@@ -11,6 +11,14 @@ keywords.workspace = true
 categories.workspace = true
 readme = "README.md"
 description = "Compiler for the Slurp template language: lexer, parser, HTML renderer, WASM bindings and the `slurp` CLI."
+# The published crate is source and documentation. Without this it was 183 files, 146 of them the
+# fuzz corpus and the harness that reads it: 76% of what every `cargo install` downloads, for
+# input data no consumer runs. They stay in git, which is where a contributor gets them.
+#
+# The two are excluded TOGETHER on purpose. `tests/fuzz_targets.rs` loads the corpus from
+# `fuzz/corpus`, so shipping the tests without it would publish a suite that fails on a vendored
+# copy, which is worse than publishing neither.
+exclude = ["fuzz/", "tests/"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
