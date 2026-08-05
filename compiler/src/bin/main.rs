@@ -359,10 +359,10 @@ fn cmd_build(
         // They are still COMPILED, and that is deliberate rather than wasteful: a syntax error, a
         // security violation or an unknown filter in a component that no page happens to import
         // yet is caught here, and would not be if these were skipped the way middleware is.
-        if !is_page_file(file, input) {
+        if let Some(kind) = non_page_kind(file, input) {
             non_page_checked += 1;
             if verbose && !diag.has_errors() {
-                println!("  {} (not under pages/, checked only)", file.display());
+                println!("  {} ({kind}, checked only)", file.display());
             }
             continue;
         }
@@ -484,16 +484,33 @@ fn copy_static_recursive(
 /// two forms yields a comparison that depends on which call happened to succeed. That is a
 /// selector deciding which of two INVERTED rule sets a file is checked under, so a comparison whose
 /// answer varies run to run is not acceptable even though its failure mode is the safe direction.
-/// Whether `file` is a routable page, i.e. lives under `<root>/pages/`.
+/// The two directory names whose contents are INCLUDED by other templates rather than routed to.
 ///
-/// This is the same convention the dev server routes on, so the two cannot disagree about what a
-/// page is. Matched on the first path COMPONENT rather than a string prefix, so a directory named
-/// `pages-archive` is not a page directory.
-fn is_page_file(file: &Path, root: &Path) -> bool {
-    file.strip_prefix(root)
-        .ok()
-        .and_then(|rel| rel.components().next())
-        .is_some_and(|first| first.as_os_str() == "pages")
+/// `@components/...` and `@layouts/...` are the registry paths the language itself uses, so these
+/// are conventions of the framework rather than a guess about someone's layout.
+const NON_PAGE_DIRS: [&str; 2] = ["components", "layouts"];
+
+/// `Some(kind)` when `file` is a template that must be checked but never emitted as a page.
+///
+/// This is a BLOCKLIST, not an allowlist of `pages/`, and the difference is the whole point. A
+/// component or layout rendered standalone is a fragment - a layout comes out carrying literal
+/// `<slot>` elements - so those must never be written. Everything else might legitimately be a
+/// page: requiring `pages/` would mean the smallest possible project, a lone `index.slurp`, built
+/// to nothing, which is exactly what the quickstart is.
+///
+/// Matched on the first path COMPONENT, so `components-archive/` is not caught by it.
+fn non_page_kind(file: &Path, root: &Path) -> Option<&'static str> {
+    let first = file.strip_prefix(root).ok()?.components().next()?;
+    NON_PAGE_DIRS
+        .into_iter()
+        .find(|d| first.as_os_str() == *d)
+        .map(|d| {
+            if d == "components" {
+                "component"
+            } else {
+                "layout"
+            }
+        })
 }
 
 fn is_middleware_file(file: &Path, root: &Path, dirs: &[PathBuf]) -> bool {
@@ -939,12 +956,22 @@ mod tests {
         write(&input.join("layouts/base.slurp"), "<html><slot /></html>");
         write(&input.join("components/Card.slurp"), "<div>card</div>");
 
-        assert!(is_page_file(&input.join("pages/index.slurp"), input));
-        assert!(!is_page_file(&input.join("layouts/base.slurp"), input));
-        assert!(!is_page_file(&input.join("components/Card.slurp"), input));
-        // A directory whose name merely starts with "pages" is not the pages directory.
-        write(&input.join("pages-archive/old.slurp"), "<p>old</p>");
-        assert!(!is_page_file(&input.join("pages-archive/old.slurp"), input));
+        assert!(non_page_kind(&input.join("pages/index.slurp"), input).is_none());
+        assert_eq!(
+            non_page_kind(&input.join("layouts/base.slurp"), input),
+            Some("layout")
+        );
+        assert_eq!(
+            non_page_kind(&input.join("components/Card.slurp"), input),
+            Some("component")
+        );
+        // A lone file at the root IS a page. Requiring `pages/` would build the smallest
+        // possible project - the one the quickstart shows - to nothing.
+        write(&input.join("index.slurp"), "<p>root</p>");
+        assert!(non_page_kind(&input.join("index.slurp"), input).is_none());
+        // A directory whose name merely starts with a blocked one is not blocked.
+        write(&input.join("components-archive/old.slurp"), "<p>old</p>");
+        assert!(non_page_kind(&input.join("components-archive/old.slurp"), input).is_none());
 
         cmd_build(input, &output, None, &[], false);
 
