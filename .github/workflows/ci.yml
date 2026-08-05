@@ -115,7 +115,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The action runs inside a musl container that has exactly one toolchain,
+      # and `rust-toolchain.toml` pins 1.88, so rustup fails with "override
+      # toolchain '1.88-x86_64-unknown-linux-musl' is not installed" before
+      # cargo-deny gets to look at a single crate. Nothing here compiles code -
+      # it reads Cargo.lock - so the pin is irrelevant to the result.
       - uses: EmbarkStudios/cargo-deny-action@v2
+        env:
+          RUSTUP_TOOLCHAIN: stable
         with:
           command: check
 
