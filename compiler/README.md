@@ -27,7 +27,7 @@ or a self-delimiting JSON literal in a JavaScript-evaluated attribute, removal o
 structural characters in a `style` value, and the allowlist sanitizer in
 `srcdoc`. An interpolation in a `<script>` body is a compile error unless it
 declares its context with `| js` or `| json`. See
-[SECURITY.md](https://github.com/bytesell/slurp/blob/main/SECURITY.md) for the
+[the security model](https://github.com/bytesell/slurp/blob/main/docs/security-model.md) for the
 threat model, the worked examples and the limitations that remain.
 
 **Status: 0.1.0, pre-1.0.** The API and the template language are both unstable.

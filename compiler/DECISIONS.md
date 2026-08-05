@@ -82,7 +82,7 @@ raw. `{html expr}` is the only opt-out. `{html expr sanitize}` runs the Ammonia
 sanitizer first, which is the recommended pattern for user-generated content. In
 a `<script>` body no escaper is a general answer, so slurp raises a compile error
 instead unless the author declares the context with `| js` or `| json` - see
-`SECURITY.md`.
+`docs/security-model.md`.
 
 ---
 

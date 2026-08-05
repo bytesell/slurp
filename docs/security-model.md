@@ -404,7 +404,7 @@ The runtime (`@slurp/runtime`) is an optional browser bundle. A page that uses n
 
 **`cn()` class helper** - `cn()` is `twMerge(clsx(...))`. Neither library executes code or interprets strings as HTML; both return a plain class string.
 
-**Not a security property, and do not use it as one:** `navigate=false` opts a link out of client navigation, and the compiler and runtime agree on the spelling (bare `navigate="false"`, pinned by a compiler integration test). It is an author convenience for links that must be full page loads. It is not a boundary: it lives in markup the page itself controls, so nothing about it constrains an attacker.
+**Not a security property, and do not use it as one:** `navigate=false` opts a link out of client navigation, and the compiler and runtime agree on the spelling. It is an author convenience for links that must be full page loads. It is not a boundary: it lives in markup the page itself controls, so nothing about it constrains an attacker.
 
 ---
 
