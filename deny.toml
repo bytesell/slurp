@@ -92,9 +92,21 @@ ignore = [
     # clear this. 0.18.1 still depends on lightningcss with default features, and lightningcss
     # puts `sourcemap` (which is what pulls parcel_sourcemap, which pulls rkyv 0.7) in its
     # `default` set, both directly and via `bundler`. Cargo features are additive only, so no
-    # downstream crate can subtract it. Clearing this needs lightningcss to move to rkyv 0.8, or
-    # minify-html to stop enabling lightningcss's defaults. Do not spend another migration on it
-    # expecting a different result. Reviewed 2026-08-05.
+    # downstream crate can subtract it, and `default-features = false` in THIS manifest does not
+    # help either: unification takes the union, so minify-html's choice wins regardless.
+    #
+    # The fix is one line, in minify-html, and it has been MEASURED rather than assumed. Adding
+    # `default-features = false` to its lightningcss dependency (in a local fork, patched in via
+    # [patch.crates-io]) removes rkyv and parcel_sourcemap outright, takes the lock from 446
+    # packages to 420, collapses the ahash, base64-simd and outref duplicate pairs, and leaves
+    # the six example-theme pages BYTE-IDENTICAL by sha256. minify-html reads exactly five items
+    # from lightningcss, all `lightningcss::stylesheet`, so none of bundler, nodejs or sourcemap
+    # is load-bearing for it. Note that disabling `sourcemap` alone is not enough, because
+    # `bundler` enables it too.
+    #
+    # So this stays only until that lands upstream or we carry a fork. Do not re-derive it, and
+    # do not spend another minify-html version bump expecting a different result. Reviewed
+    # 2026-08-05.
     "RUSTSEC-2026-0235",
 ]
 
