@@ -44,6 +44,17 @@ updates:
       # changes behaviour on every page that loads it.
       - dependency-name: "alpinejs"
         update-types: ["version-update:semver-major"]
+      # NOT a dependency to keep current, at any level. It is the VS Code API surface the
+      # extension typechecks against, pinned exactly to the engines.vscode floor so the compiler
+      # refuses an API our declared minimum does not have. Every bump here silently widens what
+      # the extension may call while the Marketplace still installs it on the old floor, so
+      # raising it is a decision made together with engines.vscode, never an automated PR.
+      - dependency-name: "@types/vscode"
+      # tailwind-merge decides which Tailwind major `cn()` resolves conflicts for, and `cn` is
+      # exported from the runtime's package root and published on `window`. A major here is a
+      # published behaviour change that no test in this repo can catch.
+      - dependency-name: "tailwind-merge"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "deps"
 
