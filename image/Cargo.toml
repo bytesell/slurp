@@ -28,7 +28,7 @@ tokio = { workspace = true }
 # TODO: upgrade to axum 0.8
 axum = "0.7"
 tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "timeout"] }
+tower-http = { version = "0.6", features = ["cors", "timeout"] }
 # SECURITY: `default-features = false` is load-bearing, do not drop it. The image crate's default
 # feature set is `["rayon", "default-formats"]`, which links bmp, dds, exr, ff, gif, hdr, ico, jpeg,
 # png, pnm, qoi, tga, tiff and webp - eleven decoders this service never declared, reachable through
