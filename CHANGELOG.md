@@ -29,10 +29,11 @@ changes to both the Rust API and the template language.
   removed only by the full page reload that a successful rebuild happens to
   trigger. A rebuild that fixed the error but produced no page left a stale
   overlay covering a document that now compiles.
-- `slurp build` emits only `pages/`. Components and layouts were written as
-  standalone HTML fragments carrying literal `<slot>` elements: on the example
-  theme, ten junk files beside six real pages. They are still compiled and
-  checked, so an error in a component no page imports yet still fails the build.
+- `slurp build` no longer writes `components/` and `layouts/` as pages. They
+  were emitted as standalone HTML fragments carrying literal `<slot>` elements:
+  on the example theme, ten junk files beside six real pages. They are still
+  compiled and checked, so an error in a component no page imports yet still
+  fails the build.
 - The `--globals` file is no longer copied into the output. It is build input,
   and the static-asset pass was publishing it alongside the site.
 - Loop truncation is reported on a production build. Both iteration budgets

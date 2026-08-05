@@ -1466,7 +1466,7 @@ Options:
 
 `build` walks the input tree for `*.slurp`, skipping symlinks and any directory named `node_modules`, `dist`, `target`, or starting with `.`. Every non-`.slurp` file is copied to the output tree verbatim, except the `--globals` file, which is build input rather than a site asset.
 
-**Only `pages/` is emitted.** Every `.slurp` file is compiled and checked, so an error in a component that no page imports yet still fails the build, but only files under a `pages/` directory are written as HTML. A component or layout rendered on its own is a fragment, not a document - a layout comes out carrying literal `<slot>` elements - and nothing can route to it, since `pages/` is the routing convention the dev server resolves against. If a build emits no pages at all it says so and names the convention.
+**`components/` and `layouts/` are checked but never emitted.** Every `.slurp` file is compiled, so an error in a component that no page imports yet still fails the build. Only those two directories are held back from the output, because a component or layout rendered on its own is a fragment rather than a document - a layout comes out carrying literal `<slot>` elements. Everything else is written, so a single `index.slurp` at the root builds to `dist/index.html`.
 
 Three things to expect:
 

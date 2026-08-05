@@ -79,6 +79,18 @@ ignore = [
     # vulnerability, no maintained fork that rav1e has moved to. Nothing we can
     # do from here until rav1e releases without it. Reviewed 2026-08-01.
     "RUSTSEC-2024-0436",
+
+    # rkyv 0.7.46, out-of-bounds read when VALIDATING AN UNTRUSTED ARCHIVE.
+    # Reached only through `minify-html -> lightningcss -> parcel_sourcemap ->
+    # rkyv`, where parcel_sourcemap uses it for its own internal source-map
+    # caching. Nothing here calls `rkyv::access` or `rkyv::from_bytes`, and no
+    # rkyv archive crosses a trust boundary in this project: what we hand
+    # minify-html is an HTML string. The fix is rkyv 0.8.17 and the 0.7 series is
+    # unsupported upstream, so clearing it means moving to minify-html 0.18,
+    # which REMOVED `Cfg::spec_compliant()` and therefore needs a deliberate
+    # migration plus a re-check of what the minifier does to every built page.
+    # Tracked by the dependabot PR for minify-html 0.18.1. Reviewed 2026-08-05.
+    "RUSTSEC-2026-0235",
 ]
 
 # ── Bans ────────────────────────────────────────────────────────────────────

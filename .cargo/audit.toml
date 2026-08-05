@@ -1,0 +1,13 @@
+# cargo-audit configuration.
+#
+# This file exists because cargo-audit does NOT read deny.toml. The two tools
+# check overlapping things from separate configuration, and the CI runs both, so
+# an advisory accepted in only one place fails the other job. Keep this list in
+# step with `[advisories] ignore` in deny.toml, where the REASONS are written
+# down; duplicating the reasoning here would just give it somewhere to go stale.
+
+[advisories]
+ignore = [
+    "RUSTSEC-2024-0436",
+    "RUSTSEC-2026-0235",
+]
