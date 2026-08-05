@@ -671,10 +671,41 @@ fn cmd_dev(bind: &str, port: u16, fixtures: Option<&Path>) {
 /// Canonicalise when the path exists, which is the case that matters: the output directory is
 /// only walkable at all once a previous run created it. Fall back to an absolute path for a
 /// first run, where the output directory does not exist yet and therefore cannot be entered.
+///
+/// The fallback then normalises `.` and `..` ITSELF, because `std::path::absolute` does not do so
+/// uniformly. On Windows it resolves them; on Unix it deliberately leaves them, since `a/../b` is
+/// not `b` when `a` is a symlink. That difference made `--output sub/../dist` exclude the output
+/// on one platform and walk it on the other, which is how a build ends up compiling its own
+/// output. Doing it lexically is correct HERE precisely because this branch only runs when the
+/// path does not exist, so there is no symlink for the shortcut to skip past.
 fn resolve_for_compare(p: &Path) -> Option<PathBuf> {
-    std::fs::canonicalize(p)
-        .ok()
-        .or_else(|| std::path::absolute(p).ok())
+    if let Ok(c) = std::fs::canonicalize(p) {
+        return Some(c);
+    }
+    Some(lexically_normalize(&std::path::absolute(p).ok()?))
+}
+
+/// Collapse `.` and `..` in an already-absolute path, without touching the filesystem.
+fn lexically_normalize(p: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            Component::CurDir => {}
+            // Refuse to pop the prefix or the root: `/..` is `/`, not the parent of the volume.
+            Component::ParentDir => {
+                if matches!(
+                    out.components().next_back(),
+                    Some(Component::Normal(_)) | None
+                ) && out.parent().is_some()
+                {
+                    out.pop();
+                }
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
 }
 
 /// True when `dir` is a directory neither walk should descend into.
@@ -938,6 +969,37 @@ mod tests {
             "no provenance header"
         );
         assert!(merged.contains("dist/"), "the template was not appended");
+    }
+
+    /// `..` collapsing, which `std::path::absolute` does NOT do uniformly across platforms.
+    ///
+    /// This is the function behind a Linux-only CI failure: Windows resolves `sub/../out` inside
+    /// `absolute`, Unix leaves it alone (correctly, since `sub` could be a symlink), so the
+    /// output-directory comparison matched on one platform and not the other and a build walked
+    /// its own output. Tested directly rather than through `resolve_for_compare`, because that
+    /// function calls `canonicalize` first and would hide the difference on any path that exists.
+    #[test]
+    fn parent_segments_collapse_the_same_way_on_every_platform() {
+        let root = std::path::absolute(".").expect("cwd");
+        let norm = |s: &str| lexically_normalize(&root.join(s));
+
+        assert_eq!(norm("sub/../out"), root.join("out"));
+        assert_eq!(norm("./out"), root.join("out"));
+        assert_eq!(norm("a/b/../../out"), root.join("out"));
+        assert_eq!(norm("a/./b/../c"), root.join("a").join("c"));
+        // Already clean paths are unchanged.
+        assert_eq!(norm("out"), root.join("out"));
+
+        // `..` must never escape past the root or a Windows volume prefix.
+        let mut top = root.clone();
+        while top.parent().is_some() {
+            top.pop();
+        }
+        let climbed = lexically_normalize(&top.join("..").join(".."));
+        assert_eq!(
+            climbed, top,
+            "`..` climbed above the filesystem root: {climbed:?}"
+        );
     }
 
     /// Only `pages/` is emitted, and everything else is still CHECKED.
