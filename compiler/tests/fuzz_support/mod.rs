@@ -1405,12 +1405,11 @@ pub fn fuzz(target: Target) -> Stats {
                     panic::catch_unwind(AssertUnwindSafe(|| signature(target, &sig_input))).ok();
                 let _ = tx.send(s);
             });
-            if outcome == Outcome::Completed {
-                if let Ok(Some(sig)) = rx.try_recv() {
-                    if seen.insert(sig) {
-                        corpus.push(input);
-                    }
-                }
+            if outcome == Outcome::Completed
+                && let Ok(Some(sig)) = rx.try_recv()
+                && seen.insert(sig)
+            {
+                corpus.push(input);
             }
         }
 

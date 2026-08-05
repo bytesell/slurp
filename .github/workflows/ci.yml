@@ -161,7 +161,16 @@ jobs:
       # Installed from source rather than a third-party action, matching how the
       # audit job installs cargo-audit. Slow only on a cold cache; rust-cache
       # keeps ~/.cargo/bin between runs.
+      #
+      # Built with STABLE, not the pinned MSRV above. wasm-pack is a tool that
+      # happens to be written in Rust: which compiler builds it says nothing
+      # about what this project supports, and pinning it to 1.88 broke the job
+      # outright once a transitive dependency of wasm-pack started requiring
+      # 1.91. The WASM artifact itself is still built by the MSRV toolchain,
+      # which is the thing the pin exists to prove.
       - name: Install wasm-pack
+        env:
+          RUSTUP_TOOLCHAIN: stable
         run: cargo install wasm-pack --locked --version 0.15.0
 
       - name: Install

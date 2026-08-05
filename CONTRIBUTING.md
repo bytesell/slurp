@@ -63,6 +63,14 @@ pnpm -C mcp run check:llms
 
 **Run `clippy` as its own step, and read its own output.** Chaining it onto another command and reading the second command's result is how warnings reach a main branch.
 
+**Run it on stable too, before you open a PR.** `rust-toolchain.toml` pins 1.88, so a plain `cargo clippy` cannot see a lint that a newer clippy added, and CI runs the same check on stable:
+
+```bash
+RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets -- -D warnings
+```
+
+That job is a deliberate canary and it can go red without anyone changing the code, when a new stable ships a new lint. Fix the lint rather than suppressing it: so far every one has pointed at something worth tidying.
+
 `cargo fmt --all --check` is blocking. Fix a failure with `cargo fmt --all`, never by relaxing the check.
 
 ### What CI actually runs
