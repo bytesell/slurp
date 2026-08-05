@@ -21,9 +21,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-# TODO: upgrade to axum 0.8 (check ws feature availability first)
-axum = { version = "0.7", features = ["ws"] }
-notify = "6"
+axum = { version = "0.8", features = ["ws"] }
+notify = "8"
 futures = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

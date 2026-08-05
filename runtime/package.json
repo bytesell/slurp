@@ -46,17 +46,18 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^4.1.10",
     "jsdom": "^30.0.1",
     "tsup": "^8.5.1",
-    "typescript": "^5.4.0",
-    "vitest": "^4.1.10",
-    "vite": "^7.1.14"
+    "typescript": "^5.9.3",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
   },
+  "//dependencies": "tailwind-merge 3 targets Tailwind CSS v4 and drops v3's class groups, so this pins which Tailwind `cn()` resolves conflicts for. That is a consumer-facing contract, not an internal version: `cn` is exported from the package root AND published on `window`, and the unit tests only exercise utilities that behave identically under both majors, so they cannot catch a regression here. Moving between tailwind-merge majors means restating the supported Tailwind version in README.md.",
   "dependencies": {
-    "alpinejs": "^3.14.0",
-    "clsx": "^2.0.0",
-    "tailwind-merge": "^2.0.0"
+    "alpinejs": "^3.15.12",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.6.0"
   }
 }

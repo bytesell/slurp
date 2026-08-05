@@ -28,7 +28,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
-    "typescript": "^5.4.0"
+    "typescript": "^5.9.3"
   },
   "publishConfig": {
     "access": "public"

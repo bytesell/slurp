@@ -115,7 +115,9 @@ function registerTools(server: McpServer): void {
         ...sourceShape,
         ...middlewareShape,
         files: z
-          .record(z.string())
+          // zod 4 requires the key type that zod 3 left implicit. It was string, so this is the
+          // same schema written out in full, not a widening.
+          .record(z.string(), z.string())
           .optional()
           .describe(
             'Optionally validate several templates in one call, as a map of path to source. Each is validated INDEPENDENTLY; imports are still not resolved between them.',
@@ -165,7 +167,8 @@ function registerTools(server: McpServer): void {
         ...sourceShape,
         ...middlewareShape,
         context: z
-          .record(z.unknown())
+          // Explicit string key, as above.
+          .record(z.string(), z.unknown())
           .optional()
           .describe(
             'The render context, as a JSON object. Every top-level key becomes a global the template can read. Defaults to {}.',

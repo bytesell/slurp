@@ -119,10 +119,12 @@ fn routes() -> Router<ServerState> {
     Router::new()
         .route("/_slurp/ws", get(ws_handler))
         .route("/_slurp/hmr-client.js", get(hmr_client_js))
-        // Proxy /api/* and /auth/* to backend when --backend-url is configured
-        .route("/api/*path", any(backend_proxy))
-        .route("/auth/*path", any(backend_proxy))
-        .route("/*path", get(static_file_handler))
+        // Proxy /api/* and /auth/* to backend when --backend-url is configured.
+        // `{*path}` is axum 0.8 syntax for the old `*path` wildcard; the capture name and the
+        // set of paths matched are unchanged.
+        .route("/api/{*path}", any(backend_proxy))
+        .route("/auth/{*path}", any(backend_proxy))
+        .route("/{*path}", get(static_file_handler))
         .route("/", get(index_handler))
 }
 

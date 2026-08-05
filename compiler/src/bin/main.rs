@@ -380,8 +380,14 @@ fn cmd_build(
                 );
                 continue;
             }
-            let output_bytes =
-                minify_html::minify(html.as_bytes(), &minify_html::Cfg::spec_compliant());
+            // `Cfg::new()` IS the old `Cfg::spec_compliant()`. minify-html 0.18 inverted the
+            // polarity of the three flags that constructor set (`do_not_minify_doctype`,
+            // `ensure_spec_compliant_unquoted_attribute_values`, `keep_spaces_between_attributes`)
+            // into `minify_doctype` / `allow_noncompliant_unquoted_attribute_values` /
+            // `allow_removing_spaces_between_attributes`, all defaulting to false, so
+            // spec-compliant became the default and the constructor was removed. Opting back in to
+            // the old lossy default would be `enable_possibly_noncompliant()`; do not call it.
+            let output_bytes = minify_html::minify(html.as_bytes(), &minify_html::Cfg::new());
             if let Err(e) = std::fs::write(&out_path, &output_bytes) {
                 eprintln!("Failed to write {}: {}", out_path.display(), e);
                 total_errors += 1;

@@ -153,10 +153,14 @@ async fn main() -> anyhow::Result<()> {
 
     // A whole-request deadline, so a slow upstream plus a slow transform cannot hold a connection
     // (and a transform permit) indefinitely.
+    // `with_status_code` replaces the deprecated `TimeoutLayer::new`, which was defined as exactly
+    // this call with `REQUEST_TIMEOUT`. Naming the status keeps the 408 the service already
+    // returned rather than adopting whatever a future default becomes.
     let app = app
-        .layer(TimeoutLayer::new(std::time::Duration::from_secs(
-            state.config.request_timeout_secs.max(1),
-        )))
+        .layer(TimeoutLayer::with_status_code(
+            axum::http::StatusCode::REQUEST_TIMEOUT,
+            std::time::Duration::from_secs(state.config.request_timeout_secs.max(1)),
+        ))
         .with_state(state.clone());
 
     let addr = SocketAddr::new(args.bind, state.config.port);

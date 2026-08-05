@@ -78,7 +78,7 @@ impl HmrHub {
                             Ok(msg) => {
                                 match serde_json::to_string(&msg) {
                                     Ok(json) => {
-                                        if ws_tx.send(Message::Text(json)).await.is_err() {
+                                        if ws_tx.send(Message::Text(json.into())).await.is_err() {
                                             break;
                                         }
                                     }
@@ -95,7 +95,7 @@ impl HmrHub {
                                 );
                                 let reload = HmrMessage::Reload { pages: vec!["*".to_string()] };
                                 if let Ok(json) = serde_json::to_string(&reload)
-                                    && ws_tx.send(Message::Text(json)).await.is_err()
+                                    && ws_tx.send(Message::Text(json.into())).await.is_err()
                                 {
                                     break;
                                 }

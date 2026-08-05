@@ -25,17 +25,16 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-# TODO: upgrade to axum 0.8
-axum = "0.7"
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "timeout"] }
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.7", features = ["cors", "timeout"] }
 # SECURITY: `default-features = false` is load-bearing, do not drop it. The image crate's default
 # feature set is `["rayon", "default-formats"]`, which links bmp, dds, exr, ff, gif, hdr, ico, jpeg,
 # png, pnm, qoi, tga, tiff and webp - eleven decoders this service never declared, reachable through
 # `with_guessed_format()` by anything that gets past the magic-byte check. Enable only the formats
 # `security::SourceFormat` declares.
 image = { version = "0.25", default-features = false, features = ["jpeg", "webp", "png", "gif"] }
-ravif = { version = "0.11", default-features = false, features = ["threading"] }
+ravif = { version = "0.13", default-features = false, features = ["threading"] }
 rgb = "0.8"
 # TLS: rustls, not the default native-tls. reqwest's default feature set pulls
 # `openssl` + `openssl-sys`, which makes a fresh Linux clone fail at LINK time
@@ -46,7 +45,7 @@ rgb = "0.8"
 # bundled webpki root store, so the host's system trust store is not consulted.
 reqwest = { version = "0.12", default-features = false, features = ["stream", "charset", "http2", "rustls-tls"] }
 bytes = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 hex = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

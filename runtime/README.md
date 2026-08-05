@@ -25,13 +25,18 @@ ESM only. These modules are browser chunks that mutate `window` on import, so
 | Feature | State |
 |---|---|
 | Bundles and boots Alpine.js (`window.Alpine`) | Works |
-| Exposes `cn()` globally for inline Alpine expressions | Works |
+| Exposes `cn()` globally for inline Alpine expressions | Works, Tailwind v4 |
 | Dev-mode HMR client (when `window.SLURP_MODE === 'dev'`) | Works, paired with `slurp-dev` |
 | `parseParams()` -> `window.slurpParams` | Implemented, but see below |
 | Client navigation | Implemented, but see below |
 
 Each boot step is isolated in a `try`/`catch`, so a failure in one cannot stop
 Alpine from starting.
+
+`cn()` resolves Tailwind conflicts through `tailwind-merge` 3, which understands
+**Tailwind CSS v4** class groups. On Tailwind v3 the joining and deduplication
+still work, but conflicts between utilities whose groups changed in v4 may not
+resolve the way that version's cascade would.
 
 ## What is implemented but NOT wired to the compiler
 

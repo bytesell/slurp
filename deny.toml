@@ -86,10 +86,15 @@ ignore = [
     # caching. Nothing here calls `rkyv::access` or `rkyv::from_bytes`, and no
     # rkyv archive crosses a trust boundary in this project: what we hand
     # minify-html is an HTML string. The fix is rkyv 0.8.17 and the 0.7 series is
-    # unsupported upstream, so clearing it means moving to minify-html 0.18,
-    # which REMOVED `Cfg::spec_compliant()` and therefore needs a deliberate
-    # migration plus a re-check of what the minifier does to every built page.
-    # Tracked by the dependabot PR for minify-html 0.18.1. Reviewed 2026-08-05.
+    # unsupported upstream.
+    #
+    # The minify-html 0.18 migration this entry used to name as the fix is DONE, and it did NOT
+    # clear this. 0.18.1 still depends on lightningcss with default features, and lightningcss
+    # puts `sourcemap` (which is what pulls parcel_sourcemap, which pulls rkyv 0.7) in its
+    # `default` set, both directly and via `bundler`. Cargo features are additive only, so no
+    # downstream crate can subtract it. Clearing this needs lightningcss to move to rkyv 0.8, or
+    # minify-html to stop enabling lightningcss's defaults. Do not spend another migration on it
+    # expecting a different result. Reviewed 2026-08-05.
     "RUSTSEC-2026-0235",
 ]
 

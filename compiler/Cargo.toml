@@ -26,12 +26,12 @@ thiserror = { workspace = true }
 wasm-bindgen = "0.2"
 js-sys = "0.3"
 html-escape = "0.2"
-ammonia = "3"
+ammonia = "4"
 clap = { version = "4", features = ["derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true }
-minify-html = "0.15"
+minify-html = "0.18"
 # Grow the stack on demand for deep recursive-descent parse/render (native only;
 # wasm relies on the depth caps). Same approach rustc uses.
 stacker = "0.1"
@@ -52,4 +52,4 @@ arbitrary = "1"
 # (JS, CSS, the iframe document parser) ever runs. Ammonia is already a
 # dependency, and its `attribute_filter` hands back the parsed - i.e. decoded -
 # attribute value, so the tests can measure that step instead of predicting it.
-ammonia = "3"
+ammonia = "4"
