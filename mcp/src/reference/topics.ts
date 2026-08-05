@@ -324,7 +324,7 @@ For a null fallback use \`| default(...)\` rather than \`??\`.
 | \`-\` \`*\` | Numeric. null, arrays, objects and non-numeric strings all coerce to 0. |
 | \`/\` \`%\` | Numeric, and DIVISION BY ZERO YIELDS 0, not an error and not Infinity. |
 | \`==\` \`!=\` | Type-strict deep equality. \`1 == "1"\` is false; \`0 == false\` is false. Numbers use an epsilon, so \`0.1 + 0.2 == 0.3\` is true. Arrays and objects compare structurally. |
-| \`<\` \`>\` \`<=\` \`>=\` | Only number-to-number and string-to-string actually compare. EVERY other pairing compares Equal, so \`>\` is false and \`>=\` is true. No coercion, so \`"10" > 9\` is false. |
+| \`<\` \`>\` \`<=\` \`>=\` | Only number-to-number and string-to-string actually compare. A cross-type pairing is neither equal nor ordered, so ALL FOUR are false: \`"10" > 9\`, \`"10" < 9\`, \`"10" >= 9\` and \`"10" <= 9\`. \`>=\` is deep-equal OR greater, so it is true only for genuinely equal values (\`null >= null\`). |
 | \`&&\` \`\\|\\|\` | Short-circuit and return THE OPERAND VALUE, JavaScript-style, not a coerced boolean. |
 | \`!x\` | Always a real boolean. |
 | \`-x\` | Only a NUMBER is negated. \`-"5"\` is 0, which disagrees with \`0 - "5"\` being -5. |
@@ -380,11 +380,28 @@ filter.
 The page context is the root scope. \`{each}\` and \`{fetch}\` create child scopes,
 and a child shadows its parent.
 
-Components and layouts render in their OWN root scope: the page globals, overlaid
-by whatever was passed explicitly, with the explicit values winning on collision.
-So a component CAN read a page global it was never passed. What it cannot see is
-the caller's local bindings, which notably means an \`{each}\` loop variable and
-\`loop.index\` are invisible inside a component unless passed as props.`
+A COMPONENT renders in its OWN root scope: the page globals, overlaid by whatever
+was passed explicitly, with the explicit values winning on collision. So a
+component CAN read a page global it was never passed. What it cannot see is the
+caller's local bindings, which notably means an \`{each}\` loop variable and
+\`loop.index\` are invisible inside a component unless passed as props.
+
+A LAYOUT gets the page globals and NOTHING ELSE. Its overlay is always empty:
+\`render_layout\` scopes with an empty map, so an attribute written on the layout
+element never arrives, and a \`props\` block inside a layout does not even apply
+its own DEFAULTS. Both render as the empty string.
+
+\`\`\`slurp
+<layout src="@layouts/tiny" heading={"passed"}>x</layout>
+\`\`\`
+
+With \`props { heading: string = "(default)" }\` declared in that layout,
+\`\${ heading }\` renders EMPTY: not "passed", and not "(default)" either. A
+component with the identical props block gets both right. Read shared values from
+page globals instead, or use a component when something has to be passed in.
+
+(OBSERVED 2026-08-05. This paragraph claimed layouts behaved like components.
+They never have, and the wrong version was the one an agent read.)`
 
 const COMPONENTS = `# Elements, attributes and components
 
@@ -584,8 +601,16 @@ appears to do nothing rather than to fail.
 
 ## props
 
-ONE DECLARATION PER LINE. (OBSERVED: putting three on one line parses as a
-single prop whose type expression swallows the rest.)
+ONE DECLARATION PER LINE.
+
+(OBSERVED. The reason is narrower than this entry used to claim, and the old
+reason was wrong: \`read_type_expr\` terminates on a newline, a comma, an \`=\`,
+a \`}\` or EOF, so several declarations on ONE line parse CORRECTLY as long as
+each carries a default. What breaks is a declaration with NO default followed by
+one with a default, on the same line: \`props { a: string  b: string = "x" }\`
+renders \`a\` as "x" and \`b\` as empty, because \`a\`'s type expression ran on
+and swallowed \`b\`'s declaration along with its default. The advice stands; only
+its justification changed.)
 
 \`\`\`slurp
 ---
@@ -702,11 +727,22 @@ const LIMITS = `# Limits
 Exceeding a budget TRUNCATES the output. It never aborts the render, so a page
 over budget still ships, quietly shortened.
 
-EVERY budget records a diagnostic, in both modes. What differs is whether the
-build FAILS: the two filter budgets are errors, everything else is a warning and
-the build still exits 0. So a 1500-item loop emits 1000 items, warns, and
-succeeds. On the CLI, \`-v\` is what prints warnings; without it the console is
-quiet even though the diagnostic exists.
+Almost every budget records a diagnostic, in both modes. What differs is whether
+the build FAILS: the two filter budgets are errors, everything else is a warning
+and the build still exits 0. So a 1500-item \`{each}\` emits 1000 items, warns,
+and succeeds. On the CLI, \`-v\` is what prints warnings; without it the console
+is quiet even though the diagnostic exists.
+
+ONE EXCEPTION, and it is the one most likely to bite: \`{repeat n}\` clamps with
+NO diagnostic at all. \`render_repeat\` does a bare \`count.min(MAX_ITERATIONS)\`
+and never reaches the accumulator, so \`{repeat 1500}\` emits 1000 and says
+nothing, even under \`-v\`. \`{each}\` over the same 1500 items warns correctly.
+Do not reason about \`{repeat}\` from the \`{each}\` behaviour. (OBSERVED
+2026-08-05; this section previously said EVERY budget records one.)
+
+A second thing \`{repeat}\` does not do is coerce: \`{repeat "3"}\` renders
+NOTHING, while \`"3" - 0\` is 3. Counts arriving from a server are exactly the
+values that are strings, so pipe them through \`| int\` first.
 
 | Limit | Value |
 |---|---|
@@ -792,7 +828,7 @@ function renderFilters(): string {
     '',
     'Chained left to right: `${ name | lower | truncate(20) }`.',
     '',
-    'An unknown filter records a diagnostic AND passes the value through unfiltered, so the page renders looking nearly right.',
+    'An unknown filter is a BUILD FAILURE at the CLI: `error[UnknownFilter]`, no page emitted, exit 1. The renderer does pass the value through unfiltered internally, which is where the old "renders looking nearly right" claim came from, but no user of `slurp build` ever sees that page. (OBSERVED 2026-08-05.) Note it is render-time, so `slurp validate` does NOT report it and a file can validate clean and then fail to build.',
     '',
     '## Value filters',
     '',

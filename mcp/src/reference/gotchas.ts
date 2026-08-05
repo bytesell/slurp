@@ -59,7 +59,7 @@ export const GOTCHAS: Gotcha[] = [
       'Filter arguments are read as literals, never evaluated. A variable argument is seen as the empty string, so the filter falls back to its default or emits nothing. `currency(cur)` with `cur = "EUR"` renders a leading space and NO currency symbol at all. `default` is the sole exception: the renderer evaluates its argument in scope.',
     wrong: '${ price | currency(settings.currency) }',
     right: '${ price | currency("EUR") }',
-    detectedBy: '`slurp_lint`, rule `filter-arg-not-literal`. The compiler does not, except for `limit()` and `filter()` where the argument is required.',
+    detectedBy: '`slurp_lint`, rule `filter-arg-not-literal`. The compiler catches it for `limit()` ONLY, as `error[InvalidFilterArgs]`. `filter()` does NOT check: `filter("featured", someVar)` and `filter(someVar, true)` both build clean and silently empty the collection, so the page renders the `{empty}` branch and nothing says why. (OBSERVED 2026-08-05; this line used to name both filters.)',
   },
   {
     title: '`| date` parses ISO strings, not epoch milliseconds',
@@ -88,7 +88,7 @@ export const GOTCHAS: Gotcha[] = [
   {
     title: 'There are NO callable functions',
     explanation:
-      'A call parses and always evaluates to null, with no diagnostic, so it renders the empty string. Every JavaScript habit lands here: Math.max, items.map, String(x), parseInt. The only call-shaped construct in the language is a filter. There are also no array properties, so items.length is null too.',
+      'A call parses and always evaluates to null, with no diagnostic, so it renders the empty string. Every JavaScript habit lands here: Math.max, items.map, String(x), parseInt. The only call-shaped construct in the language is a filter. There are also no array properties, so items.length is null too. For a COUNT there is an answer, and it is easy to miss: `loop.count` inside an `{each}` is the collection size. There is no `length` filter, so outside a loop there is no way to ask.',
     wrong: '<p>${ Math.max(a, b) }</p>',
     right: '<p>${ a > b ? a : b }</p>',
     detectedBy: '`slurp_lint`, rules `call-always-null` and `array-length-property`. The compiler does not.',
@@ -124,7 +124,7 @@ export const GOTCHAS: Gotcha[] = [
   {
     title: 'Comparisons do not coerce, but arithmetic does',
     explanation:
-      'Arithmetic coerces freely: a non-numeric string, null, an array or an object all become 0, and `+` concatenates whenever either side is a string. Comparisons do the opposite: only number-to-number and string-to-string actually compare, and every other pairing compares Equal, so `>` is false and `>=` is true. So `"10" > 9` is FALSE. Division by zero yields 0 rather than an error or Infinity.',
+      'Arithmetic coerces freely: a non-numeric string, null, an array or an object all become 0, and `+` concatenates whenever either side is a string. Comparisons do the opposite: only number-to-number and string-to-string actually compare, and a cross-type pairing is neither equal nor ordered, so EVERY comparison between them is false. `"10" > 9`, `"10" < 9`, `"10" >= 9` and `"10" <= 9` are ALL false, and so is `null >= 5`. `>=` is deep-equal OR strictly-greater, so it is true only for genuinely equal values such as `null >= null`. (OBSERVED 2026-08-05; this entry used to say a cross-type `>=` was TRUE, which is the more dangerous direction to get wrong.) Division by zero yields 0 rather than an error or Infinity.',
     wrong: '{if product.stock_string > 0}',
     right: '{if (product.stock_string | int) > 0}',
     detectedBy: 'Nothing. Coerce explicitly with `| int` or `| float` when a value may be a string.',

@@ -334,7 +334,11 @@ class Linter {
      *
      * Verified: `${ price | currency(cur) }` with `cur = "EUR"` renders
      * ` 1,234.50` (a leading space and NO currency marker), where
-     * `currency("EUR")` renders `EUR1.234,50`. Filter arguments are read as
+     * `currency("EUR")` on 49.99 renders `€49,99`: the euro SIGN, and a comma
+     * decimal separator (re-measured 2026-08-05; this comment previously
+     * claimed `EUR1.234,50`, which the compiler does not produce). Only the
+     * broken form above matters to the rule, but a wrong "correct" example is
+     * how a reader concludes the rule itself is wrong. Filter arguments are read as
      * literals; a non-literal yields the empty string inside the filter, so each
      * filter falls back to its default or produces nothing. `default` is the one
      * filter whose argument the renderer evaluates in scope.
