@@ -137,11 +137,10 @@ importers:
         version: 4.1.10(@types/node@22.20.1)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1)(vite@8.2.0(@types/node@22.20.1)(esbuild@0.27.7))
 
   vscode-extension:
-    dependencies:
+    devDependencies:
       '@bytesell/slurp-language':
         specifier: workspace:*
         version: link:../language
-    devDependencies:
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1

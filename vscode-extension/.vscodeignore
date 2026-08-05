@@ -1,0 +1,28 @@
+# What ships in the VSIX is dist/, the language configuration, the grammars and the
+# documentation. Everything below is build input.
+#
+# `dist/` is a BUNDLE: tsup inlines @bytesell/slurp-language into it, so no node_modules
+# tree needs to travel with the extension and excluding it here is safe rather than merely
+# smaller. Check that before adding a runtime dependency: a real one would need
+# `--no-dependencies` dropped from packaging and this file revisited.
+
+src/**
+test/**
+**/*.test.ts
+**/*.map
+
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+.eslintrc*
+.editorconfig
+
+node_modules/**
+
+# Editor and OS noise
+.vscode/**
+.vscode-test/**
+.DS_Store
+
+# Already-built artifacts from a previous package run
+*.vsix

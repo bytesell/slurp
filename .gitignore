@@ -24,6 +24,9 @@ node_modules/
 # Every package emits to dist/, and `slurp build` defaults to it. Nothing under
 # any dist/ is ever committed.
 dist/
+
+# `vsce package` writes the VSIX beside the manifest rather than into dist/.
+*.vsix
 coverage/
 
 # `compiler-wasm/pkg/` is the wasm-pack artifact. It is ignored by its OWN

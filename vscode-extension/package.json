@@ -89,13 +89,14 @@
     }
   },
   "scripts": {
-    "build": "tsup src/extension.ts --format cjs --external vscode --dts",
+    "build": "tsup",
     "test": "vitest run",
     "package": "vsce package",
     "typecheck": "tsc --noEmit"
   },
-  "//devDependencies": "@types/vscode is pinned EXACTLY, and equal to the engines.vscode floor above. It is not a dependency to keep current: it IS the API surface TypeScript checks against, so anything newer than the floor lets us call an API our declared minimum does not have while the Marketplace still installs there. A caret defeats the point, because ^1.85.0 resolves to the newest 1.x. Raise this and engines.vscode together or neither. (Keep notes like this OUT of the dependency objects: pnpm reads a `//`-prefixed key there as a real package name and the install fails.)",
+  "//devDependencies": "Two things here are load-bearing. @bytesell/slurp-language stays in devDependencies, never in dependencies: it is private, so a published manifest naming it would 404 and the extension would fail to activate; tsup noExternal bundles it into dist/ instead. @types/vscode is pinned EXACTLY and equal to the engines.vscode floor above, because it IS the API surface TypeScript checks against, and anything newer lets the extension call an API its declared minimum does not have while the Marketplace still installs it there. A caret defeats that, since ^1.85.0 resolves to the newest 1.x. Raise it and engines.vscode together or neither.",
   "devDependencies": {
+    "@bytesell/slurp-language": "workspace:*",
     "@types/node": "^22.0.0",
     "@types/vscode": "1.85.0",
     "@vscode/vsce": "^3.9.2",
@@ -103,9 +104,6 @@
     "typescript": "^5.9.3",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"
-  },
-  "dependencies": {
-    "@bytesell/slurp-language": "workspace:*"
   },
   "capabilities": {
     "untrustedWorkspaces": {
