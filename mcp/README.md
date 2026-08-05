@@ -1,10 +1,10 @@
-# @slurp/mcp
+# @bytesell/slurp-mcp
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for
 [Slurp](https://github.com/bytesell/slurp), so a coding agent can validate,
 render and reason about `.slurp` templates instead of guessing at them.
 
-It runs the real compiler in-process through `@slurp/compiler-wasm`: no
+It runs the real compiler in-process through `@bytesell/slurp-compiler-wasm`: no
 subprocess, no `slurp` binary on your PATH, and no second implementation of any
 rule in TypeScript. A diagnostic this server reports is a diagnostic the
 compiler produced, with the same code, message, line and column.
@@ -12,7 +12,7 @@ compiler produced, with the same code, message, line and column.
 ## Install
 
 ```bash
-npm install -g @slurp/mcp
+npm install -g @bytesell/slurp-mcp
 ```
 
 Or skip the install and let the client fetch it, which is what the
@@ -23,7 +23,7 @@ configurations below do.
 Claude Code:
 
 ```bash
-claude mcp add slurp -- npx -y @slurp/mcp
+claude mcp add slurp -- npx -y @bytesell/slurp-mcp
 ```
 
 Add `-s user` to get it in every project rather than just this one.
@@ -35,7 +35,7 @@ Any other client, or a shared `.mcp.json` at your repository root:
   "mcpServers": {
     "slurp": {
       "command": "npx",
-      "args": ["-y", "@slurp/mcp"]
+      "args": ["-y", "@bytesell/slurp-mcp"]
     }
   }
 }
@@ -46,7 +46,7 @@ The server speaks JSON-RPC over stdio. To point at a clone instead, run
 `{"command": "node", "args": ["/abs/path/to/slurp/mcp/dist/bin.js"]}`.
 
 Check the connection with `claude mcp list`. The server writes one line to
-stderr on startup (`@slurp/mcp 0.1.0 listening on stdio`) and nothing at all to
+stderr on startup (`@bytesell/slurp-mcp 0.1.0 listening on stdio`) and nothing at all to
 stdout except protocol frames, because on stdio stdout IS the protocol.
 
 ## Tools

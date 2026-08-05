@@ -75,7 +75,7 @@ afterAll(async () => {
 describe('stdio server', () => {
   it('completes the handshake and reports its identity', () => {
     const info = client.getServerVersion()
-    expect(info?.name).toBe('@slurp/mcp')
+    expect(info?.name).toBe('@bytesell/slurp-mcp')
   })
 
   it('advertises exactly the five tools, each with a description', async () => {

@@ -1,6 +1,6 @@
 import type { Plugin, Printer, AstPath, Doc, Options } from 'prettier'
 import { builders } from 'prettier/doc'
-import { formatSlurp, type EndOfLine } from '@slurp/language/format'
+import { formatSlurp, type EndOfLine } from '@bytesell/slurp-language/format'
 
 const { hardline } = builders
 

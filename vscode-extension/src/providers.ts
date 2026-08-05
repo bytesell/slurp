@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
-import { getCompletions, getHover } from '@slurp/language'
-import { formatSlurp } from '@slurp/language/format'
+import { getCompletions, getHover } from '@bytesell/slurp-language'
+import { formatSlurp } from '@bytesell/slurp-language/format'
 import { toWorkspaceRelative } from './paths'
 import type { SlurpCompletionItem } from '../../shared/interfaces'
 

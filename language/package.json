@@ -1,5 +1,5 @@
 {
-  "name": "@slurp/language",
+  "name": "@bytesell/slurp-language",
   "version": "0.1.0",
   "description": "Editor tooling for the Slurp template language: TextMate grammar, completions and hover docs.",
   "license": "MIT",

@@ -1,5 +1,5 @@
 /**
- * Entry point for `@slurp/compiler-wasm`.
+ * Entry point for `@bytesell/slurp-compiler-wasm`.
  *
  * This re-exports the wasm-bindgen glue in `pkg/` verbatim and adds one helper.
  * It exists for two reasons:
@@ -10,7 +10,7 @@
  *   2. Each export is assigned individually rather than spread. `module.exports
  *      = { ...wasm }` is not statically analysable, so bundlers and Vite's CJS
  *      interop would fail to see the named exports and an ESM
- *      `import { parse } from '@slurp/compiler-wasm'` would come back undefined.
+ *      `import { parse } from '@bytesell/slurp-compiler-wasm'` would come back undefined.
  *
  * The VS Code extension loads this with `require()` and reads `validate` off the
  * result, so the named exports must keep their wasm-bindgen names exactly.

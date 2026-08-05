@@ -34,7 +34,7 @@ import { templateSchema } from './tools/schema.js'
 import { referenceLookup } from './tools/reference.js'
 import { TOPICS, topicById, TOPIC_IDS } from './reference/topics.js'
 
-export const SERVER_NAME = '@slurp/mcp'
+export const SERVER_NAME = '@bytesell/slurp-mcp'
 export const SERVER_VERSION = '0.1.0'
 
 /** The default file name when a caller passes source with no path of its own. */

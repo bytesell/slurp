@@ -127,7 +127,7 @@ jobs:
           command: check
 
   # ── TypeScript workspace ──────────────────────────────────────────────────
-  # This job also builds the WASM package. `@slurp/compiler-wasm` is a workspace
+  # This job also builds the WASM package. `@bytesell/slurp-compiler-wasm` is a workspace
   # package whose `build` script shells out to wasm-pack, and the compiler
   # integration suite imports it, so a Node-only runner cannot run these tests.
   # `pnpm -r run build` orders it ahead of its dependents on its own.
@@ -173,7 +173,7 @@ jobs:
       # `llms.txt` promises that `llms-full.txt` is generated from the same data
       # the MCP server serves and therefore cannot drift. Nothing enforced that,
       # and the failure mode was worse than an unchecked claim: `pnpm build`
-      # above runs `@slurp/mcp`'s build script, which regenerates the file, so
+      # above runs `@bytesell/slurp-mcp`'s build script, which regenerates the file, so
       # CI was silently ERASING drift into the runner instead of reporting it.
       #
       # Both halves are needed. `check:llms` names the fix command in its own
@@ -182,7 +182,7 @@ jobs:
       # the regeneration is compared against what was committed.
       - name: llms-full.txt is in sync with the reference source
         run: |
-          pnpm --filter @slurp/mcp run check:llms
+          pnpm --filter @bytesell/slurp-mcp run check:llms
           git diff --exit-code -- llms-full.txt
 
       - name: Typecheck
@@ -192,7 +192,7 @@ jobs:
       # instance, which needs a display, so it is excluded here. Run it locally
       # when changing the extension.
       - name: Test
-        run: pnpm --filter @slurp/runtime --filter @slurp/language --filter prettier-plugin-slurp --filter @slurp/integration-tests test
+        run: pnpm --filter @bytesell/slurp-runtime --filter @bytesell/slurp-language --filter prettier-plugin-slurp --filter @bytesell/slurp-integration-tests test
 
   # ── Fuzzing: bounded, so regressions are caught by machines ───────────────
   # Non-termination and unbounded allocation are the compiler's characteristic

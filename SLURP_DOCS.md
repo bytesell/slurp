@@ -1640,7 +1640,7 @@ node compiler-wasm/build.mjs                # --target nodejs, the default
 node compiler-wasm/build.mjs --target web   # for a browser host with a bundler
 ```
 
-`pkg/` is build output and is not committed. `pnpm build` runs this as part of the `@slurp/compiler-wasm` package.
+`pkg/` is build output and is not committed. `pnpm build` runs this as part of the `@bytesell/slurp-compiler-wasm` package.
 
 ### WASM exports
 
@@ -1665,15 +1665,15 @@ What every embedder needs to know:
 
 ### TypeScript runtime
 
-The TypeScript runtime is published as **`@slurp/runtime`**. It is optional: a page using none of `{fetch}`, `{$let}`, `{try}` or client navigation does not need it.
+The TypeScript runtime is published as **`@bytesell/slurp-runtime`**. It is optional: a page using none of `{fetch}`, `{$let}`, `{try}` or client navigation does not need it.
 
 ```typescript
-import '@slurp/runtime'
+import '@bytesell/slurp-runtime'
 ```
 
 It ships three ESM bundles: `slurp.core.js` (`cn`, `parseParams`, navigation, Alpine boot, dev-mode HMR), `slurp.fetch.js` (`slurpFetch`) and `slurp.infinite.js` (`initInfiniteScroll`).
 
-Only the first is exported as `@slurp/runtime`. Because of the unwired markers described just below, the other two are published under an `experimental/` prefix - `@slurp/runtime/experimental/fetch` and `@slurp/runtime/experimental/infinite` - so that a consumer cannot import them without being told. See `runtime/README.md`.
+Only the first is exported as `@bytesell/slurp-runtime`. Because of the unwired markers described just below, the other two are published under an `experimental/` prefix - `@bytesell/slurp-runtime/experimental/fetch` and `@bytesell/slurp-runtime/experimental/infinite` - so that a consumer cannot import them without being told. See `runtime/README.md`.
 
 #### What the runtime does NOT do
 

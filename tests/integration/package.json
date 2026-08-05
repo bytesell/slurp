@@ -1,5 +1,5 @@
 {
-  "name": "@slurp/integration-tests",
+  "name": "@bytesell/slurp-integration-tests",
   "version": "0.1.0",
   "description": "Cross-package integration tests. Never published.",
   "license": "MIT",
@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
-    "@slurp/compiler-wasm": "workspace:*",
+    "@bytesell/slurp-compiler-wasm": "workspace:*",
     "vitest": "^4.1.10",
     "typescript": "^5.4.0",
     "jsdom": "^30.0.1",

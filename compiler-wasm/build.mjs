@@ -14,7 +14,7 @@
  * TARGET CHOICE: `nodejs` (CommonJS + `fs.readFileSync` of the .wasm) is the
  * default because both of this repo's consumers are Node-side - the vitest
  * integration suite and the VS Code extension, which loads the package with
- * `require('@slurp/compiler-wasm')`. A `web`/`bundler` build is a flag away
+ * `require('@bytesell/slurp-compiler-wasm')`. A `web`/`bundler` build is a flag away
  * (`node build.mjs --target web`) for a browser host that has a bundler.
  */
 import { spawnSync } from 'node:child_process'

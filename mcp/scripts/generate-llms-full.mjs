@@ -42,7 +42,7 @@ if (check) {
   const existing = existsSync(outFile) ? readFileSync(outFile, 'utf8') : ''
   if (existing !== content) {
     console.error(
-      '[llms] llms-full.txt is out of date. Run `pnpm --filter @slurp/mcp run build:llms`.',
+      '[llms] llms-full.txt is out of date. Run `pnpm --filter @bytesell/slurp-mcp run build:llms`.',
     )
     process.exit(1)
   }

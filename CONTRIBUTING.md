@@ -17,7 +17,7 @@ For anything larger than a bug fix, open an issue first so the design can be dis
 | Rust | 1.88 or newer | Pinned by `rust-toolchain.toml`. Edition 2024 needs 1.85; the dependency tree pushes the real floor to 1.88 |
 | Node.js | 20 or newer | |
 | pnpm | 9 or newer | `corepack enable` is the easiest way to get it |
-| wasm-pack | 0.15 or newer | Required: `pnpm build` builds `@slurp/compiler-wasm`, and the compiler integration tests import it. `cargo install wasm-pack --locked` |
+| wasm-pack | 0.15 or newer | Required: `pnpm build` builds `@bytesell/slurp-compiler-wasm`, and the compiler integration tests import it. `cargo install wasm-pack --locked` |
 
 **If your toolchain is too old you will not get a version message.** Edition 2024 fails on Rust 1.84 and below with `feature 'edition2024' is required`, which reads like a broken project. `rust-toolchain.toml` pins 1.88 so rustup selects the right toolchain automatically; if you see that error anyway, run `rustup update`.
 
@@ -32,12 +32,12 @@ If `cargo check` reports that a package requires a newer rustc, do not lower the
 cargo build --workspace
 
 # TypeScript workspace: runtime, language, prettier plugin, vscode extension,
-# and the WASM build of the compiler (@slurp/compiler-wasm, via wasm-pack)
+# and the WASM build of the compiler (@bytesell/slurp-compiler-wasm, via wasm-pack)
 pnpm install
 pnpm build
 ```
 
-`pnpm build` is what produces `@slurp/compiler-wasm`, and the compiler
+`pnpm build` is what produces `@bytesell/slurp-compiler-wasm`, and the compiler
 integration suite imports it, so **run it before `pnpm test` on a fresh clone**
 or those tests cannot resolve the module. `pnpm -r` orders the build ahead of
 its dependents on its own.
@@ -83,7 +83,7 @@ pnpm -C mcp run check:llms
 Where CI differs from a local run:
 
 - **`cargo build` runs with `--all-targets` in CI**, so it compiles test and bench targets too. A local `cargo build --workspace` can pass while CI fails to compile a test.
-- **The `node` job does not run `pnpm test`.** It runs `pnpm --filter @slurp/runtime --filter @slurp/language --filter prettier-plugin-slurp --filter @slurp/integration-tests test`, so `@slurp/mcp` and `vscode-extension` tests do **not** run in CI. `vscode-extension` is excluded because its `test` script downloads and launches a real VS Code instance, which needs a display. `@slurp/mcp` has no such excuse and its exclusion is worth removing. A local `pnpm test` (`pnpm -r run test`) runs both, so run it.
+- **The `node` job does not run `pnpm test`.** It runs `pnpm --filter @bytesell/slurp-runtime --filter @bytesell/slurp-language --filter prettier-plugin-slurp --filter @bytesell/slurp-integration-tests test`, so `@bytesell/slurp-mcp` and `vscode-extension` tests do **not** run in CI. `vscode-extension` is excluded because its `test` script downloads and launches a real VS Code instance, which needs a display. `@bytesell/slurp-mcp` has no such excuse and its exclusion is worth removing. A local `pnpm test` (`pnpm -r run test`) runs both, so run it.
 - **The `node` job also checks `llms-full.txt` for drift**, and needs both halves to do it. `pnpm build` regenerates that file, so `check:llms` alone always passes on a runner; the `git diff --exit-code` after it is what compares the regeneration against what was committed.
 - **The `fuzz` job is a gate, not an optional tool.** `cargo test --workspace` already runs the fuzz targets at their small default budget; the CI job re-runs them with `SLURP_FUZZ_ITERS=150000` on two operating systems. A finding is uploaded as an artifact, and the file is the reproducer.
 
@@ -155,7 +155,7 @@ This is enforced, not merely asked for. `pnpm copy-check` (`scripts/check-copy-r
 
 - Rust unit tests live beside the code in `#[cfg(test)]` modules; integration tests are in `compiler/tests/`.
 - TypeScript tests are `*.test.ts` beside the source, run with vitest.
-- **`tests/integration/compiler.test.ts` runs against the real WebAssembly build**, so it is genuine coverage of the WASM exports rather than of a stub. Because it imports `@slurp/compiler-wasm`, it needs `pnpm build` on a fresh clone. Every WASM export returns a JSON **string**, not an object, so assertions go through the `parseJson` helper.
+- **`tests/integration/compiler.test.ts` runs against the real WebAssembly build**, so it is genuine coverage of the WASM exports rather than of a stub. Because it imports `@bytesell/slurp-compiler-wasm`, it needs `pnpm build` on a fresh clone. Every WASM export returns a JSON **string**, not an object, so assertions go through the `parseJson` helper.
 
 When you fix a bug, add a test that fails before your fix. For anything touching escaping, sanitization or a resource budget, verify the test actually fails when the fix is reverted. A test that passes either way is worse than none, because it looks like coverage.
 

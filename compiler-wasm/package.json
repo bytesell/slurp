@@ -1,5 +1,5 @@
 {
-  "name": "@slurp/compiler-wasm",
+  "name": "@bytesell/slurp-compiler-wasm",
   "version": "0.1.0",
   "description": "WebAssembly build of the Slurp compiler: parse, render, validate, extract_schema and render_section for browser and editor hosts.",
   "license": "MIT",

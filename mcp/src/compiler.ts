@@ -1,7 +1,7 @@
 /**
  * The one place this package talks to the Slurp compiler.
  *
- * Everything below goes through `@slurp/compiler-wasm`, which is the real
+ * Everything below goes through `@bytesell/slurp-compiler-wasm`, which is the real
  * compiler built to WebAssembly. There is no subprocess, no `slurp` binary on
  * PATH and no reimplementation of any rule in TypeScript: a diagnostic this
  * server reports is a diagnostic the compiler produced.
@@ -24,8 +24,8 @@ import {
   validate_full as wasmValidateFull,
   extract_schema as wasmExtractSchema,
   parseJson,
-} from '@slurp/compiler-wasm'
-import type { ParseResult, RenderResult, SchemaResult, SlurpError } from '@slurp/compiler-wasm'
+} from '@bytesell/slurp-compiler-wasm'
+import type { ParseResult, RenderResult, SchemaResult, SlurpError } from '@bytesell/slurp-compiler-wasm'
 
 export type { ParseResult, RenderResult, SchemaResult, SlurpError }
 

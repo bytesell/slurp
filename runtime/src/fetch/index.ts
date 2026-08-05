@@ -1,5 +1,5 @@
 /**
- * @slurp/runtime - fetch entry point (dist/slurp.fetch.js)
+ * @bytesell/slurp-runtime - fetch entry point (dist/slurp.fetch.js)
  *
  * Provides the `slurpFetch` Alpine data factory used by compiled `{fetch}`
  * blocks. Handles:

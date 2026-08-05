@@ -21,9 +21,9 @@ export { GOTCHAS } from './reference/gotchas.js'
 
 const HEADER = `# Slurp, full reference
 
-Generated from the @slurp/mcp reference data, which is verified against the
+Generated from the @bytesell/slurp-mcp reference data, which is verified against the
 compiler by rendering each documented construct and recording the result. Do not
-edit this file by hand: run \`pnpm --filter @slurp/mcp run build:llms\`.
+edit this file by hand: run \`pnpm --filter @bytesell/slurp-mcp run build:llms\`.
 
 Source: https://github.com/bytesell/slurp
 `

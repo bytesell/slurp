@@ -53,12 +53,12 @@ is not, and it fails silently: a file full of parse errors shows no squiggles
 and nothing is logged.
 
 `getWasmValidator` in `src/extension.ts` reaches the compiler with
-`require('@slurp/compiler-wasm')`, which is not a declared dependency of this
+`require('@bytesell/slurp-compiler-wasm')`, which is not a declared dependency of this
 extension. The require throws, the `catch` returns a no-op yielding an empty
 array, and that no-op is the only fallback path. Nothing else takes over.
 
 Highlighting, completions, hover and go to definition come from
-`@slurp/language`, which **is** a declared dependency, so those work. Until
+`@bytesell/slurp-language`, which **is** a declared dependency, so those work. Until
 diagnostics are fixed, validate from the command line:
 
 ```bash

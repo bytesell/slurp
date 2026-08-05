@@ -48,7 +48,7 @@
       Mobile menu toggle.
 
       on:click compiles to a LITERAL on:click attribute. Slurp itself never
-      binds it, and neither does @slurp/runtime - it is a declaration for a
+      binds it, and neither does @bytesell/slurp-runtime - it is a declaration for a
       host runtime to pick up. It is also not interpolated: unlike an ordinary
       attribute, a ${ } inside an on: value is passed through verbatim.
 

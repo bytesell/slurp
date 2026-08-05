@@ -392,7 +392,7 @@ That matters because the runtime branches on this value. Anything reading it mus
 
 ### Runtime Security
 
-The runtime (`@slurp/runtime`) is an optional browser bundle. A page that uses no `{fetch}`, no `{$let}`, no `{try}` and no client navigation does not need it at all, and the whole of this subsection is then moot.
+The runtime (`@bytesell/slurp-runtime`) is an optional browser bundle. A page that uses no `{fetch}`, no `{$let}`, no `{try}` and no client navigation does not need it at all, and the whole of this subsection is then moot.
 
 **No `eval()`** - The runtime contains no `eval()`, no `new Function()`, and no string-argument `setTimeout`. Verified by grep across `runtime/src`. It does, however, load Alpine.js, and **Alpine evaluates its own attribute values as JavaScript**. That is Alpine's design, not a slurp defect, but it is why the JS-evaluated-attribute case above is a real injection sink rather than a theoretical one.
 

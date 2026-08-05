@@ -233,7 +233,7 @@ never checked at render time, so a missing required prop is simply null.
 ## Client-side behaviour
 
 `slurp build` produces plain HTML and injects NOTHING. The runtime is a separate package,
-`@slurp/runtime`, and a theme loads it by hand. This theme does it in `layouts/base.slurp`:
+`@bytesell/slurp-runtime`, and a theme loads it by hand. This theme does it in `layouts/base.slurp`:
 
 ```slurp
 <script src="/slurp.core.js"></script>

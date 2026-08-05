@@ -1,4 +1,4 @@
-# @slurp/compiler-wasm
+# @bytesell/slurp-compiler-wasm
 
 The WebAssembly build of the Slurp compiler. It exposes the seven entry points in
 `compiler/src/wasm/mod.rs` to JavaScript hosts: an editor, a preview pane, a
@@ -10,7 +10,7 @@ From a fresh clone, from the repository root:
 
 ```bash
 pnpm install
-pnpm --filter @slurp/compiler-wasm build
+pnpm --filter @bytesell/slurp-compiler-wasm build
 ```
 
 `pnpm build` at the root also builds it, ahead of the packages that consume it.
@@ -36,7 +36,7 @@ branded `string` that will not typecheck as a `T`. Cross the boundary with the
 exported `parseJson` helper.
 
 ```ts
-import { parse, parseJson } from '@slurp/compiler-wasm'
+import { parse, parseJson } from '@bytesell/slurp-compiler-wasm'
 
 const result = parseJson(parse('<h1>${title}</h1>'))
 //    ^ ParseResult

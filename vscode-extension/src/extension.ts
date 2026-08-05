@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import { getDiagnostics } from '@slurp/language'
+import { getDiagnostics } from '@bytesell/slurp-language'
 import type { SlurpDiagnostic } from '../../shared/interfaces'
 import {
   SlurpCompletionProvider,
@@ -201,7 +201,7 @@ function slurpErrorToVsDiagnostic(
 
 /**
  * Returns the WASM compiler's parse-only validate function if the optional
- * `@slurp/compiler-wasm` package is installed.  Falls back to a no-op that
+ * `@bytesell/slurp-compiler-wasm` package is installed.  Falls back to a no-op that
  * returns an empty array so the extension works without WASM.
  *
  * SECURITY: We only call `wasm.validate`, which is a parse-only operation.
@@ -211,7 +211,7 @@ function slurpErrorToVsDiagnostic(
 function getWasmValidator(): (source: string) => SlurpDiagnostic[] {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const wasm = require('@slurp/compiler-wasm') as Record<string, unknown>
+    const wasm = require('@bytesell/slurp-compiler-wasm') as Record<string, unknown>
     if (typeof wasm['validate'] === 'function') {
       const validate = wasm['validate'] as (source: string) => unknown
       return (source: string): SlurpDiagnostic[] => {
@@ -230,7 +230,7 @@ function getWasmValidator(): (source: string) => SlurpDiagnostic[] {
       }
     }
   } catch {
-    // @slurp/compiler-wasm not installed - return safe no-op.
+    // @bytesell/slurp-compiler-wasm not installed - return safe no-op.
   }
   return () => []
 }

@@ -15,11 +15,11 @@ export default defineConfig({
   sourcemap: true,
   target: 'node20',
   platform: 'node',
-  // `@slurp/compiler-wasm` is CommonJS and loads its .wasm with
+  // `@bytesell/slurp-compiler-wasm` is CommonJS and loads its .wasm with
   // `fs.readFileSync` relative to its own file. Bundling it would move that
   // read to a path where the .wasm does not exist, so it stays external and is
   // resolved from node_modules at run time.
-  external: ['@slurp/compiler-wasm', '@modelcontextprotocol/sdk'],
+  external: ['@bytesell/slurp-compiler-wasm', '@modelcontextprotocol/sdk'],
   // The shebang belongs on the executable only, but tsup's `banner` applies to
   // every entry. `onSuccess` prepends it to dist/bin.js alone, so importing the
   // library entry never carries a stray shebang line.

@@ -38,10 +38,10 @@ slurp gitignore  # write a .gitignore for a theme
 Optional pieces:
 
 ```bash
-cargo install slurp-dev-server   # the hot-reload server `slurp dev` launches
-cargo install slurp-image        # on-demand image resizing and transcoding
-pnpm add @slurp/runtime          # the optional browser runtime
-pnpm add -D @slurp/mcp           # MCP server, so an agent can write Slurp correctly
+cargo install slurp-dev-server        # the hot-reload server `slurp dev` launches
+cargo install slurp-image             # on-demand image resizing and transcoding
+pnpm add @bytesell/slurp-runtime      # the optional browser runtime
+pnpm add -D @bytesell/slurp-mcp       # MCP server, so an agent can write Slurp correctly
 ```
 
 ## Your first template
@@ -115,7 +115,7 @@ There are also WebAssembly bindings for browser and editor hosts. See [compiler-
 
 ## For agents
 
-`@slurp/mcp` is an MCP server that gives a coding agent the language reference plus tools to validate, render, lint and inspect schemas. Slurp is small and unusual enough that an agent will invent syntax without it.
+`@bytesell/slurp-mcp` is an MCP server that gives a coding agent the language reference plus tools to validate, render, lint and inspect schemas. Slurp is small and unusual enough that an agent will invent syntax without it.
 
 [`llms.txt`](./llms.txt) and [`llms-full.txt`](./llms-full.txt) serve the same reference to anything that reads that convention. Both are generated from the data the MCP server uses, so they cannot drift from it.
 
@@ -140,7 +140,7 @@ There are also WebAssembly bindings for browser and editor hosts. See [compiler-
 
 **0.1.0, pre-1.0.** The Rust API and the template language will both change without a deprecation cycle until 1.0.
 
-Slurp was extracted from a production system where it renders multi-tenant sites, so parsing, rendering, escaping and the resource budgets are exercised daily. The edges are less settled: parts of `@slurp/runtime` are not yet wired to compiler codegen and are published under `experimental/` for that reason, and the editor tooling and the compiler disagree on a few points of syntax, where the compiler is right. [runtime/README.md](./runtime/README.md) has the detail.
+Slurp was extracted from a production system where it renders multi-tenant sites, so parsing, rendering, escaping and the resource budgets are exercised daily. The edges are less settled: parts of `@bytesell/slurp-runtime` are not yet wired to compiler codegen and are published under `experimental/` for that reason, and the editor tooling and the compiler disagree on a few points of syntax, where the compiler is right. [runtime/README.md](./runtime/README.md) has the detail.
 
 ## Contributing
 

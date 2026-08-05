@@ -1,5 +1,5 @@
 {
-  "name": "@slurp/runtime",
+  "name": "@bytesell/slurp-runtime",
   "version": "0.1.0",
   "description": "Optional browser runtime for Slurp themes: client navigation, {fetch} data loading and infinite scroll.",
   "license": "MIT",

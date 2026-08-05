@@ -72,7 +72,7 @@ describe('llms.txt', () => {
 
   it('points at llms-full.txt and at the MCP server', () => {
     expect(text()).toContain('llms-full.txt')
-    expect(text()).toContain('@slurp/mcp')
+    expect(text()).toContain('@bytesell/slurp-mcp')
   })
 
   it('uses the real repository URL and no placeholder', () => {

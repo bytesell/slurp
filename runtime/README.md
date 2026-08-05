@@ -1,4 +1,4 @@
-# @slurp/runtime
+# @bytesell/slurp-runtime
 
 The optional browser runtime for [Slurp](https://github.com/bytesell/slurp) themes.
 
@@ -7,7 +7,7 @@ It is optional in the strong sense: a page that does not use client navigation,
 The compiler's output is plain HTML.
 
 ```bash
-pnpm add @slurp/runtime
+pnpm add @bytesell/slurp-runtime
 ```
 
 ```html
@@ -20,7 +20,7 @@ ESM only. These modules are browser chunks that mutate `window` on import, so
 
 ## What works against the 0.1.0 compiler
 
-`@slurp/runtime` (the `.` entry, `dist/slurp.core.js`) does four things on load:
+`@bytesell/slurp-runtime` (the `.` entry, `dist/slurp.core.js`) does four things on load:
 
 | Feature | State |
 |---|---|
@@ -56,8 +56,8 @@ Because of this, the two extra entry points are published under an
 `experimental/` prefix rather than as `./fetch` and `./infinite`:
 
 ```js
-import '@slurp/runtime/experimental/fetch'      // window.slurpFetch
-import '@slurp/runtime/experimental/infinite'   // IntersectionObserver sentinels
+import '@bytesell/slurp-runtime/experimental/fetch'      // window.slurpFetch
+import '@bytesell/slurp-runtime/experimental/infinite'   // IntersectionObserver sentinels
 ```
 
 The prefix is the warning. It is deliberately not something you can reach by
@@ -91,9 +91,9 @@ and the link stays opted in. Write it unquoted.
 
 ```bash
 pnpm install
-pnpm --filter @slurp/runtime build       # tsup -> dist/
-pnpm --filter @slurp/runtime test        # vitest
-pnpm --filter @slurp/runtime typecheck   # tsc --noEmit
+pnpm --filter @bytesell/slurp-runtime build       # tsup -> dist/
+pnpm --filter @bytesell/slurp-runtime test        # vitest
+pnpm --filter @bytesell/slurp-runtime typecheck   # tsc --noEmit
 ```
 
 ## License

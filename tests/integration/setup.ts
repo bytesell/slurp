@@ -1,7 +1,7 @@
 /**
  * Refuses to run this suite against a WASM build older than the compiler source.
  *
- * These tests import `@slurp/compiler-wasm`, which is a BUILD ARTIFACT produced by
+ * These tests import `@bytesell/slurp-compiler-wasm`, which is a BUILD ARTIFACT produced by
  * `wasm-pack` and deliberately not committed. Nothing in `pnpm test` rebuilds it, so
  * after any change under `compiler/src` the suite silently exercises the PREVIOUS
  * compiler. That is worse than a missing file, because the failure it produces is a
@@ -26,7 +26,7 @@ const repoRoot = resolve(here, '..', '..')
 const wasmPath = join(repoRoot, 'compiler-wasm', 'pkg', 'slurp_compiler_bg.wasm')
 const compilerSrc = join(repoRoot, 'compiler', 'src')
 
-const REBUILD = 'pnpm --filter @slurp/compiler-wasm build'
+const REBUILD = 'pnpm --filter @bytesell/slurp-compiler-wasm build'
 
 function newestMtimeMs(dir: string): number {
   let newest = 0

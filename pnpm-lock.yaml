@@ -37,7 +37,7 @@ importers:
 
   language/prettier-plugin-slurp:
     devDependencies:
-      '@slurp/language':
+      '@bytesell/slurp-language':
         specifier: workspace:*
         version: link:..
       prettier:
@@ -61,7 +61,7 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@3.25.76)
-      '@slurp/compiler-wasm':
+      '@bytesell/slurp-compiler-wasm':
         specifier: workspace:*
         version: link:../compiler-wasm
       zod:
@@ -120,7 +120,7 @@ importers:
 
   tests/integration:
     devDependencies:
-      '@slurp/compiler-wasm':
+      '@bytesell/slurp-compiler-wasm':
         specifier: workspace:*
         version: link:../../compiler-wasm
       jsdom:
@@ -138,7 +138,7 @@ importers:
 
   vscode-extension:
     dependencies:
-      '@slurp/language':
+      '@bytesell/slurp-language':
         specifier: workspace:*
         version: link:../language
     devDependencies:

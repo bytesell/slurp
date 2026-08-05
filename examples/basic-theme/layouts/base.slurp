@@ -50,7 +50,7 @@ props {
 </head>
 {*
   navigate turns on client-side navigation and transition asks it to use the
-  View Transitions API. BOTH are read by @slurp/runtime at runtime, not by the
+  View Transitions API. BOTH are read by @bytesell/slurp-runtime at runtime, not by the
   compiler, so they do nothing unless the script below is actually served.
 *}
 <body navigate transition>

@@ -424,7 +424,7 @@ If you write one thing from this page down, write this one.
 \`on:event="handler"\` parses and is emitted verbatim. \`<button on:click="go()">\`
 compiles to \`<button on:click=go()>\`, which is not an Alpine directive
 (\`@click\` / \`x-on:click\`) and not a DOM handler, so nothing runs. Neither the
-browser nor \`@slurp/runtime\` looks at it.
+browser nor \`@bytesell/slurp-runtime\` looks at it.
 
 It is also NOT interpolated, unlike every other quoted element attribute:
 \`on:click="f(\${item.id})"\` emits the literal text \`\${item.id}\` into the DOM.

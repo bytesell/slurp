@@ -88,7 +88,7 @@ renders multi-tenant sites.
   JSON fixtures for backendless previews, and an optional backend proxy.
 - **Image service** (`slurp-image`): on-demand width resize and transcode to
   AVIF, WebP or JPEG, with a two-level cache.
-- **Browser runtime** (`@slurp/runtime`): optional ESM bundles for client
+- **Browser runtime** (`@bytesell/slurp-runtime`): optional ESM bundles for client
   navigation, `{fetch}` data loading and infinite scroll.
 - **Editor tooling**: TextMate grammar, completions, hover documentation, a
   Prettier plugin and a VS Code extension.

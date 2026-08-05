@@ -1,5 +1,5 @@
 /**
- * @slurp/runtime - core entry point (dist/slurp.core.js)
+ * @bytesell/slurp-runtime - core entry point (dist/slurp.core.js)
  *
  * Always loaded on every Slurp page. Responsibilities:
  * 1. Bundle and expose Alpine.js

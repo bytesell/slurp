@@ -9,9 +9,9 @@
  * `tailwind-merge` at all while claiming to verify Tailwind conflict
  * resolution.
  *
- * Imports are by relative source path rather than through the `@slurp/runtime`
+ * Imports are by relative source path rather than through the `@bytesell/slurp-runtime`
  * package export map on purpose. The published entry points are side-effectful
- * bundles - importing `@slurp/runtime` boots Alpine and starts client
+ * bundles - importing `@bytesell/slurp-runtime` boots Alpine and starts client
  * navigation - so pulling one into a test would start the framework before the
  * test could set the page up.
  *

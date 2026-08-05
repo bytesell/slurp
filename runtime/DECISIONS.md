@@ -43,7 +43,7 @@ injection is a companion to that codegen when it lands.
 **Decision date:** 2026-08-01
 
 `format: ['esm']` and `"type": "module"`, and every `exports` entry offers only
-an `import` condition. A CommonJS consumer calling `require('@slurp/runtime')`
+an `import` condition. A CommonJS consumer calling `require('@bytesell/slurp-runtime')`
 gets `ERR_REQUIRE_ESM`. These modules are browser chunks loaded with
 `<script type="module">` and they mutate `window` on import, so a CJS build
 would create a second copy of that global state in any bundle mixing the two.
@@ -75,7 +75,7 @@ first.
 **Decision date:** 2026-08-01
 
 `slurp.fetch.js` and `slurp.infinite.js` are published as
-`@slurp/runtime/experimental/fetch` and `@slurp/runtime/experimental/infinite`,
+`@bytesell/slurp-runtime/experimental/fetch` and `@bytesell/slurp-runtime/experimental/infinite`,
 not as the shorter `./fetch` and `./infinite` the build output suggests.
 
 The client half and the compiler half of these features do not meet. Both

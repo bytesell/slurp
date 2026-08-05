@@ -35,7 +35,7 @@ import {
   extract_schema as wasmExtractSchema,
   render_section as wasmRenderSection,
   parseJson,
-} from '@slurp/compiler-wasm'
+} from '@bytesell/slurp-compiler-wasm'
 import type { ParseResult, RenderResult, SchemaResult, SlurpError } from '../../shared/interfaces'
 
 // ─── Typed wrappers ───────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 {
-  "name": "@slurp/mcp",
+  "name": "@bytesell/slurp-mcp",
   "version": "0.1.0",
   "description": "Model Context Protocol server for Slurp: validate, render, inspect and look up .slurp templates in-process, so a coding agent can close its own correction loop.",
   "license": "MIT",
@@ -51,7 +51,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@slurp/compiler-wasm": "workspace:*",
+    "@bytesell/slurp-compiler-wasm": "workspace:*",
     "zod": "^3.23.8"
   },
   "devDependencies": {

@@ -1,5 +1,5 @@
 /**
- * @slurp/runtime - infinite entry point (dist/slurp.infinite.js)
+ * @bytesell/slurp-runtime - infinite entry point (dist/slurp.infinite.js)
  *
  * Manages IntersectionObserver-based infinite scroll. The compiler emits a
  * sentinel element at the bottom of every list that uses `infinite` or

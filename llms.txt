@@ -17,7 +17,7 @@ fails if it differs from what is committed.
 
 ## Read this first if you are writing a template
 
-There is an MCP server, `@slurp/mcp`, that runs the real compiler in-process. It
+There is an MCP server, `@bytesell/slurp-mcp`, that runs the real compiler in-process. It
 gives you `slurp_validate` (structured diagnostics including the security walk),
 `slurp_render` (HTML plus development-mode warnings), `slurp_lint` (the silent
 failures the compiler does not report), `slurp_schema` and `slurp_reference`.
