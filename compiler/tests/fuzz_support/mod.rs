@@ -784,7 +784,54 @@ pub fn replay_worker_if_requested() -> bool {
             }
         });
 
-    run_target(target, &data);
+    // The work runs on a FUZZ WORKER thread, not on this one, and that is the whole point.
+    //
+    // `CountingAlloc` enforces the ceiling on the allocation path, but only for a fuzz worker,
+    // because the campaign's main thread holds the corpus and has to survive to write the
+    // reproducer out. This child has no corpus, so that exemption bought it nothing and cost it
+    // the only synchronous detector: running the target on the main thread left the polled
+    // monitor above as the sole guard, and a poll checks once and then sleeps `MEMORY_POLL`. Work
+    // that breaches and returns inside that first window is never sampled, so the child exits 0
+    // and the parent reads a breach as `Completed`. That is not hypothetical - it is a real CI
+    // failure, and it reproduced only on the faster runner, which is exactly the wrong way round
+    // for a memory ceiling.
+    //
+    // On a worker the breaching allocation itself parks the thread, synchronously, before the
+    // memory is handed out. Detection no longer depends on when a sample lands: a breached run
+    // can no longer reach the end of `run_target`, so `Completed` becomes unreachable after a
+    // breach rather than merely unlikely. The poll above is kept as a backstop for any growth
+    // that does not pass through the global allocator, so this only ADDS a detector.
+    let (tx, rx) = mpsc::channel::<()>();
+    let worker_data = data.clone();
+    let spawned = std::thread::Builder::new()
+        .name("fuzz-replay".into())
+        // Matches `run_guarded`: the crate grows its own stack with `stacker`, and an overflow
+        // here would abort with no attribution.
+        .stack_size(4 * 1024 * 1024)
+        .spawn(move || {
+            IN_FUZZ_WORKER.with(|f| f.set(true));
+            run_target(target, &worker_data);
+            let _ = tx.send(());
+        });
+
+    match spawned {
+        Ok(_handle) => loop {
+            match rx.recv_timeout(MEMORY_POLL) {
+                // Finished under the ceiling, or vanished without sending. Either way this child
+                // has nothing to report and its exit status is the answer.
+                Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    if memory_breached() {
+                        eprintln!("slurp fuzz replay: memory ceiling exceeded on the alloc path");
+                        std::process::abort();
+                    }
+                }
+            }
+        },
+        // No thread available. Fall back to running inline rather than reporting a finding that
+        // is really about this machine.
+        Err(_) => run_target(target, &data),
+    }
     true
 }
 
