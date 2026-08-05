@@ -96,11 +96,11 @@
   },
   "//devDependencies": "@types/vscode is pinned EXACTLY, and equal to the engines.vscode floor above. It is not a dependency to keep current: it IS the API surface TypeScript checks against, so anything newer than the floor lets us call an API our declared minimum does not have while the Marketplace still installs there. A caret defeats the point, because ^1.85.0 resolves to the newest 1.x. Raise this and engines.vscode together or neither. (Keep notes like this OUT of the dependency objects: pnpm reads a `//`-prefixed key there as a real package name and the install fails.)",
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/vscode": "1.85.0",
+    "@types/node": "^26.1.2",
+    "@types/vscode": "1.125.0",
     "@vscode/vsce": "^3.9.2",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"
   },
