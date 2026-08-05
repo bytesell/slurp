@@ -3,9 +3,8 @@
  *
  * THE ONE THING TO KNOW: every export here returns a JSON **string**, not an
  * object. `compiler/src/wasm/mod.rs` serialises with `JsValue::from_str`, so the
- * caller must `JSON.parse` the result. Documentation elsewhere in this repo has
- * claimed otherwise in the past, and the VS Code extension carries a comment
- * about the same trap, so the return types below are branded: `JsonString<T>`
+ * caller must `JSON.parse` the result. It is an easy trap, so the return types
+ * below are branded: `JsonString<T>`
  * is a `string` that is known to parse to `T`. It cannot be used as a `T` by
  * accident, and `parseJson` is the one way to cross that boundary.
  *
@@ -36,10 +35,10 @@ export declare function parse(source: string): JsonString<ParseResult>
  * JSON strings; malformed input comes back as an `InvalidAst` or
  * `InvalidContext` error rather than a thrown exception.
  *
- * Renders in production mode: `{debug}` emits nothing and the advisory
- * truncation warnings (loop cap, CSS-stripped, undeclared JS slot) are not
- * recorded. Use `render_dev` in an editor, where those diagnostics are the
- * point.
+ * Renders in production mode: `{debug}` emits nothing and the two advisories
+ * (CSS-stripped value, undeclared JS slot) are not recorded. Resource budgets,
+ * including the 1000-item loop cap, DO record a warning here. Use `render_dev`
+ * in an editor, where the advisories are the point.
  */
 export declare function render(
   astJson: string,
@@ -47,9 +46,9 @@ export declare function render(
 ): JsonString<RenderResult>
 
 /**
- * `render`, in development mode: `{debug}` renders and the advisory warnings
- * above are recorded. This is the entry point an editor or preview pane wants,
- * because production mode truncates a >1000-item loop with no diagnostic at all.
+ * `render`, in development mode: `{debug}` renders and the two advisories above
+ * are recorded. This is the entry point an editor or preview pane wants, because
+ * those two silently alter the output.
  */
 export declare function render_dev(
   astJson: string,

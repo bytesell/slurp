@@ -16,14 +16,13 @@ It also produces a worse corpus. Real files cluster around whatever one author h
 so they over-represent a few constructs and miss most of the grammar. Hand-written seeds cover the
 language systematically.
 
-Three kinds of file belong here, distinguished by their name prefix:
+A file's name prefix says what it is:
 
 | Prefix | What it is |
 |---|---|
 | `grammar-*` | Synthetic seeds exercising one area of the grammar: every block tag and its branches, every lexer mode transition, expressions, filters, frontmatter schemas, HTML. |
 | `repro-*` | The minimised input for a bug that was actually found, by review or by the fuzzer. Highest-value seeds: they are what stops a fixed bug regressing silently. |
-| `audit-*` | Shapes written to answer a specific question raised during a security or correctness audit, kept so the answer stays pinned. |
-| everything else (`unterm-*`, `deep-*`, `amp-*`, `mode-*`, `sec-*`, `bytes-*`, `data-*`, `reg-*`) | Hand-written hostile shapes: unterminated constructs, deep nesting, amplification, mode transitions, hostile bytes. |
+| `unterm-*`, `deep-*`, `amp-*`, `mode-*`, `sec-*`, `bytes-*`, `data-*`, `reg-*` | Hand-written hostile shapes: unterminated constructs, deep nesting, amplification, mode transitions, hostile bytes. |
 
 `corpus/sections_merge/` uses its own prefix, `state-*`, because its inputs are
 not templates: each is a section-state JSON document fed to the merge, so the
@@ -79,52 +78,48 @@ cargo test -p slurp-compiler --release --test fuzz_targets -- fuzz_lex --nocaptu
 | `SLURP_FUZZ_CONFIRM_MS` | 60000 | Budget a suspected hang must ALSO miss before it is reported |
 | `SLURP_FUZZ_RSS_LIMIT_MB` | 256 | Process-wide memory ceiling; crossing it is a reported finding |
 
-## Why a hang is reported instead of hanging
+## Hangs are reported, not suffered
 
-Every target runs on a worker thread behind a bounded wait. On a timeout the harness returns to
-a live caller that prints and saves the offending input, rather than waiting for a call that
-never returns. That property is itself tested, by
-`watchdog_reports_a_hang_instead_of_hanging`, against a body known to spin.
+Every target runs on a worker thread behind a bounded wait, so a timeout returns to a live caller
+that prints and saves the offending input. `watchdog_reports_a_hang_instead_of_hanging` tests that
+against a body known to spin.
 
-A suspected hang is then re-run in a SUBPROCESS with a much larger budget before it is reported.
-A debug build under a parallel `cargo test` is slow enough that a legitimately bounded
-computation can miss the fast budget, and a fuzzer that reports false hangs stops being trusted.
-Only an input that also misses the confirmation budget is a real non-termination. The subprocess
-path is also what turns a stack overflow from an uncatchable abort of the whole suite into one
-attributable input.
+A suspected hang is re-run in a subprocess with a much larger budget before it is reported. A
+debug build under a parallel `cargo test` is slow enough that a legitimately bounded computation
+can miss the fast budget, and a fuzzer that reports false hangs stops being trusted. Only an input
+that also misses the confirmation budget is a real non-termination. The subprocess also turns a
+stack overflow from an uncatchable abort of the whole suite into one attributable input.
 
-Minimisation runs in subprocesses too, because Rust cannot kill a thread and asking a hanging
-input the same question 400 times in-process would leak 400 spinning threads.
+Minimisation runs in subprocesses for the same reason: Rust cannot kill a thread, so asking a
+hanging input the same question 400 times in-process would leak 400 spinning threads.
 
-## Why memory is bounded as well as time
+## Memory is bounded as well as time
 
 An input that allocates without bound is the same bug class as one that hangs: the process dies
-either way, and in a shared render service it takes every other tenant with it. Bounding only TIME
-leaves that half uncovered, and an unbounded target can reach several GB before anything notices.
-A harness that dies of the failure it is meant to report cannot report it.
+either way, and in a shared render service it takes every other tenant with it. An unbounded
+target can reach several GB before anything notices, and a harness that dies of the failure it is
+meant to report cannot report it.
 
-So a counting global allocator, `CountingAlloc`, tracks live bytes process-wide.
+A counting global allocator, `CountingAlloc`, tracks live bytes process-wide.
 
-**Enforcement is on the allocation path, not on the timer, and the distinction is the whole
-point.** The watchdog's 50 ms sample can observe a slow leak but cannot contain a fast one: a tight
-allocation loop, or a single huge allocation, goes from under the ceiling to many gigabytes between
-two samples. So the ceiling is checked inside `CountingAlloc::alloc`, which parks the offending
-worker **before** handing out the memory that would cross it. Parking rather than returning null is
-deliberate too - a null return routes to `handle_alloc_error`, which aborts the process, which is
-the failure this exists to report rather than suffer.
+**Enforcement is on the allocation path, not on the timer.** The watchdog's 50 ms sample can
+observe a slow leak but cannot contain a fast one: a tight allocation loop, or a single huge
+allocation, goes from under the ceiling to many gigabytes between two samples. So the ceiling is
+checked inside `CountingAlloc::alloc`, which parks the offending worker *before* handing out the
+memory that would cross it. Parking rather than returning null matters too: a null return routes
+to `handle_alloc_error`, which aborts the process, which is the failure this exists to report.
 
-The 50 ms poll's remaining job is classification and reporting: crossing `SLURP_FUZZ_RSS_LIMIT_MB`
-is surfaced exactly like a hang or a panic, with the input written to `crashes/`. The ceiling is
-PROCESS-wide rather than per-target on purpose: a hang-detected worker is leaked and keeps
-allocating, so leaked workers have to be counted too. Note that the ceiling is rebased on live bytes
+The 50 ms poll's remaining job is classification and reporting. Crossing
+`SLURP_FUZZ_RSS_LIMIT_MB` is surfaced exactly like a hang or a panic, with the input written to
+`crashes/`. The ceiling is process-wide rather than per-target because a hang-detected worker is
+leaked and keeps allocating, so leaked workers have to be counted too. It is rebased on live bytes
 at initialisation, so the variable is a budget rather than an absolute RSS figure. Confirmation
 subprocesses carry the ceiling explicitly and `abort` on their own when they cross it, so a CI
 runner attributes the input instead of being OOM-killed with no output.
 
-Both halves are proven by tests, the same way the hang watchdog is:
-`allocator_stops_a_fast_runaway_at_the_ceiling` and
+Both halves are tested: `allocator_stops_a_fast_runaway_at_the_ceiling` and
 `subprocess_enforces_its_own_memory_ceiling`.
 
-**Worst-case footprint of a campaign** is the ceiling plus one confirmation subprocess carrying
-the same ceiling, so roughly 2x `SLURP_FUZZ_RSS_LIMIT_MB`, provided parallelism is bounded with
-`--test-threads=1`. CI does exactly that.
+Worst case for a campaign is the ceiling plus one confirmation subprocess carrying the same
+ceiling, so roughly 2x `SLURP_FUZZ_RSS_LIMIT_MB`, provided parallelism is bounded with
+`--test-threads=1`. CI does that.

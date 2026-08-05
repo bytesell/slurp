@@ -37,10 +37,9 @@
 
 ## 1. Overview
 
-> **Status: 0.1.0.** This document is the reference for what the compiler
-> actually does today, re-verified against the source. Where a feature is
-> absent, incomplete or wired only halfway, it says so rather than describing
-> the intent. Anything not described here does not exist.
+> **Status: 0.1.0.** This is a reference for what the compiler does today, not
+> for what it is meant to do. Where a feature is absent, incomplete or wired
+> only halfway, it says so. Anything not described here does not exist.
 
 Slurp is a server-side HTML templating engine written in Rust. Templates are compiled to plain HTML strings before being sent to the browser. An optional TypeScript runtime layers client behaviour on top of the emitted HTML.
 
@@ -48,8 +47,8 @@ Slurp is a server-side HTML templating engine written in Rust. Templates are com
 
 - Rendering is a **single server-side pass over a JSON context**. There is no reactivity, no function evaluation and no user code execution at render time.
 - Expression output is HTML-escaped by default. `{html}` is the only way to emit raw output. See [Section 10](#10-escaping-and-security), including the contexts where that escaping is not sufficient.
-- Compile-time security checks gate `env.SLURP_SECRET_*`, `request.*` scope, `{redirect}` and `{next}`. **These run in the `compile*` entry points only, never in WASM.**
-- The renderer is deliberately **total and tolerant**: missing data renders `""`, budgets truncate, and unknown keys are dropped. Almost nothing raises. That is what makes it safe to render untrusted templates in a shared service, and it is also why most mistakes are silent rather than loud. `--verbose` on `slurp build` shows the warnings that were produced, and every budget produces one, but without `-v` the console stays quiet and a build that dropped the tail of a list still exits 0. See "Resource budgets" in Section 11.
+- Compile-time security checks gate `env.SLURP_SECRET_*`, `request.*` scope, `{redirect}` and `{next}`. **They run in the `compile*` entry points, in `slurp validate`, and in the WASM export `validate_full`. Every other WASM export skips them.**
+- The renderer is deliberately **total and tolerant**: missing data renders `""`, budgets truncate, and unknown keys are dropped. Almost nothing raises. That is what makes it safe to render untrusted templates in a shared service, and it is also why most mistakes are silent rather than loud. The resource budgets record a warning either way, but `slurp build` prints warnings only under `--verbose`, so without `-v` a build that dropped the tail of a list is quiet and still exits 0. See "Resource budgets" in Section 11.
 - The compiler is available as a native Rust library, a WASM module, a CLI binary (`slurp`), and a dev server with hot reload.
 
 ---
@@ -67,6 +66,9 @@ slurp validate --dir .
 
 # Start the dev server with hot reload
 slurp dev --port 3000
+
+# Write a theme .gitignore
+slurp gitignore
 ```
 
 ### Rust library
@@ -81,7 +83,7 @@ let options = CompileOptions {
 };
 
 let html = compile_template("<h1>Hello, ${name}!</h1>", options)?;
-// → "<h1>Hello, Alice!</h1>"
+// -> "<h1>Hello, Alice!</h1>"
 ```
 
 ### Simple template
@@ -253,7 +255,7 @@ The condition is any expression. Falsy values: `false`, `null`, `0`, `""`, empty
 
 #### With index
 
-**The item name comes first and the index second.** Earlier revisions of this document had these reversed.
+**The item name comes first and the index second.**
 
 ```slurp
 {each item, i in products}
@@ -317,9 +319,8 @@ See [Section 9](#9-loop-filters) for the full loop filter reference.
 
 Pattern-match a value against string, number, or boolean literals. `_` is the wildcard arm.
 
-> **There is no `{case}` tag.** An arm is written `pattern -> body`. Earlier
-> revisions of this document showed `{case "x"}`, which is a parse error
-> (`Expected match pattern, found LBrace`).
+> **There is no `{case}` tag.** An arm is written `pattern -> body`; `{case "x"}`
+> is a parse error (`Expected match pattern, found LBrace`).
 
 ```slurp
 {match order.status}
@@ -492,7 +493,7 @@ Runs the content through an `ammonia`-based allowlist sanitizer before emitting.
 
 Everything not on that list is removed, so `<script>`, `<iframe>`, `<object>`, `<embed>`, `<form>`, `<input>`, `<style>` and the rest are stripped by absence rather than as special cases. Attributes work the same way: only an explicit allowlist survives, which is what removes every `on*` handler. URL schemes are limited to `http`, `https` and `mailto`. Any `<a>` with a `target` gets `rel="noopener noreferrer"` added.
 
-The full attribute list and the tracking caveat about allowed `img`/`srcset` are in [SECURITY.md](./SECURITY.md).
+The full attribute list and the tracking caveat about allowed `img`/`srcset` are in [docs/security-model.md](./docs/security-model.md).
 
 #### `{html}` in attribute position
 
@@ -714,11 +715,13 @@ To bind a handler, write the Alpine attribute you actually want:
 <button @click="addToCart(1)">Add to cart</button>
 ```
 
-Before putting a value into any Alpine attribute, read the JS-evaluated-attribute warning in [SECURITY.md](./SECURITY.md); those attributes are a JavaScript context and `${ }` escaping is not sufficient in them.
+Before putting a value into any Alpine attribute, read the JS-evaluated-attribute warning in [docs/security-model.md](./docs/security-model.md); those attributes are a JavaScript context and `${ }` escaping is not sufficient in them.
 
-### `navigate=false` - NOT WIRED
+### `navigate=false`
 
-This is documented for completeness only. The compiler emits `data-navigate="false"` while the client runtime reads the `navigate` attribute, so the opt-out currently has no effect.
+Opts a link out of client navigation. The compiler emits a bare `navigate="false"` and the runtime reads that same spelling (`runtime/src/core/navigation.ts`), pinned by a compiler integration test.
+
+It only does anything on a page where client navigation is running at all, which needs a `navigate` attribute on `<body>` and a `[data-slurp-page]` container. The compiler generates neither; a theme or host supplies them. See [Section 14](#14-wasm--typescript-integration).
 
 ---
 
@@ -819,10 +822,9 @@ The emitted service URL has the shape `/_slurp/image?src={urlencoded}&w={width}&
 
 > **There is no frontmatter `layout` directive.** A page wraps itself in a
 > layout using the `{layout}` block or the `<layout>` element, both shown below.
-> A `layout "..."` line in frontmatter parses without error and does nothing at
-> all, because frontmatter silently skips tokens it does not recognise, so the
-> page renders with no layout applied. Earlier revisions of this document showed
-> that form.
+> A `layout "..."` line in frontmatter parses without error and does nothing,
+> because frontmatter silently skips tokens it does not recognise, so the page
+> renders with no layout applied.
 
 ### Defining a layout
 
@@ -1025,7 +1027,7 @@ ${value | filterName}
 ${value | filterName(arg1, arg2)}
 ```
 
-Two rules to know before the table:
+Before the table:
 
 > **Filter arguments must be literals.** A filter argument is read only as a
 > string, number or boolean literal; anything else yields `""` with no error.
@@ -1044,7 +1046,7 @@ An unknown filter name **fails the build**.
 Convert string to uppercase.
 
 ```slurp
-${"hello" | upper}   → "HELLO"
+${"hello" | upper}   -> "HELLO"
 ```
 
 ### `lower`
@@ -1052,7 +1054,7 @@ ${"hello" | upper}   → "HELLO"
 Convert string to lowercase.
 
 ```slurp
-${"WORLD" | lower}   → "world"
+${"WORLD" | lower}   -> "world"
 ```
 
 ### `currency(code?)`
@@ -1064,10 +1066,10 @@ Supported codes: `USD` `$`, `EUR` `€`, `GBP` `£`, `JPY` `¥`, `CAD` `CA$`, `A
 JPY uses 0 decimals; EUR uses `.` for thousands and `,` for decimals; CHF uses `'` for thousands. The symbol always prefixes, and a negative renders as `-$5.00`. Rounding happens in minor units, so `19.999` becomes `$20.00`. A non-numeric value becomes `0`.
 
 ```slurp
-${1234.56 | currency("USD")}   → "$1,234.56"
-${1000.00 | currency("EUR")}   → "€1.000,00"
-${5000    | currency("JPY")}   → "¥5,000"
-${-50.00  | currency("GBP")}   → "-£50.00"
+${1234.56 | currency("USD")}   -> "$1,234.56"
+${1000.00 | currency("EUR")}   -> "€1.000,00"
+${5000    | currency("JPY")}   -> "¥5,000"
+${-50.00  | currency("GBP")}   -> "-£50.00"
 ```
 
 ### `truncate(n, suffix?)`
@@ -1075,9 +1077,9 @@ ${-50.00  | currency("GBP")}   → "-£50.00"
 Truncate a string to at most `n` characters. Appends `suffix` (default: `"..."`) when truncated.
 
 ```slurp
-${"Hello, world!" | truncate(5)}          → "Hello..."
-${"Hello, world!" | truncate(5, " →")}    → "Hello →"
-${"Hi"            | truncate(100)}         → "Hi"
+${"Hello, world!" | truncate(5)}         -> "Hello..."
+${"Hello, world!" | truncate(5, " [more]")} -> "Hello [more]"
+${"Hi"            | truncate(100)}       -> "Hi"
 ```
 
 Character count is Unicode-aware.
@@ -1087,8 +1089,8 @@ Character count is Unicode-aware.
 Format a number to `n` decimal places.
 
 ```slurp
-${3.14159 | fixed(2)}   → "3.14"
-${42      | fixed(2)}   → "42.00"
+${3.14159 | fixed(2)}   -> "3.14"
+${42      | fixed(2)}   -> "42.00"
 ```
 
 ### `date(format?)`
@@ -1107,9 +1109,9 @@ Format an ISO date string (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SSZ`). Default form
 | `D` | `5` | Day without padding |
 
 ```slurp
-${"2024-01-15"          | date}                  → "Jan 15, 2024"
-${"2024-03-05"          | date("MM/DD/YYYY")}     → "03/05/2024"
-${"2024-12-25"          | date("D MMMM YYYY")}    → "25 December 2024"
+${"2024-01-15"          | date}                  -> "Jan 15, 2024"
+${"2024-03-05"          | date("MM/DD/YYYY")}     -> "03/05/2024"
+${"2024-12-25"          | date("D MMMM YYYY")}    -> "25 December 2024"
 ```
 
 **There are no time tokens.** The filter splits on `T` or a space, then on `-`. If that yields fewer than three parts the **input is returned unchanged**, so an epoch-millisecond timestamp passes straight through looking like a number. Pass dates as RFC 3339 or `YYYY-MM-DD` strings.
@@ -1129,10 +1131,10 @@ ${user.bio | default("No bio yet.")}
 Format a count word. If `plural` is omitted, appends `"s"` to `singular`.
 
 ```slurp
-${5 | plural("item")}              → "5 items"
-${1 | plural("item")}              → "1 item"
-${3 | plural("child", "children")} → "3 children"
-${0 | plural("result")}            → "0 results"
+${5 | plural("item")}              -> "5 items"
+${1 | plural("item")}              -> "1 item"
+${3 | plural("child", "children")} -> "3 children"
+${0 | plural("result")}            -> "0 results"
 ```
 
 ### `int`
@@ -1140,9 +1142,9 @@ ${0 | plural("result")}            → "0 results"
 Convert to integer. Truncates floats; parses numeric strings. Returns `0` on failure.
 
 ```slurp
-${"42.7" | int}   → 42
-${3.9    | int}   → 3
-${null   | int}   → 0
+${"42.7" | int}   -> 42
+${3.9    | int}   -> 3
+${null   | int}   -> 0
 ```
 
 ### `float`
@@ -1150,8 +1152,8 @@ ${null   | int}   → 0
 Convert to floating-point number. Returns `0.0` on failure.
 
 ```slurp
-${"3.14" | float}   → 3.14
-${null   | float}   → 0.0
+${"3.14" | float}   -> 3.14
+${null   | float}   -> 0.0
 ```
 
 Neither `int` nor `float` does prefix parsing: `"12abc"` is `0`, not `12`.
@@ -1268,7 +1270,7 @@ HTML entity escaping is right in HTML text and in a plain attribute value, and w
 - **Inside a `style` or `:style` attribute** the CSS-structural characters `; { } ( ) " ' \ @ * < >` are removed from the value. `:` and `/` are kept, so `background:url(${ path })` still works.
 - **Inside `srcdoc`** the value is run through the same ammonia allowlist sanitizer that `{html expr sanitize}` uses, at the layer the iframe will see it.
 
-Two contexts still have no protection: a **`<style>` element body** (the CSS strip is routed by attribute name, so nothing reaches text inside `<style>`), and a `{html attrs}` **attribute spread**, which is theme-trust only and can never be made safe for untrusted data. Do not interpolate untrusted data into either. [SECURITY.md](./SECURITY.md) has the full treatment with worked examples and the limitations that remain.
+A **`<style>` element body** and a `{html attrs}` **attribute spread** have no protection at all. The CSS strip is routed by attribute name, so nothing reaches text inside `<style>`; the spread's whole purpose is forwarding Alpine directives, which Alpine evaluates as JavaScript, so it can never be made safe for untrusted data. Do not interpolate untrusted data into either. [docs/security-model.md](./docs/security-model.md) has the worked examples and the remaining limitations.
 
 ### A trap: JavaScript template literals
 
@@ -1320,7 +1322,7 @@ Plus one **warning**, raised at parse time so `slurp validate` sees it: a JavaSc
 
 The two script-context rules above additionally have render-time backstops in the renderer, so they are enforced even on the paths that render without the compile-time walk.
 
-The `SLURP_SECRET_` check matches a **literal name prefix**, and it is refused in every file - middleware is not an exception. The compiler never reads the process environment; `env` is just a context root supplied by the host. `${ env.API_KEY }` compiles cleanly and renders whatever the host put there. Getting this right is the host's job, and [SECURITY.md](./SECURITY.md) says exactly what that job is.
+The `SLURP_SECRET_` check matches a **literal name prefix**, and it is refused in every file - middleware is not an exception. The compiler never reads the process environment; `env` is just a context root supplied by the host. `${ env.API_KEY }` compiles cleanly and renders whatever the host put there. Getting this right is the host's job, and [docs/security-model.md](./docs/security-model.md) says exactly what that job is.
 
 ---
 
@@ -1404,10 +1406,6 @@ tail is better than a page that fails. What you are protected from is not notici
 Note the exit code is 0, so a script that only checks the status will not catch this.
 Look for the warning, or count what you expected to render.
 
-Both iteration warnings were `BuildMode::Development`-only until 2026-08-04, which
-meant `slurp build` dropped items with no output at all and `-v` could not change it.
-If you are reading an older release, that is what it did.
-
 ### `ErrorAccumulator`
 
 Some APIs (`compile()`) return an accumulator holding both errors and warnings:
@@ -1468,12 +1466,9 @@ Options:
 
 **`components/` and `layouts/` are checked but never emitted.** Every `.slurp` file is compiled, so an error in a component that no page imports yet still fails the build. Only those two directories are held back from the output, because a component or layout rendered on its own is a fragment rather than a document - a layout comes out carrying literal `<slot>` elements. Everything else is written, so a single `index.slurp` at the root builds to `dist/index.html`.
 
-Three things to expect:
-
 - **Output is always minified**, with `minify-html` in spec-compliant mode. There is no flag to turn it off. Spec-compliant minification removes optional tags and attribute quotes, so built HTML will not look like your source. The library API does not minify; only the CLI does.
 - **`slurp build` truncates a loop and still exits 0.** Every budget in Section 11 truncates rather than failing, so a build that drops the tail of a list reports success. The warning is produced, but `-v` is what prints it. See "Resource budgets" in Section 11.
-
-A `--globals` file that is unreadable, malformed, or not a JSON object is a **fatal** error rather than a silent fallback.
+- **A `--globals` file that is unreadable, malformed, or not a JSON object is fatal**, not a silent fallback to an empty context. The reason to pass it is that some attribute cannot be written without it, and a quiet fallback builds clean and breaks in the browser.
 
 ### `slurp validate` CLI options
 
@@ -1555,7 +1550,7 @@ Compile from a virtual file system (`options.virtual_files`). Resolves imports a
 ```rust
 pub fn compile(
     source: &str,
-    file: &str,
+    file: impl Into<String>,
     context: &serde_json::Value,
     mode: BuildMode,
 ) -> (String, ErrorAccumulator)
@@ -1575,6 +1570,8 @@ pub struct CompileOptions {
     pub virtual_files: Option<HashMap<String, String>>,
     /// Entry file name within virtual_files.
     pub entry_file: Option<String>,
+    /// Renderer byte budgets. Defaults to `MemoryBudget::DEFAULT`.
+    pub budget: MemoryBudget,
 }
 ```
 
@@ -1587,7 +1584,7 @@ pub enum BuildMode {
 }
 ```
 
-In `Development` mode, `{debug}` nodes emit HTML comments. In `Production` mode they are stripped.
+In `Development` mode, `{debug}` nodes emit a visible `<pre data-slurp-debug>` element. In `Production` mode they are stripped.
 
 ### `parse`
 
@@ -1607,10 +1604,10 @@ pub fn render(
     doc: &Document,
     context: &serde_json::Value,
     mode: BuildMode,
-) -> Result<String, CompileError>
+) -> (String, ErrorAccumulator)
 ```
 
-Render a parsed `Document` to HTML given a context JSON value. Three arguments; there is no `file` parameter.
+Render a parsed `Document` to HTML against a context JSON value. Three arguments; there is no `file` parameter. Like `compile`, it returns diagnostics alongside the output rather than a `Result`, because rendering is total.
 
 ### Other exports
 
@@ -1623,12 +1620,15 @@ Render a parsed `Document` to HTML given a context JSON value. Three arguments; 
 ### Building the WASM module
 
 ```sh
-wasm-pack build compiler/ --target web --out-dir pkg/
+node compiler-wasm/build.mjs                # --target nodejs, the default
+node compiler-wasm/build.mjs --target web   # for a browser host with a bundler
 ```
+
+`pkg/` is build output and is not committed. `pnpm build` runs this as part of the `@slurp/compiler-wasm` package.
 
 ### WASM exports
 
-**Seven** functions are exported. Earlier revisions of this document listed five and named `compile_wasm`, `parse_wasm` and `get_errors_wasm`; **none of those three exist**.
+Seven functions are exported. There is no `compile_wasm`, `parse_wasm` or `get_errors_wasm`, whatever an older integration may call.
 
 ```typescript
 function parse(source: string): string
@@ -1640,7 +1640,7 @@ function extract_schema(source: string): string
 function render_section(ast_json: string, section_state_json: string, context_json: string): string
 ```
 
-Three things every embedder must know:
+What every embedder needs to know:
 
 1. **Each returns a JSON string, not an object.** Callers must `JSON.parse()` the result.
 2. **`validate_full` is the one that runs the compile-time security walk**, and it is a separate export rather than a change to `validate` so that editor-preview hosts are unaffected. Rules such as "an unfiltered `${ }` may not appear in a `<script>` body" live in the walk, not in the parser, so a tool that calls only `validate` reports a file clean that `slurp build` then rejects. Pass `is_middleware` matching the eventual compile; `false` is what the CLI uses. The walk returns on its first violation, so at most one security diagnostic comes back per call.
@@ -1665,8 +1665,7 @@ Be careful here, because the runtime's capability and the compiler's output do n
 
 - **It registers zero Alpine magics and zero Alpine directives.** There is no `$reactive`, no `$money`, nothing of that shape. It touches Alpine in exactly three places: `Alpine.start()`, `Alpine.initTree()` after a client navigation, and `Alpine.data('slurpFetch', ...)`.
 - **`{$let}` has no hydrator.** Nothing reads `data-slurp-let`.
-- Several markers the runtime looks for have **no producer in the compiler**: `[data-slurp-page]`, `<meta name="slurp-route">`, `x-data="slurpFetch(...)"` and `[data-slurp-sentinel]`. In practice that means `slurp.fetch.js` and `slurp.infinite.js` are not reachable from compiled output today, and client navigation needs a theme that supplies `[data-slurp-page]` itself.
-- **`navigate=false` does not work**: the compiler emits `data-navigate="false"` and the runtime reads `navigate`.
+- Several markers the runtime looks for have **no producer in the compiler**: `[data-slurp-page]`, `<meta name="slurp-route">`, `x-data="slurpFetch(...)"` and `[data-slurp-sentinel]`. In practice that means `slurp.fetch.js` and `slurp.infinite.js` are not reachable from compiled output today, and client navigation needs a theme that supplies `[data-slurp-page]` and a `navigate` attribute on `<body>` itself.
 
 An embedding host can supply any of the above itself. This section exists so that you find that out here rather than by debugging.
 
@@ -1688,7 +1687,7 @@ GET /_slurp/image?src=<url>&w=<width>&f=<format>
 | `w` | yes | none | 1 to 8192 |
 | `f` | no | `webp` | `avif`, `webp`, `jpeg` (or `jpg`) |
 
-**There is no `h`, no `q`, and the format parameter is `f`, not `fmt`.** Earlier revisions of this document listed all three, plus `png` and `gif` as output formats. Those are accepted as INPUT formats and are never emitted.
+**There is no `h`, no `q`, and the format parameter is `f`, not `fmt`.** PNG and GIF are accepted as input formats and are never emitted.
 
 The only transform is a **width-only resize that preserves aspect ratio and never upscales**, using Lanczos3. Quality is fixed (AVIF q=80 speed=6; JPEG and WebP use the `image` crate defaults). Height on the `<Image>` component is used for the `<img>` attribute only and is never sent to this service.
 
@@ -1696,12 +1695,15 @@ Errors are JSON `{"error": "..."}`: 400 bad parameters or URL, 403 blocked, 413 
 
 ### Security
 
-- SSRF protection: all hostnames are DNS-resolved to IP addresses before connecting. Private RFC 1918 ranges, loopback, IPv6 ULA, and link-local are blocked.
+- SSRF protection: every hostname is DNS-resolved before connecting and every returned address must be globally routable unicast. The connection is then pinned to those exact addresses, so a second lookup cannot reach a private one.
 - Scheme allowlist: only `http://` and `https://` are permitted as source URLs.
-- Magic byte validation: response body must start with valid JPEG, PNG, GIF, WebP, or AVIF headers.
-- Source size limit: responses over the configured limit are rejected before and after download.
-- Decompression bomb protection: decoded pixel count × 4 bytes must not exceed the limit.
+- Magic byte validation: the response body must begin with a JPEG, PNG, GIF or WebP header, and the format the decoder infers from the content must match the one the header declared. An AVIF or HEIC `ftyp` header is recognised only so such a file is reported as an unsupported source rather than as corrupt data; there is no ISO base media decoder linked in, and AVIF is an output format only.
+- Source size limit: enforced against `Content-Length` and again while streaming, because the header can be absent or can lie.
+- Decompression bomb protection: declared width times height times the decoder's real bytes per pixel must not exceed the limit, checked before any pixel buffer is allocated.
 - No redirects followed: redirect policy is `none()`.
+- Rate limiting is an in-memory fixed-window counter per client. It resets on restart and is not shared between instances, so put a reverse proxy in front of it in production.
+
+The full treatment is in [docs/security-model.md](./docs/security-model.md).
 
 ### Caching
 
@@ -1714,9 +1716,11 @@ Two-level cache:
 
 ## 16. Limitations and Known Issues
 
+Security limitations are separate and live in [docs/security-model.md](./docs/security-model.md).
+
 ### No object or array literals in templates
 
-Slurp expressions do not support `{key: value}` object literals or `[1, 2, 3]` array literals. Pass complex data via server-side context instead.
+`{key: value}` and `[1, 2, 3]` are parse errors. Pass structured data in through the render context.
 
 ```slurp
 {* NOT supported: *}
@@ -1726,13 +1730,9 @@ Slurp expressions do not support `{key: value}` object literals or `[1, 2, 3]` a
 {$let config = siteConfig}
 ```
 
-### No callable functions
+### No callable functions, and no `===`, `??`, `?.`, `in` or bitwise operators
 
-`f(a, b)` parses and always evaluates to `null`, rendering as an empty string with no error. There is no `Math`, no `math`, and no way to register a function. Compute on the server or use a filter.
-
-### No `===`, `??`, `?.`, `in`, or bitwise operators
-
-Only `==` and `!=`. Path access is null-safe by default so `?.` is unnecessary, and writing any of these is a parse error.
+`f(a, b)` parses and evaluates to `null`, rendering empty with no error; there is no way to register a function. The missing operators are parse errors, except that path access is null-safe at every depth, so `?.` is not needed. See [Section 3.2](#32-expressions).
 
 ### `{with}` is a keyword with no implementation
 
@@ -1750,25 +1750,17 @@ Only `==` and `!=`. Path access is null-safe by default so `?.` is unnecessary, 
 
 The `currency` filter uses a manual lookup table for symbols and separators to keep the WASM binary small. A currency not in the table (USD, EUR, GBP, JPY, CAD, AUD, CHF) gets its **code used as the prefix**, so `SEK 10.00`.
 
-### Rate limiting is per-process
-
-The image service rate limiter is an in-memory sliding-window store per IP. In a multi-instance deployment, limits are not shared across instances. Use a reverse proxy (nginx, Caddy) for shared rate limiting in production.
-
 ### `{try}` error branch is server-side no-op
 
 The `{error}` branch inside `{try}` is never rendered on the server. It is client-side only. The server always renders the `{try}` body.
 
 ### Parts of the compiler-to-runtime contract are unwired
 
-`{$let}` has no hydrator, `navigate=false` emits an attribute the runtime does not read, `on:` handlers compile to inert literal attributes, and several markers the runtime looks for have no producer. See [Section 14](#14-wasm--typescript-integration).
+`{$let}` has no hydrator, `on:` handlers compile to inert literal attributes, and several markers the runtime looks for have no producer in the compiler. See [Section 14](#14-wasm--typescript-integration).
 
 ### Component AST fields that are parsed and never read
 
 `spread`, `events` and `slot` on a component node all reach the AST and are then ignored by the renderer.
-
-### Frontmatter comments break on keywords
-
-`lex_frontmatter` has no `{*` branch, so a comment inside frontmatter is keyword-matched rather than skipped. A comment containing `props`, `type`, `using`, `as`, `from` or `middleware` breaks the file: `{* No props - self-contained *}` fails with `Expected { after props`. Keep frontmatter comments free of those words, or put them below the frontmatter.
 
 ### Validating a theme that has middleware needs `--middleware`
 
@@ -1782,4 +1774,4 @@ Without the flag, `middleware/auth.slurp` reports a spurious `MiddlewareScopeVio
 
 ### `detect_circular_dfs` re-parses files on each traversal
 
-Circular import detection re-parses every referenced file on every DFS pass. For projects with many deeply-nested imports this is O(n × depth). Acceptable for typical project sizes; a parse cache would fix it for larger codebases.
+Circular import detection re-parses every referenced file on every DFS pass, so the cost is O(n * depth). Fine at typical project sizes; a parse cache would fix it for larger ones.

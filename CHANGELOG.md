@@ -22,6 +22,15 @@ changes to both the Rust API and the template language.
   and `height` are optional and default to 800 and 600, so the old name
   described a case that does not exist. Hosts switching on the code string need
   to update.
+- **A loop truncated at the 1,000-item cap is reported in every build mode**, not
+  only in development. Both iteration budgets recorded their warning under
+  `BuildMode::Development` and the CLI always builds production, so `slurp build`
+  dropped items past the cap with no diagnostic and `-v` had nothing to surface.
+  Truncation itself is unchanged and the output is byte-identical; `slurp build -v`
+  now prints `warning[IterationLimitExceeded]: Iteration limit: collection has N
+  items, capped at 1000`. The WASM `render` export returns the warning too, not
+  just `render_dev`. This matches the output-byte and render-depth budgets, which
+  already warned in both modes.
 
 ### Fixed
 
@@ -36,34 +45,6 @@ changes to both the Rust API and the template language.
   fails the build.
 - The `--globals` file is no longer copied into the output. It is build input,
   and the static-asset pass was publishing it alongside the site.
-- Loop truncation is reported on a production build. Both iteration budgets
-  recorded their warning in development mode only, and the CLI always builds
-  production, so `slurp build` dropped items past the cap with no diagnostic and
-  `-v` could not surface one. Truncation behaviour is unchanged; only the
-  silence is gone.
-
-### Changed
-
-- **A loop truncated at the 1,000-item cap is now reported in every build mode**,
-  not only in development. `slurp build -v` prints
-  `warning[IterationLimitExceeded]: Iteration limit: collection has N items,
-  capped at 1000`. The truncation itself is unchanged: the render still keeps the
-  first 1,000 items, still succeeds, and the output is byte-identical. Only the
-  silence is gone. Truncation removes rows without leaving any trace in the
-  markup, so a production render that said nothing reported a clean build while
-  dropping part of a list. This matches the output-byte and render-depth budgets,
-  which already warned in both modes. The WASM `render` export now returns this
-  warning as well as `render_dev`.
-
-### Removed
-
-- `slurp_image::ImageCache::max_disk_bytes()`. The budget is supplied to
-  `ImageCache::new` and to `sweep`, so the accessor had no callers.
-- The unconstructed `Token::TemplateLiteralEnd` lexer token, an alias for
-  `Token::TemplateLiteralClose` that no lexer path produced.
-
-### Fixed
-
 - The dev server's source-directory watcher no longer panics on a `--source-dir`
   it cannot watch, or when `current_exe()` fails because the binary is being
   rebuilt. It ran on a bare thread, so a panic there killed hot reload while the
@@ -74,6 +55,13 @@ changes to both the Rust API and the template language.
   `dist`, building a different directory and reporting success.
 - `slurp-image` sizes its cache from `Config` rather than directly from the
   command-line flags, so `Config::memory_cache_size` is honoured.
+
+### Removed
+
+- `slurp_image::ImageCache::max_disk_bytes()`. The budget is supplied to
+  `ImageCache::new` and to `sweep`, so the accessor had no callers.
+- The unconstructed `Token::TemplateLiteralEnd` lexer token, an alias for
+  `Token::TemplateLiteralClose` that no lexer path produced.
 
 ## [0.1.0] - 2026-08-01
 
@@ -128,8 +116,8 @@ renders multi-tenant sites.
   private and reserved ranges, pins those addresses into the HTTP client to
   defeat rebinding, disables redirects, and validates magic bytes.
 - Known gaps are documented rather than implied away. See
-  [SECURITY.md](./SECURITY.md), in particular the section on contexts where
-  `${ }` escaping is not sufficient.
+  [docs/security-model.md](./docs/security-model.md), in particular the section
+  on contexts where `${ }` escaping is not sufficient.
 
 [Unreleased]: https://github.com/bytesell/slurp/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/bytesell/slurp/releases/tag/v0.1.0

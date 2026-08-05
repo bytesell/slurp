@@ -29,9 +29,7 @@ node build.mjs --target web
 ## Everything returns a JSON string
 
 `JsValue::from_str` is how each export serialises, so **every function returns a
-`string` that you must `JSON.parse`**. It does not return an object. Older
-documentation in this repo claimed otherwise and the VS Code extension carries a
-comment about being bitten by it.
+`string` that you must `JSON.parse`**. It does not return an object.
 
 The TypeScript declarations encode this: an export returns `JsonString<T>`, a
 branded `string` that will not typecheck as a `T`. Cross the boundary with the
@@ -63,15 +61,19 @@ a copy per consumer.
 
 ### `render` vs `render_dev`
 
-Three of the renderer's diagnostics are recorded only in development mode: a
-loop truncated at the 1,000-item cap, CSS-structural characters stripped from a
-`style` value, and an un-annotated interpolation in a JavaScript-evaluated
-attribute. In production mode all three happen silently.
+Two of the renderer's advisories are recorded only in development mode:
+CSS-structural characters stripped from a `style` value, and an un-annotated
+interpolation in a JavaScript-evaluated attribute. In production both happen
+silently. `{debug expr}` also renders only in development.
 
-That is the right trade for server-side rendering and the wrong one for an
-editor, where a loop quietly losing its tail is precisely what a preview should
-surface. Editors and preview panes should call `render_dev`. `render` is
-unchanged, so existing hosts keep production behaviour.
+That is the right trade for a server-side hot path and the wrong one for an
+editor, where a `style` value quietly losing characters is precisely what a
+preview should surface. Editors and preview panes should call `render_dev`.
+`render` is unchanged, so existing hosts keep production behaviour.
+
+The budget diagnostics are **not** among them. Loop truncation at 1,000 items,
+the output-byte budget and the render-depth budget are reported in both modes,
+because each one silently removes content from the page.
 
 ### `validate` vs `validate_full`
 
@@ -94,7 +96,7 @@ A tool that calls only `validate` therefore tells an author their file is clean
 and then `slurp build` rejects it. The two are kept separate rather than merged
 so that pure editor-preview hosts stay unaffected.
 
-Two things to know at the call site:
+At the call site:
 
 - **`isMiddleware` must match the value the eventual compile will use.** The
   rules genuinely differ: `request.*` and `{redirect}` are legal only in

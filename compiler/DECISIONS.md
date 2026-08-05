@@ -53,11 +53,9 @@ rather than using a parser generator library such as `nom`, `pest`, or
 than delegating to a general-purpose crate, and choose between them from the
 context a value lands in.
 
-An earlier revision of this document said the `html-escape` crate performed all
-template expression output escaping. It does not, and has not for some time. The
-crate is still a dependency, but it is used for exactly one thing:
-`decode_html_entities` in `sections.rs`. Every escaper on the output path is
-local.
+Every escaper on the output path is local. The `html-escape` crate is still a
+dependency, used for exactly one thing: `decode_html_entities` in
+`sections.rs`.
 
 **Reasons:**
 

@@ -4,7 +4,7 @@ Thanks for taking an interest. This document covers how to build the project, wh
 
 ## Before you start
 
-**Slurp is pre-1.0 and parts of it are honestly incomplete.** [SLURP_DOCS.md](./SLURP_DOCS.md) marks every unimplemented and unwired feature inline. If you are about to fix something, read the relevant section first: a surprising number of "bugs" are documented gaps with a known reason, and a few are documented gaps that genuinely want fixing.
+Slurp is pre-1.0 and parts of it are unfinished. [SLURP_DOCS.md](./SLURP_DOCS.md) marks every unimplemented and unwired feature inline, so read the relevant section before fixing something: a fair number of "bugs" are documented gaps with a reason, and some are documented gaps that want fixing.
 
 For anything larger than a bug fix, open an issue first so the design can be discussed before you write it.
 
@@ -19,9 +19,9 @@ For anything larger than a bug fix, open an issue first so the design can be dis
 | pnpm | 9 or newer | `corepack enable` is the easiest way to get it |
 | wasm-pack | 0.15 or newer | Required: `pnpm build` builds `@slurp/compiler-wasm`, and the compiler integration tests import it. `cargo install wasm-pack --locked` |
 
-**If your toolchain is too old you will not get a version message.** Edition 2024 fails on Rust 1.84 and below with `feature 'edition2024' is required`, which reads like a broken project. `rust-toolchain.toml` pins 1.88 so rustup selects the right toolchain automatically; if you see that error anyway, run `rustup update`. The floor is 1.88 rather than the 1.85 edition 2024 needs because the `image` crate requires it.
+**If your toolchain is too old you will not get a version message.** Edition 2024 fails on Rust 1.84 and below with `feature 'edition2024' is required`, which reads like a broken project. `rust-toolchain.toml` pins 1.88 so rustup selects the right toolchain automatically; if you see that error anyway, run `rustup update`.
 
-The toolchain file pins the MSRV so that clippy lints do not churn and so the minimum supported version is what everyone actually builds against. That pin is also what catches MSRV drift: building under it is the only way to notice that a dependency bump has raised the floor, which had already happened silently before the pin existed. To try a newer toolchain locally, prefix a command with `RUSTUP_TOOLCHAIN=stable`.
+The pin is at 1.88 rather than the 1.85 edition 2024 needs because the `image` crate requires it. Pinning keeps clippy lints from churning and makes the declared MSRV the version everyone actually builds against, which is the only way a dependency bump that raises the floor gets noticed. To try a newer toolchain locally, prefix a command with `RUSTUP_TOOLCHAIN=stable`.
 
 If `cargo check` reports that a package requires a newer rustc, do not lower the pin. Either hold that dependency back, or raise `channel` in `rust-toolchain.toml` and `rust-version` in `Cargo.toml` together, and note the bump in `CHANGELOG.md`.
 
@@ -80,13 +80,16 @@ pnpm -C mcp run check:llms
 | `node` | `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm typecheck`, the llms-full drift check, then a filtered `test` |
 | `fuzz` | the compiler fuzz targets on **both** ubuntu and windows, with a raised iteration budget |
 
-Three of those differ from what a local run does, in ways worth knowing:
+Where CI differs from a local run:
 
 - **`cargo build` runs with `--all-targets` in CI**, so it compiles test and bench targets too. A local `cargo build --workspace` can pass while CI fails to compile a test.
 - **The `node` job does not run `pnpm test`.** It runs `pnpm --filter @slurp/runtime --filter @slurp/language --filter prettier-plugin-slurp --filter @slurp/integration-tests test`, so `@slurp/mcp` and `vscode-extension` tests do **not** run in CI. `vscode-extension` is excluded because its `test` script downloads and launches a real VS Code instance, which needs a display. `@slurp/mcp` has no such excuse and its exclusion is worth removing. A local `pnpm test` (`pnpm -r run test`) runs both, so run it.
+- **The `node` job also checks `llms-full.txt` for drift**, and needs both halves to do it. `pnpm build` regenerates that file, so `check:llms` alone always passes on a runner; the `git diff --exit-code` after it is what compares the regeneration against what was committed.
 - **The `fuzz` job is a gate, not an optional tool.** `cargo test --workspace` already runs the fuzz targets at their small default budget; the CI job re-runs them with `SLURP_FUZZ_ITERS=150000` on two operating systems. A finding is uploaded as an artifact, and the file is the reproducer.
 
-**`cargo audit` reports advisories that are not currently actionable.** Several come from transitive dependencies of the image codecs and cannot be resolved without an upstream release. New advisories are worth investigating; the existing ones are recorded with a reason in `deny.toml`, which is what the `deny` job re-checks.
+**`cargo audit` reports advisories that are not currently actionable.** Several come from transitive dependencies of the image codecs and cannot be resolved without an upstream release.
+
+**An accepted advisory has to be written down twice, because `cargo audit` does not read `deny.toml`.** The ignore list lives in `.cargo/audit.toml` for the `audit` job and in `[advisories] ignore` in `deny.toml` for the `deny` job, and an advisory accepted in only one of them fails the other. `deny.toml` is where the reasons are written; `.cargo/audit.toml` carries the bare IDs.
 
 ## How the pieces fit together
 
@@ -100,7 +103,7 @@ Understanding this saves time, because a change in one place often needs a match
    -> compiler/src/renderer   one pass over a JSON context -> HTML
 ```
 
-`shared/interfaces.ts` is the TypeScript view of the compiler's wire shapes, imported by the WASM package, the language server, the runtime and the VS Code extension. It is the only file in `shared/`: it used to sit beside an `ast.rs` and an `errors.rs` described as the Rust half of the same contract, but neither was a workspace member, neither was `include!`d and neither was referenced from any Rust file, so they silently rotted while contributors were told to maintain them. They are gone. **The compiler's own `ast.rs` and `error.rs` are the Rust definitions.** When you add an error code or change a wire shape, update `interfaces.ts` in the same pull request.
+`shared/interfaces.ts` is the TypeScript view of the compiler's wire shapes, imported by the WASM package, the language server, the runtime, the Prettier plugin and the VS Code extension. It is the only file in `shared/`; **the compiler's own `ast.rs` and `error.rs` are the Rust definitions.** When you add an error code or change a wire shape, update `interfaces.ts` in the same pull request.
 
 `runtime/` layers optional browser behaviour on the emitted HTML via data attributes. `language/` and `vscode-extension/` are editor tooling and are a separate description of the language from the compiler's, which means they can and do drift.
 
@@ -112,17 +115,17 @@ There is an architecture rationale in `compiler/DECISIONS.md`, `image/DECISIONS.
 
 Missing data renders `""`. Budgets truncate. Unknown editor settings are dropped and unknown block types are ignored. Slurp renders untrusted templates in shared multi-tenant services, so a bad template must never take a page down.
 
-Most budgets also record a diagnostic, but **the two loop-iteration budgets record one only in `BuildMode::Development`**, and `slurp build` is unconditionally `Production`, so on a build they truncate in total silence. That is a defect, not a design stance; do not copy the pattern into a new budget.
+**Every budget records a diagnostic in every build mode.** Truncating is right; truncating silently is not, because the dropped rows leave no trace in the page and the build still exits 0. A new budget must warn unconditionally, not under `BuildMode::Development`: both loop-iteration budgets were dev-only once, which meant `slurp build` dropped items past the cap and `-v` had nothing to print.
 
-**When you add a failure path, follow that stance:** degrade and record a diagnostic rather than returning an error, unless the failure is a security violation or a build-time mistake the author must fix. If you add a silent behaviour, document it in `SLURP_DOCS.md` in the same pull request. A silent behaviour nobody wrote down is the single most common complaint about this codebase.
+**When you add a failure path, follow that stance:** degrade and record a diagnostic rather than returning an error, unless the failure is a security violation or a build-time mistake the author must fix. If you add a silent behaviour, document it in `SLURP_DOCS.md` in the same pull request. A silent behaviour nobody wrote down is the most common complaint about this codebase.
 
 ### Security-relevant changes
 
-- **Escaping is context-sensitive, and so is slurp's.** `renderer/escape.rs` holds five different escapers and `renderer/js_slot.rs` decides which one a slot needs. Before touching any of them or any call site, read the "How `${ }` is treated in each context" section of [SECURITY.md](./SECURITY.md). A change that looks like a simplification there can silently remove a control: the ordering in `escape_slot` is load-bearing (the CSS strip runs first, because doing it after the JS pass would remove the backslashes that pass added), and the verbatim-emission exemption for a filtered value is reachable only while `script_depth > 0`.
+- **Escaping is context-sensitive, and so is slurp's.** `renderer/escape.rs` holds five different escapers and `renderer/js_slot.rs` decides which one a slot needs. Before touching any of them or any call site, read "How `${ }` is treated in each context" in [docs/security-model.md](./docs/security-model.md). A change that looks like a simplification there can silently remove a control: the ordering in `escape_slot` is load-bearing (the CSS strip runs first, because doing it after the JS pass would remove the backslashes that pass added), and the verbatim-emission exemption for a filtered value is reachable only while `script_depth > 0`.
 - **Refusing is a legitimate answer, and sometimes the only honest one.** Where no automatic escaper fits a position, slurp raises `UnsafeScriptInterpolation` rather than applying one that does not. Do not "improve" such a refusal into an escaper that leaves the payload intact while looking like a fix.
-- **Never describe a protection that the code does not deliver.** If you document a security property, cite the file and the **symbol** that enforces it, never a line number. Line numbers in prose rot by construction, and a `SECURITY.md` promising a control that does not exist is worse than no document, because it is the first thing a researcher will test.
+- **Never describe a protection that the code does not deliver.** If you document a security property, cite the file and the **symbol** that enforces it, never a line number. Line numbers in prose rot by construction, and a documented control that does not exist is worse than no document, because it is the first thing a researcher will test.
 - Sanitizers stay allowlist-based. Do not convert one to a blocklist.
-- The compile-time checks in `lib.rs` run in the `compile*` paths, in `slurp validate`, and in the WASM export `validate_full` only. The other WASM exports skip them deliberately. If you add a check, say in `SECURITY.md` which of those paths it reaches.
+- The compile-time checks in `lib.rs` run in the `compile*` paths, in `slurp validate`, and in the WASM export `validate_full` only. The other WASM exports skip them deliberately. If you add a check, say in `docs/security-model.md` which of those paths it reaches.
 
 ### The lexer keyword list is one place, and it must stay that way
 
@@ -152,7 +155,7 @@ This is enforced, not merely asked for. `pnpm copy-check` (`scripts/check-copy-r
 
 - Rust unit tests live beside the code in `#[cfg(test)]` modules; integration tests are in `compiler/tests/`.
 - TypeScript tests are `*.test.ts` beside the source, run with vitest.
-- **`tests/integration/compiler.test.ts` runs against the real WebAssembly build** and is genuine coverage of the six WASM exports. It used to run against a hardcoded stub behind a `SKIPPED_PENDING_WASM` binding, and an earlier revision of this document still said so; that is no longer true. Because it imports `@slurp/compiler-wasm`, it needs `pnpm build` on a fresh clone. Every WASM export returns a JSON **string**, not an object, so assertions go through the `parseJson` helper.
+- **`tests/integration/compiler.test.ts` runs against the real WebAssembly build**, so it is genuine coverage of the WASM exports rather than of a stub. Because it imports `@slurp/compiler-wasm`, it needs `pnpm build` on a fresh clone. Every WASM export returns a JSON **string**, not an object, so assertions go through the `parseJson` helper.
 
 When you fix a bug, add a test that fails before your fix. For anything touching escaping, sanitization or a resource budget, verify the test actually fails when the fix is reverted. A test that passes either way is worse than none, because it looks like coverage.
 
