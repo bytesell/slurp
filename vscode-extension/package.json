@@ -95,13 +95,13 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.125.0",
     "@vscode/vsce": "^3.9.2",
     "tsup": "^8.5.1",
-    "typescript": "^5.4.0",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10",
-    "vite": "^7.1.14",
-    "@types/node": "^20.0.0"
+    "vite": "^8.2.0",
+    "@types/node": "^26.1.2"
   },
   "dependencies": {
     "@slurp/language": "workspace:*"

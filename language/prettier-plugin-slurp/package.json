@@ -27,7 +27,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "peerDependencies": {
-    "prettier": "^3.0.0"
+    "prettier": "^3.9.6"
   },
   "scripts": {
     "build": "tsup",
@@ -38,9 +38,9 @@
   "devDependencies": {
     "@slurp/language": "workspace:*",
     "tsup": "^8.5.1",
-    "typescript": "^5.4.0",
-    "prettier": "^3.0.0",
+    "typescript": "^7.0.2",
+    "prettier": "^3.9.6",
     "vitest": "^4.1.10",
-    "vite": "^7.1.14"
+    "vite": "^8.2.0"
   }
 }

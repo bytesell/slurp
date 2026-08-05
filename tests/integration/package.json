@@ -19,8 +19,8 @@
   "devDependencies": {
     "@slurp/compiler-wasm": "workspace:*",
     "vitest": "^4.1.10",
-    "typescript": "^5.4.0",
+    "typescript": "^7.0.2",
     "jsdom": "^30.0.1",
-    "vite": "^7.1.14"
+    "vite": "^8.2.0"
   }
 }
