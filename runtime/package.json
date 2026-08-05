@@ -55,7 +55,7 @@
     "vite": "^7.1.14"
   },
   "dependencies": {
-    "alpinejs": "^3.14.0",
+    "alpinejs": "^3.15.12",
     "clsx": "^2.0.0",
     "tailwind-merge": "^2.0.0"
   }
