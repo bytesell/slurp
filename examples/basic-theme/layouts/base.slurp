@@ -1,0 +1,66 @@
+---
+using "@components/Navbar"
+using "@components/Footer"
+
+{* A type is recorded for tooling and is NEVER enforced at render time, so a
+   missing field is simply null. props takes ONE declaration per line. *}
+type Seo {
+  title: string
+  description: string
+  image: string
+}
+
+props {
+  seo: Seo
+}
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {*
+    THE HEAD CONTRACT, so a page and this layout cannot emit two <title>s:
+    the layout owns <title> and the description, both driven by the `seo`
+    value a page puts in the render context. The head slot below is for
+    ADDITIONAL tags (canonical, structured data, per-page og overrides).
+    A page should not put a <title> in its {head} block.
+
+    Both are guarded, so a page that supplies no seo at all gets neither an
+    empty <title> nor an empty description, and can then emit its own.
+  *}
+  {if seo.title}
+    <title>${ seo.title }</title>
+  {/if}
+  {if seo.description}
+    <meta name="description" content="${ seo.description }" />
+  {/if}
+  {if seo.image}
+    <meta property="og:image" content="${ seo.image }" />
+    <meta property="og:title" content="${ seo.title }" />
+    <meta property="og:description" content="${ seo.description }" />
+  {/if}
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="stylesheet" href="/theme.css" />
+  <link rel="icon" href="/favicon.ico" />
+  {* "head" and "default" are the ONLY slot names that are ever filled.
+     A page fills this one with its {head} block. *}
+  <slot name="head" />
+</head>
+{*
+  navigate turns on client-side navigation and transition asks it to use the
+  View Transitions API. BOTH are read by @slurp/runtime at runtime, not by the
+  compiler, so they do nothing unless the script below is actually served.
+*}
+<body navigate transition>
+  <Navbar />
+  <main id="main-content">
+    <slot />
+  </main>
+  <Footer />
+  {* The compiler does NOT inject the runtime. A theme adds this itself, and
+     only needs it for the client-side behaviour above. *}
+  <script src="/slurp.core.js"></script>
+</body>
+</html>

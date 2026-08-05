@@ -1,0 +1,245 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── Rust: build, test and lint on the pinned MSRV toolchain ────────────────
+  # The toolchain is named explicitly AND pinned by rust-toolchain.toml, and the
+  # two must stay equal: this job is what proves the declared MSRV is true.
+  rust:
+    name: Rust (MSRV)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --workspace --all-targets
+
+      - name: Test
+        run: cargo test --workspace
+
+      # Run clippy as its own step. Chaining it onto another command and reading
+      # the second command's exit code is how warnings reach a main branch.
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # ── Rust: the same on current stable, to catch newer-toolchain breakage ────
+  rust-stable:
+    name: Rust (stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Build and test
+        env:
+          RUSTUP_TOOLCHAIN: stable
+        run: |
+          cargo build --workspace --all-targets
+          cargo test --workspace
+      - name: Clippy
+        env:
+          RUSTUP_TOOLCHAIN: stable
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # ── Formatting: blocking. The tree was formatted in full, so it stays that way.
+  # Fix a failure with `cargo fmt --all`; never by relaxing this job.
+  fmt:
+    name: Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+          components: rustfmt
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+
+  # ── Copy rule ─────────────────────────────────────────────────────────────
+  # Em-dash, en-dash and horizontal ellipsis are banned everywhere in the repo:
+  # source, comments, docs and templates. They are visually near-identical to
+  # their ASCII spellings, so this cannot be left to review. Checks every file
+  # git considers part of the repository, not a chosen subset; a rule enforced
+  # on some files is not enforced.
+  copy:
+    name: Copy rule
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check
+        run: node scripts/check-copy-rule.mjs
+
+  # ── Security advisories ───────────────────────────────────────────────────
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      # Fails on a vulnerability. Advisories we have consciously accepted are
+      # listed with a reason in deny.toml and re-checked by the licenses job.
+      - name: Audit
+        env:
+          RUSTUP_TOOLCHAIN: stable
+        run: cargo audit
+
+  # ── Licences, banned crates and advisory decisions ────────────────────────
+  deny:
+    name: cargo deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+  # ── TypeScript workspace ──────────────────────────────────────────────────
+  # This job also builds the WASM package. `@slurp/compiler-wasm` is a workspace
+  # package whose `build` script shells out to wasm-pack, and the compiler
+  # integration suite imports it, so a Node-only runner cannot run these tests.
+  # `pnpm -r run build` orders it ahead of its dependents on its own.
+  node:
+    name: Node
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      # The pinned MSRV toolchain, same as the `rust` job, so the WASM artifact
+      # is built by the compiler this project claims to support.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Distinct from the other jobs' caches: this one is a wasm32 target
+          # directory and sharing a key with a host build thrashes both.
+          key: wasm
+
+      # Installed from source rather than a third-party action, matching how the
+      # audit job installs cargo-audit. Slow only on a cold cache; rust-cache
+      # keeps ~/.cargo/bin between runs.
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked --version 0.15.0
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # `llms.txt` promises that `llms-full.txt` is generated from the same data
+      # the MCP server serves and therefore cannot drift. Nothing enforced that,
+      # and the failure mode was worse than an unchecked claim: `pnpm build`
+      # above runs `@slurp/mcp`'s build script, which regenerates the file, so
+      # CI was silently ERASING drift into the runner instead of reporting it.
+      #
+      # Both halves are needed. `check:llms` names the fix command in its own
+      # error message, but on its own it always passes here because the build
+      # just rewrote the file. The `git diff` is what actually detects drift:
+      # the regeneration is compared against what was committed.
+      - name: llms-full.txt is in sync with the reference source
+        run: |
+          pnpm --filter @slurp/mcp run check:llms
+          git diff --exit-code -- llms-full.txt
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # vscode-extension's `test` script downloads and launches a real VS Code
+      # instance, which needs a display, so it is excluded here. Run it locally
+      # when changing the extension.
+      - name: Test
+        run: pnpm --filter @slurp/runtime --filter @slurp/language --filter prettier-plugin-slurp --filter @slurp/integration-tests test
+
+  # ── Fuzzing: bounded, so regressions are caught by machines ───────────────
+  # Non-termination and unbounded allocation are the compiler's characteristic
+  # failure modes, so the fuzz targets are a GATE, not an out-of-band tool
+  # somebody remembers to run. Every target runs under a watchdog (see
+  # `compiler/tests/fuzz_support/`),
+  # which is what makes a hang a reported failure with a minimised input instead
+  # of a job that sits at the 6-hour GitHub timeout.
+  #
+  # The budget is per target and deliberately small. `cargo test` already runs
+  # these targets at their default (a few seconds each); this job buys depth. The
+  # matrix runs Windows too, because that is the platform the compiler is
+  # developed on and the subprocess watchdog uses process spawn and kill, which
+  # are the least portable things in the harness.
+  fuzz:
+    name: Fuzz (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    # A hang shows up as the watchdog failing the test in well under this. The
+    # job timeout is only a backstop against the runner itself wedging.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+      - uses: Swatinem/rust-cache@v2
+
+      # Release, because the fuzzer's value is iterations per second and a debug
+      # build is roughly 5x slower here. It also keeps legitimately slow inputs
+      # from tripping the per-input budget.
+      - name: Fuzz
+        env:
+          SLURP_FUZZ_ITERS: "150000"
+          SLURP_FUZZ_SECS: "150"
+          SLURP_FUZZ_TIMEOUT_MS: "5000"
+          SLURP_FUZZ_CONFIRM_MS: "60000"
+          # Memory ceiling, process-wide, in libFuzzer's usual range. A GitHub runner has 7 GB,
+          # so an unbounded target would simply be OOM-killed by the kernel with no attribution
+          # and no reproducer. Crossing this is REPORTED as a finding instead, with the input
+          # written to fuzz/crashes/ and uploaded by the step below.
+          SLURP_FUZZ_RSS_LIMIT_MB: "1024"
+        # --test-threads=1 bounds PARALLELISM, and with it the worst-case footprint: one fuzz
+        # target at a time, so the peak is the ceiling above plus one confirmation subprocess
+        # that carries the same ceiling, i.e. about 2 GB rather than an unbounded multiple of it.
+        run: cargo test -p slurp-compiler --release --test fuzz_targets -- --nocapture --test-threads=1
+
+      # A finding is written to `compiler/fuzz/crashes/`. Uploading it is what
+      # makes a CI-only failure reproducible locally: the file IS the input.
+      - name: Upload reproducers
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes-${{ matrix.os }}
+          path: compiler/fuzz/crashes/
+          if-no-files-found: ignore

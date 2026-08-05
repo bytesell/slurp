@@ -1,0 +1,216 @@
+{
+  "product": {
+    "id": "prod_001",
+    "title": "Premium Leather Wallet",
+    "slug": "premium-leather-wallet",
+    "description": "<p>Handcrafted from full-grain vegetable-tanned leather, this wallet develops a rich patina unique to you. Slim enough for any pocket yet spacious enough for everything you carry daily.</p><ul><li>8 card slots with easy-access thumb notch</li><li>Full-length billfold compartment</li><li>RFID-blocking lining</li><li>Hand-stitched with waxed thread</li></ul>",
+    "image": "https://images.unsplash.com/photo-1627123424574-724758594e93?w=800",
+    "images": [
+      "https://images.unsplash.com/photo-1627123424574-724758594e93?w=800",
+      "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=800",
+      "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=800"
+    ],
+    "price": 49.99,
+    "comparePrice": 79.99,
+    "status": "available",
+    "shipsAt": "2026-04-15T00:00:00Z",
+    "specs": [
+      { "key": "Material",    "value": "Full-grain vegetable-tanned leather" },
+      { "key": "Dimensions", "value": "4.5\" x 3.5\" x 0.25\"" },
+      { "key": "Card slots",  "value": "8" },
+      { "key": "Weight",      "value": "42 g" },
+      { "key": "RFID block",  "value": "Yes" },
+      { "key": "Warranty",    "value": "Lifetime" }
+    ]
+  },
+  "collection": {
+    "title": "All Products",
+    "description": "Browse our full range of premium leather goods.",
+    "image": "https://images.unsplash.com/photo-1445205170230-053b83016050?w=1280",
+    "slug": "all"
+  },
+  "seo": {
+    "title": "Our Store - Premium Leather Goods",
+    "description": "Premium products for discerning customers. Handcrafted leather wallets, bags, and accessories.",
+    "image": "https://images.unsplash.com/photo-1627123424574-724758594e93?w=1200"
+  },
+  "params": {
+    "slug": "premium-leather-wallet"
+  },
+  "year": 2026,
+  "env": {
+    "dev": true,
+    "prod": false
+  },
+  "request": {
+    "user": {
+      "id": "user_001",
+      "name": "Jane Smith",
+      "email": "jane@example.com"
+    },
+    "cookies": {
+      "session": "mock-session-token-abc123",
+      "sessionExpiry": 9999999999999
+    }
+  },
+  "cart": {
+    "count": 2,
+    "subtotal": 99.98,
+    "discount": 0,
+    "tax": 8.00,
+    "total": 107.98,
+    "items": [
+      {
+        "id": "prod_001",
+        "title": "Premium Leather Wallet",
+        "slug": "premium-leather-wallet",
+        "image": "https://images.unsplash.com/photo-1627123424574-724758594e93?w=200",
+        "price": 49.99,
+        "qty": 2
+      }
+    ]
+  },
+  "featured": [
+    {
+      "title": "Best Sellers",
+      "products": [
+        {
+          "id": "prod_001",
+          "title": "Premium Leather Wallet",
+          "slug": "premium-leather-wallet",
+          "image": "https://images.unsplash.com/photo-1627123424574-724758594e93?w=600",
+          "price": 49.99,
+          "comparePrice": 79.99,
+          "status": "available"
+        },
+        {
+          "id": "prod_002",
+          "title": "Card Holder Slim",
+          "slug": "card-holder-slim",
+          "image": "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=600",
+          "price": 29.99,
+          "comparePrice": null,
+          "status": "available"
+        },
+        {
+          "id": "prod_003",
+          "title": "Leather Passport Cover",
+          "slug": "leather-passport-cover",
+          "image": "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=600",
+          "price": 39.99,
+          "comparePrice": 59.99,
+          "status": "low-stock"
+        },
+        {
+          "id": "prod_004",
+          "title": "Key Organiser",
+          "slug": "key-organiser",
+          "image": "https://images.unsplash.com/photo-1595079676339-1534801ad6cf?w=600",
+          "price": 24.99,
+          "comparePrice": null,
+          "status": "available"
+        }
+      ]
+    },
+    {
+      "title": "New Arrivals",
+      "products": [
+        {
+          "id": "prod_005",
+          "title": "Bifold Notebook Cover",
+          "slug": "bifold-notebook-cover",
+          "image": "https://images.unsplash.com/photo-1517842645767-c639042777db?w=600",
+          "price": 54.99,
+          "comparePrice": null,
+          "status": "new"
+        },
+        {
+          "id": "prod_006",
+          "title": "Wristlet Clutch",
+          "slug": "wristlet-clutch",
+          "image": "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=600",
+          "price": 69.99,
+          "comparePrice": 89.99,
+          "status": "available"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "id": "rev_001",
+      "author": "Marcus T.",
+      "rating": 5,
+      "title": "Best wallet I've ever owned",
+      "body": "Bought this six months ago and it already looks better than when I got it. The leather is incredible quality and the stitching shows real craftsmanship.",
+      "createdAt": "2025-09-12T10:22:00Z",
+      "verified": true
+    },
+    {
+      "id": "rev_002",
+      "author": "Priya N.",
+      "rating": 4,
+      "title": "Great quality, slightly stiff at first",
+      "body": "Needs a week or two to break in but once it does it's perfect. Very slim, fits in my front pocket easily. Would buy again.",
+      "createdAt": "2025-11-03T08:45:00Z",
+      "verified": true
+    },
+    {
+      "id": "rev_003",
+      "author": "Daniel W.",
+      "rating": 5,
+      "title": "Gift-worthy packaging too",
+      "body": "Bought as a gift. The recipient loved it. Packaging was beautiful - no need for extra wrapping.",
+      "createdAt": "2026-01-17T14:10:00Z",
+      "verified": false
+    }
+  ],
+  "stock": {
+    "count": 3
+  },
+  "profile": {
+    "id": "user_001",
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "avatar": "",
+    "memberSince": "2024-03-01T00:00:00Z",
+    "totalOrders": 7,
+    "totalSpent": 342.86
+  },
+  "orders": [
+    {
+      "id": "ord_001",
+      "number": "1042",
+      "createdAt": "2026-02-14T09:30:00Z",
+      "status": "delivered",
+      "total": 129.97
+    },
+    {
+      "id": "ord_002",
+      "number": "1031",
+      "createdAt": "2026-01-08T11:15:00Z",
+      "status": "delivered",
+      "total": 49.99
+    },
+    {
+      "id": "ord_003",
+      "number": "1019",
+      "createdAt": "2025-12-20T16:00:00Z",
+      "status": "delivered",
+      "total": 89.98
+    }
+  ],
+  "addresses": [
+    {
+      "id": "addr_001",
+      "name": "Jane Smith",
+      "line1": "42 Maple Street",
+      "line2": "Apt 3B",
+      "city": "Portland",
+      "state": "OR",
+      "zip": "97201",
+      "country": "United States",
+      "default": true
+    }
+  ]
+}

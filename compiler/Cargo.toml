@@ -1,0 +1,55 @@
+[package]
+name = "slurp-compiler"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
+description = "Compiler for the Slurp template language: lexer, parser, HTML renderer, WASM bindings and the `slurp` CLI."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "slurp"
+path = "src/bin/main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+html-escape = "0.2"
+ammonia = "3"
+clap = { version = "4", features = ["derive"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true }
+minify-html = "0.15"
+# Grow the stack on demand for deep recursive-descent parse/render (native only;
+# wasm relies on the depth caps). Same approach rustc uses.
+stacker = "0.1"
+
+[dev-dependencies]
+pretty_assertions = "1"
+# Byte-driven structured generation for the fuzz harness (`tests/fuzz_support/`).
+#
+# WHY NOT cargo-fuzz/libFuzzer: it needs a nightly toolchain and a separate crate that
+# `cargo test` never builds. This workspace pins stable 1.88 and gates on `cargo test`, so a
+# libFuzzer target would be a fuzzer nobody runs. `arbitrary` gives the same
+# bytes-to-structure discipline (a corpus file IS the input, byte for byte, so a crash
+# reproduces exactly) while staying a plain dev-dependency that runs on Windows and in CI.
+arbitrary = "1"
+# The XSS suite asserts on what the BROWSER sees, not on our raw output. Several
+# of the findings it pins are invisible to a raw-string assertion precisely
+# because the HTML parser DECODES character references before the next parser
+# (JS, CSS, the iframe document parser) ever runs. Ammonia is already a
+# dependency, and its `attribute_filter` hands back the parsed - i.e. decoded -
+# attribute value, so the tests can measure that step instead of predicting it.
+ammonia = "3"

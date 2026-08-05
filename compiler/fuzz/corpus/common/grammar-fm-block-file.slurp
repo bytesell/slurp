@@ -1,0 +1,4 @@
+---
+block { name: "B" settings { v: text = "v" } blocks { @theme } }
+---
+<i>${block.settings.v}</i>

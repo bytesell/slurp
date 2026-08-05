@@ -1,0 +1,390 @@
+---
+type CartItem {
+  id: string
+  title: string
+  image: string
+  price: number
+  qty: number
+  slug: string
+}
+---
+
+{* Only the BLOCK form of {layout} can fill the layout's head slot. With the
+   element form, <layout src="...">, the {head} children stay in the body. *}
+{layout "@layouts/base"}
+  {* base.slurp already emits <title> and the meta description from `seo`, so
+     the head slot carries only what the layout does not. *}
+  {head}
+    <meta name="robots" content="noindex, nofollow" />
+  {/head}
+
+  <div class="cart-page section__inner">
+    <h1 class="cart-page__heading">Your Cart</h1>
+
+    {if $cart.count == 0}
+      {* --- Empty cart state --- *}
+      <div class="cart-empty">
+        <svg class="cart-empty__icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="9" cy="21" r="1" />
+          <circle cx="20" cy="21" r="1" />
+          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+        </svg>
+        <h2>Your cart is empty</h2>
+        <p>Looks like you haven't added anything yet.</p>
+        <a href="/collections/all" class="btn btn--primary">Start Shopping</a>
+      </div>
+
+    {else}
+      <div class="cart-layout">
+
+        {* --- Line items --- *}
+        <div class="cart-items">
+          {each item in $cart.items}
+            <div class="cart-item" data-id="${ item.id }">
+              {* An ELEMENT attribute interpolates its ${ } slots. A COMPONENT
+                 prop does not, which is why <Image> below uses prop={expr}. *}
+              <a href="/products/${ item.slug }" class="cart-item__image-link">
+                <Image
+                  src={item.image}
+                  alt={item.title}
+                  width={120}
+                  height={120}
+                />
+              </a>
+
+              <div class="cart-item__details">
+                <a href="/products/${ item.slug }" class="cart-item__title">${ item.title }</a>
+                {if item.variant}
+                  <p class="cart-item__variant">${ item.variant }</p>
+                {/if}
+                <p class="cart-item__unit-price">${ item.price | currency } each</p>
+              </div>
+
+              <div class="cart-item__qty">
+                {* Quantity controls *}
+                <button
+                  class="qty-btn"
+                  on:click="$cart.updateQty(item.id, item.qty - 1)"
+                  aria-label="Decrease quantity"
+                  disabled={item.qty <= 1}
+                >-</button>
+                <span class="qty-display" aria-live="polite">${ item.qty }</span>
+                <button
+                  class="qty-btn"
+                  on:click="$cart.updateQty(item.id, item.qty + 1)"
+                  aria-label="Increase quantity"
+                >+</button>
+              </div>
+
+              <div class="cart-item__subtotal">
+                ${ item.price * item.qty | currency }
+              </div>
+
+              <button
+                class="cart-item__remove"
+                on:click="$cart.remove(item.id)"
+                aria-label="Remove ${ item.title } from cart"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          {/each}
+
+          {* Continue shopping *}
+          <div class="cart-items__footer">
+            <a href="/collections/all" class="btn btn--ghost">&larr; Continue Shopping</a>
+            <button class="btn btn--ghost btn--danger" on:click="$cart.clear()">Clear Cart</button>
+          </div>
+        </div>
+
+        {* --- Order summary --- *}
+        <aside class="cart-summary">
+          <h2 class="cart-summary__heading">Order Summary</h2>
+
+          <div class="cart-summary__lines">
+            <div class="summary-line">
+              {* | plural prints the NUMBER as well as the word, so "2 items"
+                 comes from one slot and not from two. *}
+              <span>Subtotal (${ $cart.count | plural("item") })</span>
+              <span>${ $cart.subtotal | currency }</span>
+            </div>
+
+            {if $cart.discount > 0}
+              <div class="summary-line summary-line--discount">
+                <span>Discount</span>
+                <span>-${ $cart.discount | currency }</span>
+              </div>
+            {/if}
+
+            <div class="summary-line">
+              <span>Shipping</span>
+              <span>
+                {if $cart.subtotal >= 75}
+                  <span class="free-shipping">FREE</span>
+                {else}
+                  Calculated at checkout
+                {/if}
+              </span>
+            </div>
+
+            <div class="summary-line">
+              <span>Tax (estimated)</span>
+              <span>${ $cart.tax | currency }</span>
+            </div>
+          </div>
+
+          <div class="cart-summary__total">
+            <span>Total</span>
+            <span>${ $cart.total | currency }</span>
+          </div>
+
+          {* Promo code.
+
+             {$let} SEEDS client state; it creates no template binding, so
+             `${ promoApplied }` would render empty and `{if promoApplied}`
+             would always take the false branch. The two states are therefore
+             toggled by the client with x-show, not by a server-side {if}. *}
+          {$let promoCode = ""}
+          {$let promoApplied = false}
+
+          <div class="promo-row" x-show="!promoApplied">
+            <input
+              class="promo-input"
+              type="text"
+              placeholder="Promo code"
+              aria-label="Promo code"
+              on:input="promoCode = $event.target.value"
+            />
+            <button
+              class="btn btn--ghost"
+              on:click="promoApplied = $cart.applyPromo(promoCode)"
+            >Apply</button>
+          </div>
+          <p class="promo-success" x-show="promoApplied">Promo code applied!</p>
+
+          {if $cart.subtotal < 75}
+            <p class="free-shipping-nudge">
+              Add ${ 75 - $cart.subtotal | currency } more to get free shipping!
+            </p>
+          {/if}
+
+          <a href="/checkout" class="btn btn--primary btn--checkout">
+            Proceed to Checkout
+          </a>
+
+          <div class="cart-summary__trust">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+            Secure checkout - 256-bit SSL
+          </div>
+        </aside>
+
+      </div>
+    {/if}
+  </div>
+
+  {if env.dev}
+    {debug $cart}
+  {/if}
+
+{/layout}
+
+<style>
+.section__inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+.cart-page { padding: 2.5rem 0 4rem; }
+.cart-page__heading {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin-bottom: 2rem;
+}
+
+/* -- Empty -- */
+.cart-empty {
+  text-align: center;
+  padding: 5rem 1.5rem;
+}
+.cart-empty__icon {
+  color: #d1d5db;
+  margin-bottom: 1.5rem;
+}
+.cart-empty h2 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+.cart-empty p  { color: #6b7280; margin-bottom: 1.5rem; }
+
+/* -- Layout -- */
+.cart-layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 2.5rem;
+  align-items: start;
+}
+
+/* -- Items -- */
+.cart-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+.cart-item {
+  display: grid;
+  grid-template-columns: 100px 1fr auto auto auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+.cart-item:last-of-type { border-bottom: none; }
+.cart-item__image-link { display: block; }
+.cart-item__image-link img {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 0.5rem;
+}
+.cart-item__title {
+  font-weight: 600;
+  color: #111827;
+  text-decoration: none;
+  font-size: 0.9375rem;
+}
+.cart-item__title:hover { text-decoration: underline; }
+.cart-item__variant { font-size: 0.8125rem; color: #6b7280; margin: 0.125rem 0; }
+.cart-item__unit-price { font-size: 0.8125rem; color: #9ca3af; margin: 0; }
+.cart-item__qty {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.qty-btn {
+  background: #f9fafb;
+  border: none;
+  width: 2rem;
+  height: 2rem;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.qty-btn:hover:not(:disabled) { background: #e5e7eb; }
+.qty-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.qty-display { width: 2.5rem; text-align: center; font-weight: 600; font-size: 0.9375rem; }
+.cart-item__subtotal { font-weight: 700; font-size: 0.9375rem; white-space: nowrap; }
+.cart-item__remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9ca3af;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+}
+.cart-item__remove:hover { color: #111827; background: #f3f4f6; }
+.cart-items__footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  background: #f9fafb;
+}
+.btn--danger { color: #991b1b; }
+.btn--danger:hover { background: #fef2f2; }
+
+/* -- Summary -- */
+.cart-summary {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  background: #fff;
+  position: sticky;
+  top: 5rem;
+}
+.cart-summary__heading {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+.cart-summary__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-bottom: 1rem;
+}
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9375rem;
+  color: #374151;
+}
+.summary-line--discount { color: #15803d; font-weight: 600; }
+.free-shipping { color: #15803d; font-weight: 600; }
+.cart-summary__total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1.125rem;
+  font-weight: 700;
+  padding: 1rem 0;
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 1rem;
+}
+.promo-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.promo-input {
+  flex: 1;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+}
+.promo-success { color: #15803d; font-size: 0.875rem; margin-bottom: 0.75rem; }
+.free-shipping-nudge {
+  font-size: 0.8125rem;
+  color: #b45309;
+  background: #fffbeb;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+}
+.btn--checkout {
+  width: 100%;
+  justify-content: center;
+  padding: 0.875rem;
+  font-size: 1rem;
+}
+.cart-summary__trust {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .cart-layout { grid-template-columns: 1fr; }
+  .cart-summary { position: static; }
+  .cart-item { grid-template-columns: 80px 1fr; grid-template-rows: auto auto; }
+  .cart-item__qty { grid-column: 2; }
+  .cart-item__subtotal { grid-column: 2; }
+  .cart-item__remove { grid-column: 2; justify-self: start; }
+}
+@media (max-width: 600px) {
+  .cart-item { grid-template-columns: 72px 1fr; }
+  .cart-item__image-link img { width: 72px; height: 72px; }
+}
+</style>

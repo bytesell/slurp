@@ -1,0 +1,4 @@
+---
+section { name: "S" blocks { @theme(heading, text) } }
+---
+{blocks}

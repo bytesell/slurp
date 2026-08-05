@@ -1,0 +1,16 @@
+packages:
+  - "compiler-wasm"
+  - "mcp"
+  - "runtime"
+  - "language"
+  - "language/prettier-plugin-slurp"
+  - "vscode-extension"
+  - "tests/integration"
+
+# Security pin. `monaco-editor` (a dev dependency of @slurp/language) pulls a
+# transitive `dompurify`; versions below 3.4.12 carry a prototype-pollution
+# advisory. This lives HERE and not in package.json because pnpm 10 stopped
+# reading the `pnpm` field from package.json and ignores it with only a warning,
+# which would drop the pin silently on any non-frozen install.
+overrides:
+  dompurify: "^3.4.12"

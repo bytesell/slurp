@@ -1,0 +1,6 @@
+export { registerSlurp } from './monaco'
+export { getCompletions, FILTERS, LOOP_VARS, GLOBALS, SNIPPETS, FETCH_OPTIONS } from './completions'
+export { getHover } from './hover'
+export { getDiagnostics } from './diagnostics'
+export { formatSlurp, BLOCK_KEYWORDS } from './format'
+export type { SlurpFormatOptions, EndOfLine } from './format'

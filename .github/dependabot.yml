@@ -1,0 +1,50 @@
+version: 2
+
+updates:
+  # ── Rust ──────────────────────────────────────────────────────────────────
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Patch bumps are noise individually and useful in a batch. Several of the
+      # advisories this repo has carried were cleared by a patch bump alone.
+      rust-patch:
+        update-types: ["patch"]
+    ignore:
+      # A major bump here needs a source change and a look at the MSRV, so it
+      # should be a deliberate pull request rather than an automated one.
+      - dependency-name: "axum"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "ammonia"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "image"
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: "deps"
+
+  # ── npm / pnpm ────────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+    ignore:
+      # Alpine is the runtime's one browser-facing dependency and a major bump
+      # changes behaviour on every page that loads it.
+      - dependency-name: "alpinejs"
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: "deps"
+
+  # ── GitHub Actions ────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"

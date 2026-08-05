@@ -1,0 +1,508 @@
+---
+using "@components/ReviewCard"
+using "@components/Badge"
+using "@components/AddToCart"
+using "@components/SkeletonCard"
+using "@components/SkeletonProduct"
+
+{*
+  Types are declared here rather than imported. There is no types/ directory in
+  this theme, and `using type { X } from "@types/product"` is tooling-only
+  metadata with no render effect, so a dangling one resolves to nothing and is
+  never reported. A local `type` block at least names something real.
+
+  Either way a type is NEVER enforced at render time: a missing field is null.
+*}
+type Product {
+  id: string
+  title: string
+  slug: string
+  description: string
+  image: string
+  images: string[]
+  price: number
+  comparePrice?: number
+  status: string
+  shipsAt?: string
+  specs: Spec[]
+}
+
+type Spec {
+  key: string
+  value: string
+}
+
+type Review {
+  id: string
+  author: string
+  rating: number
+  title?: string
+  body: string
+  createdAt: string
+  verified: bool
+}
+
+type Stock {
+  count: number
+}
+---
+
+{* Only the BLOCK form of {layout} can fill the layout's head slot. With the
+   element form, <layout src="...">, the {head} children stay in the body. *}
+{layout "@layouts/base"}
+  {* base.slurp already emits <title>, the meta description and the og:image,
+     og:title and og:description tags from `seo`, so the head slot carries only
+     what the layout does not. A page-specific title belongs in `seo`, not in a
+     second <title> here. *}
+  {head}
+    <meta property="og:type" content="product" />
+  {/head}
+
+  {*
+    {$let} seeds CLIENT state and must sit in the BODY. In frontmatter it is an
+    unrecognised statement and is discarded silently, which is where these two
+    lines used to be.
+
+    Neither name is readable server-side, so everything below is written to
+    render a correct RESTING state: no thumbnail is marked active, and the
+    quantity reads 1.
+  *}
+  {$let activeImage = 0}
+  {$let quantity = 1}
+
+  {*
+    Main product fetch.
+
+    Options are CALL syntax: cache(300), not cache:300. An unrecognised option
+    is DROPPED SILENTLY, so `cache:300` compiled to a fetch with no caching at
+    all and said nothing about it.
+
+    The source is a DECLARATION. The renderer never evaluates it: it reads
+    `product` out of the render context and picks a branch, so no request is
+    made at build time. A URL string is used rather than a call, because a call
+    implies a function-calling capability the language does not have.
+  *}
+  {fetch product: Product from "/api/products/${ params.slug }" cache(300) retry(3) abort-on-navigate}
+
+    {* NOTE: the server ALWAYS renders the {try} body and never the {error}
+       branch, which is discarded rather than emitted. This is a client-side
+       boundary and needs a runtime to do anything. *}
+    {try}
+      <div class="product-page section__inner">
+
+        {* Gallery *}
+        <div class="product-gallery">
+          <div class="product-gallery__main">
+            <Image
+              src={product.image}
+              alt={product.title}
+              width={800}
+              height={600}
+              priority
+            />
+          </div>
+
+          {* There are NO array properties: product.images.length is null, so
+             the old `.length > 1` test was always false and the thumbnails
+             never rendered at all. An empty array is falsy, so the array
+             itself is the test. *}
+          {if product.images}
+            <div class="product-gallery__thumbs">
+              {each img, i in product.images | limit(8)}
+                {* The index is published as a data attribute because an on:
+                   value is NOT interpolated: a ${ } inside one is emitted
+                   verbatim. Ordinary attributes below DO interpolate. *}
+                <button
+                  class={"thumb", "thumb--active": activeImage == i}
+                  data-index="${ i }"
+                  on:click="selectImage"
+                  aria-label="View image ${ i + 1 }"
+                >
+                  <Image src={img} alt={`${product.title} - view ${i + 1}`} width={80} height={80} />
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        {* Product info *}
+        <div class="product-info">
+
+          {* Breadcrumb *}
+          <nav class="breadcrumb" aria-label="Breadcrumb">
+            <a href="/">Home</a>
+            <span aria-hidden="true">/</span>
+            <a href="/collections/all">All Products</a>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page">${ product.title }</span>
+          </nav>
+
+          <h1 class="product-info__title">${ product.title }</h1>
+
+          {* Discount badge + prices *}
+          <div class="product-info__prices">
+            {if product.comparePrice > product.price}
+              {* There is no math.round(). A call of any kind evaluates to null
+                 and renders empty, so this read "% off" with no number. `| int`
+                 truncates instead, and filters bind LOOSEST so it applies to
+                 the whole arithmetic expression. *}
+              <Badge variant="sale">
+                ${ (product.comparePrice - product.price) / product.comparePrice * 100 | int }% off
+              </Badge>
+              <span class="price price--compare" aria-label="Original price">
+                ${ product.comparePrice | currency }
+              </span>
+            {/if}
+            <span class="price price--current" aria-label="Current price">
+              ${ product.price | currency }
+            </span>
+          </div>
+
+          {* Stock status via match. Arms are `pattern -> body`, and matching is
+             type-strict. There is no {case} keyword. *}
+          {match product.status}
+            "available" ->
+              <Badge variant="new">In Stock</Badge>
+            "sold_out" ->
+              <Badge variant="default">Sold Out</Badge>
+            "pre_order" ->
+              <Badge variant="low-stock">Pre-Order - ships ${ product.shipsAt | date("MMM D") }</Badge>
+            _ ->
+              <span class="status-unknown">${ product.status | upper }</span>
+          {/match}
+
+          {* Live stock poll.
+
+             The type hint used to be an inline object, `stock: { count: number }`,
+             which is the one HARD parse error this page carried. It is also the
+             error whose diagnostic reports no filename, so in a whole-theme run
+             it surfaces only as `unknown:99:26`. Name the type instead. *}
+          {fetch stock: Stock from "/api/products/${ params.slug }/stock" poll(10)}
+            {if stock.count > 0 && stock.count <= 5}
+              <p class="low-stock-warning">
+                <svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                Only ${ stock.count } left in stock!
+              </p>
+            {/if}
+          {/fetch}
+
+          {* Quantity selector. The display is a literal 1: ${ quantity } is
+             {$let} state, which is not readable server-side and would render
+             an empty box. *}
+          <div class="quantity-selector">
+            <label class="quantity-selector__label">Quantity</label>
+            <div class="quantity-selector__controls">
+              <button class="qty-btn" on:click="decrementQuantity" aria-label="Decrease quantity">-</button>
+              <span class="qty-display" aria-live="polite">1</span>
+              <button class="qty-btn" on:click="incrementQuantity" aria-label="Increase quantity">+</button>
+            </div>
+          </div>
+
+          <AddToCart productId={product.id} />
+
+          {* Specs table. Same .length trap as the gallery above, so the specs
+             never rendered either. The zebra striping was `loop.even`, which
+             does not exist in any construct - the loop variables are index,
+             count, first and last - so it emitted a literal "false" class on
+             every row. CSS :nth-child does the striping honestly. *}
+          {if product.specs}
+            <div class="specs">
+              <h2 class="specs__heading">Specifications</h2>
+              {each spec in product.specs | limit(10)}
+                <div class="spec-row">
+                  <span class="spec-key">${ spec.key }</span>
+                  <span class="spec-value">${ spec.value }</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          {* Full rich-text description *}
+          <div class="product-description">
+            {html product.description sanitize}
+          </div>
+
+        </div>
+      </div>
+
+      {* Reviews *}
+      <section class="reviews section">
+        <div class="section__inner">
+          <h2 class="section__heading">Customer Reviews</h2>
+
+          {* infinite(10) is the call form; `infinite limit=10` was two
+             unrecognised options and was dropped silently. *}
+          {fetch reviews: Review[] from "/api/products/${ params.slug }/reviews" infinite(10) abort-on-navigate}
+
+            <div class="reviews__list">
+              {* {empty} is a BRANCH MARKER and takes no closing tag. The
+                 stray {/empty} that used to be here closed the {each}. *}
+              {each review in reviews}
+                <ReviewCard review={review} />
+              {empty}
+                <p class="empty-state">No reviews yet - be the first!</p>
+              {/each}
+            </div>
+
+            {*
+              This button used to be wrapped in {if !reviews.lastPage} and call
+              reviews.loadMore(). Neither is reachable from a template: inside a
+              {fetch} body the name is rebound to the ARRAY, so both are calls
+              on an array that evaluate to null. `lastPage` does not exist under
+              any name (the runtime property is `hasMore`), so `!null` was
+              always true and the button always rendered anyway.
+
+              The paging helpers live on an Alpine component in the separate
+              slurp.fetch / slurp.infinite bundles, which the compiler never
+              binds. So this is markup plus an on: declaration for a host
+              runtime to wire, which is the honest version of what was here.
+            *}
+            <div class="reviews__load-more">
+              <button class="btn btn--ghost" on:click="loadMoreReviews">
+                Load More Reviews
+              </button>
+            </div>
+
+          {loading}
+            <div class="reviews__list">
+              {repeat 3}
+                <SkeletonCard />
+              {/repeat}
+            </div>
+
+          {error}
+            {* In an {error} branch `error` is bound to the VALUE OF the
+               __error key, not to the fetch result. So a context shaped
+               { "reviews": { "__error": { "message": "..." } } } is what makes
+               error.message readable here. *}
+            <p class="error-text">Could not load reviews: ${ error.message }</p>
+
+          {/fetch}
+        </div>
+      </section>
+
+    {error}
+      <div class="error-boundary section__inner" role="alert">
+        <h2>Something went wrong</h2>
+        <p>${ error.message }</p>
+        <a href="/collections/all" class="btn btn--primary">Back to Products</a>
+      </div>
+    {/try}
+
+  {loading}
+    <div class="section__inner">
+      <SkeletonProduct />
+    </div>
+
+  {error}
+    <div class="error-page section__inner" role="alert">
+      {* There is no === operator. It lexes as == plus a stray =, which is a
+         parse error. == is already type-strict, so it is the one you want. *}
+      <h1>
+        {if error.status == 404}
+          Product Not Found
+        {else}
+          Something Went Wrong
+        {/if}
+      </h1>
+      <p>
+        ${ error.status == 404 ? "This product doesn't exist or has been removed." : error.message }
+      </p>
+      <div class="error-page__actions">
+        <a href="/collections/all" class="btn btn--primary">Browse Products</a>
+        <a href="/" class="btn btn--ghost">Go Home</a>
+      </div>
+    </div>
+
+  {/fetch}
+
+  {* {debug} renders in DEVELOPMENT mode only and is stripped with no trace in
+     production, which is what slurp build always uses. Visible under slurp dev. *}
+  {if env.dev}
+    {debug product}
+  {/if}
+
+{/layout}
+
+<style>
+.section__inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+.section { padding: 3rem 0; }
+.section__heading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+}
+
+/* Page layout */
+.product-page {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  padding-top: 2rem;
+  padding-bottom: 3rem;
+}
+
+/* Gallery */
+.product-gallery__main img {
+  width: 100%;
+  border-radius: 1rem;
+  object-fit: cover;
+}
+.product-gallery__thumbs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+.thumb {
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  cursor: pointer;
+  background: none;
+  transition: border-color 0.15s;
+}
+.thumb--active { border-color: #111827; }
+.thumb img { display: block; width: 72px; height: 72px; object-fit: cover; }
+
+/* Info */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  color: #9ca3af;
+  margin-bottom: 1rem;
+}
+.breadcrumb a { color: #6b7280; text-decoration: none; }
+.breadcrumb a:hover { color: #111827; }
+.product-info__title {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 800;
+  margin: 0 0 0.75rem;
+}
+.product-info__prices {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+.price--current { font-size: 1.5rem; }
+.status-unknown {
+  font-size: 0.8125rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+.low-stock-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #b45309;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin: 0.25rem 0;
+}
+
+/* Quantity */
+.quantity-selector { margin: 1rem 0; }
+.quantity-selector__label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.375rem;
+}
+.quantity-selector__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.qty-btn {
+  background: #f9fafb;
+  border: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.125rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.qty-btn:hover { background: #e5e7eb; }
+.qty-display {
+  width: 3rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Specs */
+.specs { margin: 1.5rem 0; }
+.specs__heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.spec-row {
+  display: flex;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+}
+.specs .spec-row:nth-child(even) { background: #f9fafb; }
+.spec-key {
+  flex: 0 0 40%;
+  font-weight: 500;
+  color: #6b7280;
+}
+.spec-value { color: #111827; }
+
+/* Description */
+.product-description {
+  margin-top: 1.5rem;
+  font-size: 0.9375rem;
+  color: #374151;
+  line-height: 1.7;
+}
+
+/* Reviews */
+.reviews__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.reviews__load-more {
+  margin-top: 1.5rem;
+  display: flex;
+  justify-content: center;
+}
+.error-text { color: #991b1b; font-size: 0.9375rem; }
+
+/* Error states */
+.error-boundary, .error-page {
+  text-align: center;
+  padding: 4rem 1.5rem;
+}
+.error-boundary h2, .error-page h1 {
+  margin-bottom: 0.75rem;
+}
+.error-page__actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .product-page { grid-template-columns: 1fr; }
+}
+</style>

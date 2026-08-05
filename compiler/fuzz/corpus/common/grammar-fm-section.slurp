@@ -1,0 +1,17 @@
+---
+section {
+  name: "S"
+  settings {
+    s0: text = "t"
+    s1: richtext = "<p>p</p>"
+    s2: color = "#fff"
+    s3: image = ""
+    s4: icon = "check"
+    s5: link = "/l"
+    s6: number = 1
+    s7: toggle = true
+    sel: select(a, b, c) = a
+  }
+}
+---
+${ section.settings.s0 }

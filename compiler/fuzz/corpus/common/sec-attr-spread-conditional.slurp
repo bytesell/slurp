@@ -1,0 +1,1 @@
+<div {if flag}{html attrs}{/if} class="c">x</div>@@@{"attrs": "€=1 onclick=\"a\""}

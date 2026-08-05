@@ -1,0 +1,148 @@
+---
+{* No props - footer is fully self-contained *}
+---
+
+<footer class="footer">
+  <div class="footer__inner">
+
+    <div class="footer__brand">
+      <a href="/" class="footer__logo" aria-label="Homepage">
+        {* Quote the numbers. An unquoted width=100 lexes as an attribute NAME,
+           so the value is dropped and the img renders unsized. *}
+        <img src="/logo.svg" alt="Our Store" width="100" height="30" />
+      </a>
+      <p class="footer__tagline">Premium products for discerning customers.</p>
+    </div>
+
+    <nav class="footer__nav" aria-label="Footer navigation">
+      <div class="footer__col">
+        <h4 class="footer__heading">Shop</h4>
+        <ul role="list">
+          <li><a href="/collections/all">All Products</a></li>
+          <li><a href="/collections/new-arrivals">New Arrivals</a></li>
+          <li><a href="/collections/sale">Sale</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h4 class="footer__heading">Company</h4>
+        <ul role="list">
+          <li><a href="/about">About Us</a></li>
+          <li><a href="/blog">Blog</a></li>
+          <li><a href="/careers">Careers</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h4 class="footer__heading">Support</h4>
+        <ul role="list">
+          <li><a href="/faq">FAQ</a></li>
+          <li><a href="/shipping">Shipping</a></li>
+          <li><a href="/returns">Returns</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h4 class="footer__heading">Legal</h4>
+        <ul role="list">
+          <li><a href="/privacy">Privacy Policy</a></li>
+          <li><a href="/terms">Terms of Service</a></li>
+          <li><a href="/cookies">Cookie Policy</a></li>
+        </ul>
+      </div>
+    </nav>
+
+  </div>
+
+  <div class="footer__bottom">
+    {*
+      Slurp has NO callable functions. math.year(), Math.max(), String(x) and
+      items.length all parse, evaluate to null and render the empty string,
+      with no diagnostic. Anything computed has to arrive through the render
+      context, so the host passes the current year in as `year`.
+    *}
+    <p>&copy; ${ year } Our Store. All rights reserved.</p>
+    {*
+      navigate=false opts a link out of the client-side navigation that
+      <body navigate> turns on. It compiles to a real navigate="false"
+      attribute, which is what the runtime checks. (Cross-origin links are
+      skipped by the runtime anyway, so this pair is belt and braces.)
+    *}
+    <div class="footer__socials">
+      <a href="https://twitter.com" aria-label="Twitter" navigate=false>
+        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.258 5.63L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" /></svg>
+      </a>
+      <a href="https://instagram.com" aria-label="Instagram" navigate=false>
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" /></svg>
+      </a>
+    </div>
+  </div>
+</footer>
+
+<style>
+.footer {
+  background: #111827;
+  color: #d1d5db;
+  margin-top: 4rem;
+}
+.footer__inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 2rem;
+  display: flex;
+  gap: 3rem;
+  flex-wrap: wrap;
+}
+.footer__brand {
+  flex: 0 0 220px;
+}
+.footer__tagline {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+.footer__nav {
+  flex: 1;
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+.footer__col { flex: 1; min-width: 120px; }
+.footer__heading {
+  color: #f9fafb;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.75rem;
+}
+.footer__col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.footer__col a {
+  color: #9ca3af;
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+.footer__col a:hover { color: #f9fafb; }
+.footer__bottom {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem;
+  border-top: 1px solid #1f2937;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+.footer__socials {
+  display: flex;
+  gap: 1rem;
+}
+.footer__socials a { color: #6b7280; }
+.footer__socials a:hover { color: #f9fafb; }
+</style>

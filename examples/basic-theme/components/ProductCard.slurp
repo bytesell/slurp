@@ -1,0 +1,136 @@
+---
+using "@components/Badge"
+using "@components/AddToCart"
+using type { Product } from "@types/product"
+
+props {
+  product: Product
+  featured: boolean = false
+}
+---
+
+{*
+  A class list mixes plain entries with conditional "name": cond entries.
+  A bare entry is ALWAYS emitted, so class={"a", cond && "b"} is not a
+  conditional at all: when cond is false the entry stringifies and you get
+  a literal class="a false".
+*}
+<article
+  class={
+    "product-card",
+    "product-card--featured": featured
+  }
+  on:add-to-cart="cart.add($event.detail.id)"
+>
+  {* width/height MUST be braced. width=600 lexes as two boolean props, so
+     the value is lost and Image falls back to its 800x600 default. *}
+  <a href=`/products/${product.slug}` class="product-card__image-link">
+    <Image
+      src={product.image}
+      alt={product.title}
+      width={600}
+      height={400}
+    />
+  </a>
+
+  {* Slurp has no === operator. Use ==, which is already type-strict. *}
+  {if product.comparePrice > product.price}
+    <Badge variant="sale">Sale</Badge>
+  {else if product.status == "new"}
+    <Badge variant="new">New</Badge>
+  {/if}
+
+  {if product.status == "low-stock"}
+    <Badge variant="low-stock">Low Stock</Badge>
+  {/if}
+
+  <div class="product-card__body">
+    <h3 class="product-card__title">
+      <a href=`/products/${product.slug}`>${ product.title }</a>
+    </h3>
+
+    <div class="product-card__prices">
+      {if product.comparePrice > product.price}
+        <span class="price price--compare" aria-label="Original price">${ product.comparePrice | currency }</span>
+      {/if}
+      <span class="price" aria-label="Current price">${ product.price | currency }</span>
+    </div>
+
+    {* Extra content injected by parent *}
+    <slot />
+
+    <AddToCart productId={product.id} />
+  </div>
+</article>
+
+<style>
+.product-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: #fff;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+.product-card:hover {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  transform: translateY(-2px);
+}
+.product-card--featured {
+  border-color: #111827;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+.product-card--featured .product-card__title a {
+  font-size: 1.125rem;
+}
+.product-card__image-link { display: block; overflow: hidden; }
+.product-card__image-link img {
+  width: 100%;
+  aspect-ratio: 3/2;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+.product-card:hover .product-card__image-link img {
+  transform: scale(1.03);
+}
+.product-card .badge {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+}
+.product-card__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+.product-card__title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.product-card__title a {
+  color: #111827;
+  text-decoration: none;
+}
+.product-card__title a:hover { text-decoration: underline; }
+.product-card__prices {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.price {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #111827;
+}
+.price--compare {
+  font-weight: 400;
+  font-size: 0.875rem;
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+</style>

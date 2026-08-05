@@ -1,0 +1,6 @@
+{match v}
+  1 -> one
+  "s" -> str
+  true -> yes
+  _ -> other
+{/match}

@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["vitest/globals"]
+  },
+  // `runtime.test.ts` imports runtime sources directly, which pull in
+  // `alpinejs`. That module's types come from an ambient declaration inside the
+  // runtime package (`runtime/src/alpinejs.d.ts`), and ambient declarations are
+  // only in scope for the program that includes them - so without this line the
+  // import resolves to an implicit `any` and TS7016 fails the check here while
+  // the runtime package's own typecheck stays green.
+  "include": ["*.test.ts", "vitest.config.ts", "../../runtime/src/*.d.ts"]
+}

@@ -1,0 +1,105 @@
+# cargo-deny configuration.
+#
+#   cargo install cargo-deny
+#   cargo deny check
+#
+# The point of this file is that every licence we consume and every advisory we
+# tolerate is an explicit, dated decision with a reason next to it, rather than
+# something that arrived by accident and nobody noticed.
+
+[graph]
+all-features = true
+
+[output]
+feature-depth = 1
+
+# ── Licences ────────────────────────────────────────────────────────────────
+[licenses]
+# Slurp itself is MIT. Everything below is what we are willing to CONSUME.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    "BSL-1.0",
+
+    # MPL-2.0 is weak, FILE-level copyleft. Consuming an unmodified MPL-2.0
+    # crate as a dependency imposes nothing on our own MIT source: the reciprocal
+    # obligation attaches to the MPL files themselves, and only if we modify and
+    # distribute them. Seven crates arrive this way, all through
+    # `minify-html -> lightningcss`:
+    #   cssparser, cssparser-color, cssparser-macros, dtoa-short,
+    #   lightningcss, lightningcss-derive, parcel_selectors
+    # If we ever VENDOR and PATCH one of those, the patched files must stay
+    # MPL-2.0 and be published. Reviewed 2026-08-01.
+    "MPL-2.0",
+
+    # CDLA-Permissive-2.0 licences DATA, not code, and it is here for exactly one
+    # thing: `webpki-roots`, which packages the Mozilla CA certificate bundle.
+    # The licence grants unrestricted use of the data with no reciprocal
+    # obligation and no attribution requirement on downstream works, so it
+    # imposes nothing on our MIT source. It reaches us unconditionally, through
+    # `reqwest -> hyper-rustls -> webpki-roots` in both `slurp-dev-server` and
+    # `slurp-image`. Reviewed 2026-08-04.
+    "CDLA-Permissive-2.0",
+
+    # NCSA (University of Illinois/NCSA Open Source License) is a permissive
+    # BSD-style licence, the one LLVM shipped under before relicensing. It
+    # arrives only via `libfuzzer-sys` (itself `(MIT OR Apache-2.0) AND NCSA`),
+    # which is pulled by `rav1e`'s `fuzzing` feature and is therefore visible
+    # here ONLY because `[graph] all-features = true` turns every optional
+    # feature on. It is never in a shipped build. Allowing the licence is
+    # preferred to narrowing the graph: `all-features` is what makes this check
+    # catch a licence we would acquire the day someone enables a feature, and
+    # that early warning is worth more than a shorter allow list.
+    # Reviewed 2026-08-04.
+    "NCSA",
+]
+# Anything not on the allow list fails. Do not add a licence here without
+# understanding what it obliges us to do.
+confidence-threshold = 0.93
+
+[[licenses.exceptions]]
+# Triple-licensed; we take it under MIT or Apache-2.0, never LGPL.
+name = "r-efi"
+allow = ["MIT", "Apache-2.0"]
+
+# ── Advisories ──────────────────────────────────────────────────────────────
+[advisories]
+yanked = "deny"
+ignore = [
+    # paste 1.0.15, unmaintained. Reached only through
+    # `slurp-image -> ravif -> rav1e -> paste`, and it is a proc-macro used at
+    # BUILD time, not a runtime dependency. No advisory of an actual
+    # vulnerability, no maintained fork that rav1e has moved to. Nothing we can
+    # do from here until rav1e releases without it. Reviewed 2026-08-01.
+    "RUSTSEC-2024-0436",
+]
+
+# ── Bans ────────────────────────────────────────────────────────────────────
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+deny = [
+    # TLS: this tree is rustls-only on purpose. `reqwest` in both `dev-server`
+    # and `image` sets `default-features = false` specifically to keep
+    # native-tls and its openssl-sys build out of the graph, because that made a
+    # fresh Linux clone fail at LINK time without libssl-dev and pkg-config.
+    # If one of these reappears, some crate has re-enabled a default TLS
+    # feature. Fix the feature flags rather than removing this ban.
+    { name = "openssl" },
+    { name = "openssl-sys" },
+    { name = "native-tls" },
+]
+
+# ── Sources ─────────────────────────────────────────────────────────────────
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

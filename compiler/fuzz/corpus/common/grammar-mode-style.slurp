@@ -1,0 +1,8 @@
+<style>{if x}y{/if}</style>
+<style>${a}</style>
+<style>{else}</style>
+<style>`t`</style>
+<style></div></style>
+<style>---</style>
+<style>{html v}</style>
+<style>{* c *}</style>

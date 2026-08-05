@@ -1,0 +1,1432 @@
+# Slurp, full reference
+
+Generated from the @slurp/mcp reference data, which is verified against the
+compiler by rendering each documented construct and recording the result. Do not
+edit this file by hand: run `pnpm --filter @slurp/mcp run build:llms`.
+
+Source: https://github.com/bytesell/slurp
+
+---
+
+# Slurp
+
+Slurp is a lightweight, agent-first templating engine. You write pages,
+components and layouts; it compiles them to plain HTML with almost no client
+JavaScript. Sections and blocks additionally declare a typed schema, so a
+non-technical person can edit a page through a form without touching the
+template.
+
+The mental model closest to it is a small Astro: file-based pages, components
+with props and slots, layouts, and a build step that produces static HTML.
+
+## What a file looks like
+
+```slurp
+---
+using "@components/ProductCard"
+section {
+  name: "Featured"
+  settings {
+    heading: text = "Featured products"
+    limit:   number = 8 { min: 1, max: 24 }
+  }
+}
+---
+<section>
+  <h2>${ section.settings.heading }</h2>
+  {each product in products | limit(8)}
+    <ProductCard product={product} />
+  {empty}
+    <p>Nothing here yet.</p>
+  {/each}
+</section>
+```
+
+## The shape of the language
+
+- `${ expr }` interpolates, HTML-escaped. `{ expr }` is the same thing.
+- Block tags are brace-delimited: `{if}`, `{each}`, `{match}`, `{fetch}`,
+  `{repeat}`, `{try}`, `{slot}`, `{layout}`, `{head}`, `{sections}`,
+  `{blocks}`.
+- `{* comments *}` are stripped from the output.
+- Frontmatter between `---` lines declares imports, props, types, middleware
+  and the section or block schema.
+- Everything is rendered on the server. Rendering is deterministic and has no
+  side effects: the compiler performs no network request, reads no file the host
+  did not hand it, and given the same source and context produces the same bytes.
+
+## Four things that will save you time
+
+1. A quoted COMPONENT prop is a literal string; a quoted ELEMENT attribute
+   interpolates. This asymmetry is the most common mistake in the language.
+2. There are no callable functions. `Math.max(a, b)` parses and evaluates to
+   null.
+3. Filter arguments must be literals. `default` is the only exception.
+4. A `${ }` inside a `<script>` body must end in `| js` or `| json`.
+
+Ask for the `gotchas` topic for the full list, each with the fix.
+
+---
+
+# Block tags
+
+The lexer recognises 14 block keywords. 11 are usable tags, 2 are branch markers
+valid only inside another tag, and 1 (`with`) is lexed but has no parser support
+at all, so every `{with}` is a hard error. That last one is worth knowing: it
+looks like a language feature and is not one.
+
+## `{if}`
+
+```slurp
+{if notifications.count > 0}
+  <a href="/inbox">Inbox (${ notifications.count })</a>
+{else if user.is_guest}
+  <a href="/login">Sign in</a>
+{else}
+  <span>Nothing new</span>
+{/if}
+```
+
+Any number of `{else if}`, at most one `{else}`. Neither takes a closing tag.
+
+Truthiness: `null`, `false`, the number `0`, the empty string, the empty
+array and the empty object are falsy. Everything else is truthy, INCLUDING the
+strings `"0"` and `"false"`. Note that an empty array is falsy here and truthy
+in JavaScript.
+
+## `{each}`
+
+```slurp
+{each product, i in products | limit(12) | sort("price")}
+  <li>${ i }: ${ product.name }</li>
+{empty}
+  <li>Nothing here yet.</li>
+{/each}
+```
+
+THE ITEM NAME COMES FIRST, the index second. The `in` keyword is required.
+`{empty}` takes no closing tag; `{/each}` is required.
+
+Four loop variables are bound automatically:
+
+| Variable | Meaning |
+|---|---|
+| `loop.index` | 0-based position |
+| `loop.count` | the TOTAL number of items, not index+1 |
+| `loop.first` | index == 0 |
+| `loop.last` | index == count-1 |
+
+Filters in an `{each}` header are LOOP filters, a different table from the
+value filters. Using a value filter name there is an error.
+
+A non-array, non-null collection is wrapped and iterated once. A null collection
+is empty and takes the `{empty}` branch. Each loop is capped at 1000 items.
+
+## `{match}`
+
+```slurp
+{match post.status}
+  "published" -> <span class="ok">Published</span>
+  "archived"  -> <span class="warn">Archived</span>
+  _           -> <span>${ post.status }</span>
+{/match}
+```
+
+THERE IS NO `{case}` KEYWORD. Arms are a bare pattern, then `->`, then a body.
+Patterns are string, number or boolean literals, or `_` for the wildcard.
+
+Matching is type-strict: a `"1"` pattern never matches a numeric `1`. With no
+matching arm and no `_`, the block renders nothing.
+
+## `{fetch}`
+
+```slurp
+{fetch products: Product[] from "/api/products" cache(300) retry(2)}
+  {each p in products}<li>${ p.name }</li>{/each}
+{loading}
+  {repeat 6}<div class="skeleton"></div>{/repeat}
+{error}
+  <p>Could not load products.</p>
+{empty}
+  <p>No products yet.</p>
+{/fetch}
+```
+
+THE BRANCH ORDER IS FIXED: body, then `{loading}`, then `{error}`, then
+`{empty}`. Out of order is not recovered and reports an unclosed block.
+
+Options, all optional: `cache(n)`, `retry(n)`, `timeout(n)`, `poll(n)`,
+`paginate(n)`, `infinite(n)`, and the bare flag `abort-on-navigate` (also
+spelled `abortOnNavigate`). An unrecognised option is SILENTLY DROPPED.
+
+Server-side the compiler performs NO network request. It reads the name out of
+the render context and picks a branch: absent or null gives `{loading}`; an
+object carrying an `__error` key gives `{error}`; an empty array gives
+`{empty}`; anything else renders the body with the name rebound. The type hint
+is recorded and has no effect on rendering.
+
+## `{repeat}`
+
+```slurp
+{repeat 8}<div class="skeleton-card"></div>{/repeat}
+```
+
+The count is any expression; non-numeric means 0, and it is capped at 1000.
+
+## `{try}`
+
+```slurp
+{try}<LiveFeed items={$feed.items} />{error}<p>Feed unavailable.</p>{/try}
+```
+
+THE SERVER ALWAYS RENDERS THE BODY AND NEVER THE `{error}` BRANCH. This is
+purely a client-side boundary and needs the browser runtime to do anything.
+
+## `{html expr}` and `{html expr sanitize}`
+
+Raw, unescaped output; the only way to bypass escaping.
+
+```slurp
+{html product.description}        {* trusted only *}
+{html review.body sanitize}       {* safe for untrusted input *}
+```
+
+`sanitize` runs a strict tag and attribute allowlist and permits only the
+http, https and mailto URL schemes. Any `<a target=...>` gains
+`rel="noopener noreferrer"`.
+
+`{html}` also works in ATTRIBUTE position as an attribute spread, including a
+conditional form:
+
+```slurp
+<input {html attrs} {if is_required}{html "required"}{/if} />
+```
+
+That path is sanitized differently: the spread is re-parsed into whole
+attributes and any with an unsafe name (`on*`, `x-html`, `x-data`,
+`x-init`, `x-effect`) or a script-scheme value is dropped.
+
+## `{$let name = expr}`
+
+Seeds CLIENT state. Server-side it emits ONLY a JSON payload:
+
+```html
+<script type="application/json" data-slurp-let="count">0.0</script>
+```
+
+IT CREATES NO TEMPLATE BINDING. Writing `{$let n = 5}` and then `${ n }`
+renders the empty string. (OBSERVED.) Object and array literals are not valid
+values, because the language has no such literals; pass them through context.
+
+## `{slot}` and `{layout}`
+
+Only two slot names are ever filled: `default` and `head`. Any other name
+renders as a literal `<slot name="x">` element.
+
+```slurp
+{layout "@layouts/base"}
+  {head}<title>Products</title>{/head}
+  <h1>Products</h1>
+{/layout}
+```
+
+The two layout forms are NOT equivalent. With `{layout "..."}` the `{head}`
+children are extracted into the layout's head slot. With the element form
+`<layout src="...">` they are not, and render inline in the body.
+
+There is no `layout` frontmatter directive. A `layout:` line in frontmatter is
+silently ignored.
+
+## `{sections}` and `{blocks}`
+
+Host integration points. `{sections}` emits pre-rendered section HTML the host
+injected under a reserved context key; `{sections "header"}` does the same for a
+named group, which is how global chrome lives in a layout. `{blocks}` renders
+the child blocks of the nearest enclosing section or block, each from its own
+`blocks/<type>.slurp` file.
+
+## `{debug expr}`, `{redirect}`, `{next}`
+
+`{debug}` renders a pretty-printed value in DEVELOPMENT mode and is stripped
+with no trace in production, which is what `slurp build` always uses.
+
+`{redirect}` and `{next}` are middleware-only signals that render nothing.
+Using either outside middleware is a compile error.
+
+---
+
+# Expressions
+
+## Precedence, loosest first
+
+| # | Construct | Associativity |
+|---|---|---|
+| 1 | `\|` filter application | left, and LOOSEST of all |
+| 2 | `? :` ternary | RIGHT |
+| 3 | `\|\|` | left |
+| 4 | `&&` | left |
+| 5 | `==` `!=` | left |
+| 6 | `<` `>` `<=` `>=` | left |
+| 7 | `+` `-` | left |
+| 8 | `*` `/` `%` | left |
+| 9 | `!x` `-x` prefix | right |
+| 10 | `f(...)` `x[...]` postfix | left |
+| 11 | literals, paths, `(...)`, template literals | tightest |
+
+FILTERS BIND LOOSEST. `${ a ? "yes" : "no" | upper }` applies `upper` to the
+whole ternary result, not to `"no"`. Parenthesise if you meant otherwise.
+
+A filter cannot be followed by a binary operator: `${ a | upper + b }` is a
+parse error. Parenthesise instead.
+
+All binary operators are left-associative, including the comparisons, so
+`a < b < c` parses as `(a < b) < c`.
+
+## Operators that do NOT exist
+
+`===` `!==` `??` `?.` `in` `**` `typeof` `instanceof`, every bitwise
+operator, every assignment operator, and arrow functions. Writing any of them is
+a parse or lex error, not a silent no-op.
+
+There is no `?.` because none is needed: `.` is ALWAYS null-safe.
+For a null fallback use `| default(...)` rather than `??`.
+
+## Operator semantics
+
+| Op | Behaviour |
+|---|---|
+| `+` | STRING CONCATENATION if either side is a string, otherwise numeric. `"a" + 1` is `a1`. |
+| `-` `*` | Numeric. null, arrays, objects and non-numeric strings all coerce to 0. |
+| `/` `%` | Numeric, and DIVISION BY ZERO YIELDS 0, not an error and not Infinity. |
+| `==` `!=` | Type-strict deep equality. `1 == "1"` is false; `0 == false` is false. Numbers use an epsilon, so `0.1 + 0.2 == 0.3` is true. Arrays and objects compare structurally. |
+| `<` `>` `<=` `>=` | Only number-to-number and string-to-string actually compare. EVERY other pairing compares Equal, so `>` is false and `>=` is true. No coercion, so `"10" > 9` is false. |
+| `&&` `\|\|` | Short-circuit and return THE OPERAND VALUE, JavaScript-style, not a coerced boolean. |
+| `!x` | Always a real boolean. |
+| `-x` | Only a NUMBER is negated. `-"5"` is 0, which disagrees with `0 - "5"` being -5. |
+
+Any arithmetic result that is NaN or infinite silently becomes 0.
+
+## Literals
+
+| Form | Notes |
+|---|---|
+| `"str"` / `'str'` | Escapes: `\n \t \r \\ \' \" \0 \uXXXX`. An unknown escape is preserved as backslash plus the character. |
+| `123`, `1.5`, `1e3` | All f64. `.5` is NOT valid, a digit must lead. `1.` is not a number either. No hex, no separators, no unary plus. |
+| `true` `false` `null` | Word-boundary matched. There is no `undefined` keyword. |
+| `\`text ${expr}\`` | Template literal. Escapes are a SMALLER set than in a quoted string: `\n \t \r \\ \` \$` and NO `\uXXXX`. |
+| `[1,2]`, `{a:1}` | DO NOT EXIST. Both are parse errors. Pass collections through the render context. |
+
+## Paths
+
+```slurp
+${ user.address.city }      {* null-safe at every depth: missing gives "" *}
+${ items[0].title }         {* literal index *}
+${ config["feature-flag"] } {* literal string key *}
+${ items[i] }               {* dynamic index: WORKS *}
+```
+
+Navigation is null-safe at every depth, so a missing intermediate yields the
+empty string rather than an error.
+
+A dynamic index WORKS. (OBSERVED: with `items = ["a","b","c"]` and `i = 1`,
+`${ items[i] }` renders `b`, including when `i` is an `{each}` index.)
+Older notes claim dynamic indexes always render empty; that was true of an
+earlier compiler and is not true now.
+
+After a `.` only an identifier is accepted, so `a.0` is a parse error and
+`a[0]` is the only form.
+
+There are NO array properties or methods. `items.length` resolves to null and
+renders empty. (OBSERVED.) Pass a count through the render context, or use
+`loop.count` inside the loop.
+
+`$name` marks a reactive path for the client runtime. Server-side it resolves
+exactly like a plain path.
+
+## Function calls
+
+`f(a, b)` PARSES and ALWAYS EVALUATES TO NULL. There are no built-in callable
+functions of any kind. (OBSERVED: `${ Math.max(1,2) }` renders the empty
+string, with no diagnostic.) The only call-shaped construct in the language is a
+filter.
+
+## Scoping
+
+The page context is the root scope. `{each}` and `{fetch}` create child scopes,
+and a child shadows its parent.
+
+Components and layouts render in their OWN root scope: the page globals, overlaid
+by whatever was passed explicitly, with the explicit values winning on collision.
+So a component CAN read a page global it was never passed. What it cannot see is
+the caller's local bindings, which notably means an `{each}` loop variable and
+`loop.index` are invisible inside a component unless passed as props.
+
+---
+
+# Filters
+
+There are 13 value filters and 4 loop filters. THE TWO TABLES ARE DISJOINT: using one where the other belongs is an UnknownFilter error.
+
+FILTER ARGUMENTS MUST BE LITERALS. A non-literal argument is read as the empty string, so the filter silently falls back to its default or emits nothing, with no diagnostic. `default` is the ONLY filter whose argument is evaluated in scope.
+
+Chained left to right: `${ name | lower | truncate(20) }`.
+
+An unknown filter records a diagnostic AND passes the value through unfiltered, so the page renders looking nearly right.
+
+## Value filters
+
+Usable anywhere an expression is.
+
+### `upper`
+
+Uppercases the stringified value, with full Unicode case mapping.
+
+Null and wrong types: null renders as the empty string. An array or object is first serialised to JSON and then uppercased, which uppercases its KEYS too.
+
+```slurp
+${ name | upper }
+```
+
+### `lower`
+
+Lowercases the stringified value, with full Unicode case mapping.
+
+Null and wrong types: null renders as the empty string. Same JSON caveat as upper.
+
+```slurp
+${ name | lower }
+```
+
+### `currency(code = "USD")`
+
+Formats a number as money. Known codes and their symbols: USD $, EUR EUR-sign, GBP pound, JPY yen, CAD CA$, AUD AU$, CHF "CHF " (with a trailing space). Only JPY uses 0 decimals; every other code including unknown ones uses 2. EUR groups with "." and separates decimals with ","; CHF groups with an apostrophe; everything else groups with "," and separates with ".".
+
+Null and wrong types: A null, array, object or non-numeric string becomes 0, so it renders as the zero amount rather than blank. An UNKNOWN code is not an error: the code plus a space is used as the symbol, so currency("SEK") renders "SEK 10.00".
+
+TRAP: The symbol always PREFIXES, for every code, so EUR renders as EUR-sign then the amount rather than the usual European suffix. A negative renders with the sign outside the symbol (-$5.00). Rounding happens once in minor units, so 19.999 becomes $20.00. And the argument must be a LITERAL: currency(someVar) silently produces a leading space and no currency marker at all.
+
+```slurp
+${ price | currency("EUR") }
+```
+
+### `truncate(n = 50, suffix = "...")`
+
+Shortens a string to n CHARACTERS (not bytes, so it is Unicode-safe). The suffix is appended only when it actually truncated.
+
+Null and wrong types: null becomes the empty string, which is length 0 and never truncates.
+
+TRAP: If truncation lands inside an unterminated HTML tag, everything from that "<" onward is dropped before the suffix is added. It does not balance tags, so truncating HTML is still unsafe.
+
+```slurp
+${ description | truncate(120, "...") }
+```
+
+### `fixed(n = 2)`
+
+Formats a number with exactly n decimal places. Returns a STRING.
+
+Null and wrong types: A null, array, object or non-numeric string becomes 0, so it renders as 0.00.
+
+TRAP: A requested precision above 100 is silently clamped to 100 rather than rejected.
+
+```slurp
+${ rating | fixed(1) }
+```
+
+### `date(format = "MMM DD, YYYY")`
+
+Formats an ISO date string. The complete token set is YYYY, YY, MMMM, MMM, MM, M, DD, D. There are NO time tokens at all: no hours, minutes, seconds, timezone or day-of-week.
+
+Null and wrong types: Parsing takes the text before the first "T" or space and splits it on "-". If that yields fewer than three parts, THE INPUT IS RETURNED UNCHANGED.
+
+TRAP: That passthrough is the trap: epoch milliseconds have no "-", so "1700000000000" renders verbatim as "1700000000000" with no diagnostic. Pass RFC 3339 / ISO 8601 strings, never epoch numbers. There is also no escaping in the format string, so a literal "D" or "M" in surrounding text gets substituted.
+
+```slurp
+${ post.published_at | date("MMMM D, YYYY") }
+```
+
+### `default(fallback?)`
+
+Substitutes the fallback when the value is empty. "Empty" means null, the empty string, the empty array or the empty object. With no argument it yields the empty string.
+
+Null and wrong types: This IS the null handler. Note that 0 and false are NOT empty and pass through.
+
+TRAP: This is the ONLY filter whose argument is evaluated as an expression in scope. Every other filter reads its arguments as literals. So default(user.name) works and currency(user.code) does not.
+
+```slurp
+${ user.nickname | default(user.name) }
+```
+
+### `plural(one = "item", many = one + "s")`
+
+Picks a singular or plural word based on a count.
+
+Null and wrong types: A null or non-numeric value counts as 0, so the plural word is used.
+
+TRAP: The OUTPUT INCLUDES THE NUMBER. `${ 5 | plural("item") }` renders "5 items", not "items". Writing `${count} ${count | plural("item")}` prints the number twice.
+
+```slurp
+${ result_count | plural("result", "results") }
+```
+
+### `int`
+
+Coerces to a whole number, truncating floats toward zero. Returns a NUMBER.
+
+Null and wrong types: null, arrays and objects become 0. true becomes 1, false becomes 0.
+
+TRAP: String parsing is all-or-nothing, with no prefix parsing: "12abc" becomes 0, not 12.
+
+```slurp
+${ raw_count | int }
+```
+
+### `float`
+
+Coerces to a floating-point number. Returns a NUMBER.
+
+Null and wrong types: null, arrays and objects become 0.
+
+TRAP: Same all-or-nothing string parsing: "1.5x" becomes 0.
+
+```slurp
+${ raw_price | float }
+```
+
+### `js`
+
+Escapes a value for placement INSIDE a JavaScript string literal you wrote yourself. It escapes quotes, backtick, backslash, "$", newlines, U+2028/U+2029, "<" and "/". It does NOT add the surrounding quotes.
+
+Null and wrong types: null becomes the empty string.
+
+TRAP: It is a CLAIM about position, and a false claim is refused at compile time. Using it where the slot is NOT inside a quoted string (statement or expression position) is an UnsafeScriptInterpolation error, because escaping quote characters cannot contain a value that lands next to a ";" or "(". Quote the slot, or use | json.
+
+```slurp
+<button @click="add('${ id | js }')">Add</button>
+```
+
+### `json`
+
+Serialises the value as a complete JSON literal, script-safely (it rewrites "<" and the line separators). A string comes out WITH its quotes.
+
+Null and wrong types: null serialises as the JSON literal null.
+
+TRAP: Because it is self-delimiting, this is the right choice in JavaScript statement or expression position, where | js is refused. Do not wrap it in your own quotes as well.
+
+```slurp
+<script>const config = ${ page.config | json };</script>
+```
+
+### `unsafe_js`
+
+No escaping at all. It exists so a theme can declare that a value IS JavaScript the theme itself wrote, rather than data.
+
+Null and wrong types: null becomes the empty string.
+
+TRAP: Never reachable by untrusted data without an XSS. It is deliberately NOT accepted as the script filter in a <script> body: the raw hatch there is {html expr}.
+
+```slurp
+<button @click={`${ handlerName | unsafe_js }()`}>Go</button>
+```
+
+## Loop filters
+
+Usable ONLY in an `{each}` header. A loop-filter error EMPTIES the collection, which then renders the `{empty}` branch, so a broken loop filter looks like missing data rather than like an error.
+
+### `limit(n)`
+
+Truncates the collection to the first n items.
+
+Null and wrong types: The argument is REQUIRED. A missing or non-literal argument is an error.
+
+TRAP: A loop-filter error EMPTIES the collection, which then renders the {empty} branch. So a broken limit() looks like "there is no data" rather than like an error.
+
+```slurp
+{each p in products | limit(12)}<li>${p.name}</li>{/each}
+```
+
+### `sort(key?, dir?)`
+
+Sorts ascending by default. Pass "desc" as the second argument to reverse. With a key, sorts by that field on each item, falling back to the whole item when the key is absent. The sort is stable.
+
+Null and wrong types: Cross-type pairs are ordered by type rank (null, bool, number, string, array, object), so a mixed collection sorts deterministically rather than erratically.
+
+TRAP: Only the exact string "desc" reverses. "DESC" and "descending" both mean ascending.
+
+```slurp
+{each p in products | sort("price", "desc")}<li>${p.name}</li>{/each}
+```
+
+### `reverse`
+
+Reverses the collection in place.
+
+Null and wrong types: An empty or null collection stays empty.
+
+```slurp
+{each p in products | reverse}<li>${p.name}</li>{/each}
+```
+
+### `filter(key, value)`
+
+Keeps items whose item[key] equals value. Both arguments must be literals.
+
+Null and wrong types: Items that are not objects, or that lack the key, are DROPPED. Comparison is type-strict, so filter("id", "1") never matches a numeric 1.
+
+TRAP: Passing a variable as the key makes the key the empty string, so every item is dropped and the loop renders its {empty} branch.
+
+```slurp
+{each p in products | filter("featured", true)}<li>${p.name}</li>{/each}
+```
+
+---
+
+# Elements, attributes and components
+
+## What makes a component
+
+A tag is a COMPONENT if its first character is uppercase. Everything else is a
+plain HTML element. There is no registration step beyond a `using` import.
+
+## THE ASYMMETRY THAT CATCHES EVERYONE
+
+```slurp
+<span data-x="Hi ${name}"></span>   {* ELEMENT attribute: interpolates. Renders "Hi World" *}
+<Card title="Hi ${name}" />        {* COMPONENT prop: LITERAL. Renders "Hi ${name}" *}
+<Card title={\`Hi ${name}\`} />      {* COMPONENT prop, correct: renders "Hi World" *}
+```
+
+(OBSERVED, all three.) A quoted element attribute is re-lexed as a template
+literal and its slots are evaluated. A quoted component prop is not: the
+`${...}` characters are carried through as literal text. Nothing is reported.
+
+If you write one thing from this page down, write this one.
+
+## Element attribute forms
+
+| Form | Meaning |
+|---|---|
+| `attr` | Boolean attribute, emitted bare. |
+| `attr="text"` | Literal, and `${...}` inside IS interpolated. |
+| `attr={expr}` | Expression. An empty result OMITS the attribute entirely. |
+| `attr={\`tpl ${x}\`}` | Template literal. |
+| `class={"a": cond, "b": true}` | Conditional class list, joined with spaces. |
+| `on:click="handler"` | NOT A BINDING. Emitted as an inert literal attribute, and never interpolated. See below. |
+| `{html expr}` | Raw attribute spread, sanitized. |
+
+### `on:` binds nothing
+
+`on:event="handler"` parses and is emitted verbatim. `<button on:click="go()">`
+compiles to `<button on:click=go()>`, which is not an Alpine directive
+(`@click` / `x-on:click`) and not a DOM handler, so nothing runs. Neither the
+browser nor `@slurp/runtime` looks at it.
+
+It is also NOT interpolated, unlike every other quoted element attribute:
+`on:click="f(${item.id})"` emits the literal text `${item.id}` into the DOM.
+
+To bind a handler, write the Alpine attribute you want:
+
+```slurp
+<button @click="addToCart(1)">Add to cart</button>
+```
+
+## Component prop forms
+
+| Form | Result |
+|---|---|
+| `prop={expr}` | The evaluated expression. This is the form you want. |
+| `prop="text"` | A LITERAL string. Never interpolated. |
+| `prop={\`text ${x}\`}` | Template literal. The correct way to interpolate. |
+| `prop` | Boolean `true`. |
+| `prop=123` | TWO boolean props. An unquoted number lexes as an attribute NAME, so you get `prop = true` and a second prop literally named `123`. Write `prop={123}`. |
+| `...spread` | A PARSE ERROR. Both `<Card ...cardProps />` and `<Card ...spread={cardProps} />` fail with `error[UnexpectedToken]`. Pass props explicitly. |
+
+An unresolvable component does NOT fail the build. It renders a placeholder:
+
+```html
+<div data-slurp-component="Card" data-slurp-props="{...}">children</div>
+```
+
+which is why a broken import can look like a clean build with a missing card.
+
+## URL attributes are scheme-checked
+
+`href src xlink:href poster formaction action cite background data ping srcset`,
+plus their `:href` and `x-bind:href` forms, are checked. A `javascript:`,
+`data:` or `vbscript:` value collapses to an EMPTY value; the attribute is not
+dropped. Detection first strips control characters, Unicode whitespace,
+zero-width and bidi characters, so obfuscation does not get past it.
+
+## A nested double quote inside `${ }` ends the attribute
+
+```slurp
+<div title="${ a["k"] }">   {* BROKEN: renders <div title=" a[" k> *}
+<div title={ a["k"] }>      {* correct *}
+<div title="${ a['k'] }">   {* also correct *}
+```
+
+(OBSERVED.) The lexer closes an attribute at its first matching quote, before
+interpolation is ever considered. There is no diagnostic.
+
+## `<Image>`
+
+```slurp
+<Image src={product.image} alt={product.name} width={400} height={300} priority />
+```
+
+Emits a `<picture>` with AVIF, WebP and JPEG sources. `src` is required and
+omitting it is the only error this component raises. `width` defaults to 800
+and `height` to 600; both accept a literal, contrary to older notes claiming a
+literal is ignored. (OBSERVED: `width={400}` produces `w=400`.) `priority`
+switches loading from lazy to eager. `height` is only used for the `<img>`
+attribute and is never sent to the image service.
+
+---
+
+# Script bodies and JavaScript attributes
+
+This is the part of Slurp with the strictest rules, and the reason is worth one
+paragraph. A `<script>` body is a RAW TEXT element: the HTML parser hands it to
+the JavaScript engine WITHOUT decoding character references. So the entity
+escaping that makes `${ }` safe in ordinary text is completely inert there,
+and every JavaScript metacharacter except `<` passes through untouched. The
+compiler therefore refuses to guess.
+
+## Rule 1: every `${ }` in a `<script>` body must declare its escaping
+
+```slurp
+<script>var n = ${ user.name };</script>          {* ERROR *}
+<script>var n = ${ user.name | json };</script>   {* correct: emits "Bo" with quotes *}
+<script>var n = '${ user.name | js }';</script>   {* correct: you supply the quotes *}
+```
+
+Only `| js` and `| json` satisfy the rule. `| unsafe_js` deliberately does
+NOT; the raw hatch inside a script body is `{html expr}`.
+
+The difference between them: `| js` escapes the value for placement inside a
+string literal YOU wrote, and adds no quotes. `| json` emits a complete,
+self-delimiting JSON literal, so a string arrives with its quotes.
+(OBSERVED: with `name = "Bo"`, `| js` gives `Bo` and `| json` gives `"Bo"`.)
+
+## Rule 2: a JS template literal cannot be written in a `<script>` body at all
+
+Slurp claims the `${` sequence itself, so there is no way to write a backtick
+template in a script body. Build the string by concatenation instead.
+
+## Rule 3: in a JavaScript-evaluated ATTRIBUTE, position decides the filter
+
+An attribute counts as JavaScript-evaluated if it starts with `@` or `x-on:`,
+starts with `x-bind:` or `:`, is longer than two characters and starts with
+`on`, or is one of `x-data x-init x-effect x-show x-text x-html x-if x-for
+x-model`.
+
+Inside such an attribute the compiler tracks whether each slot sits inside a
+quote YOU opened:
+
+```slurp
+<button @click="add('${ id | js }')">   {* STRING position: | js is correct *}
+<button @click="add(${ id | json })">   {* STATEMENT position: | json is correct *}
+<button @click="add(${ id | js })">     {* ERROR: a false claim about position *}
+```
+
+(OBSERVED: the third form is refused with UnsafeScriptInterpolation.)
+
+Why the third is an error rather than merely redundant: `| js` is a CLAIM that
+the slot is inside a string literal, and a declared slot is then passed through
+VERBATIM. Outside a literal that turns the auto-escaper off and puts nothing in
+its place, and escaping quote characters cannot contain a value sitting next to
+a `;` or a `(`.
+
+An UNDECLARED slot in statement position is not an error. It is auto-encoded as
+a JSON literal, which is a complete answer, and development mode records an
+advisory warning suggesting you declare it.
+
+## Rule 4: a backtick template in a quoted attribute is a warning
+
+```slurp
+<a :href="\`/product/${item.slug}\`">   {* WARNING: renders EMPTY *}
+<a :href="'/product/' + item.slug">    {* correct *}
+```
+
+The template engine consumes the `${ }` slots itself and evaluates them against
+the SERVER render context, not the browser's, so a client-side variable renders
+EMPTY with no runtime error and no other sign of failure. This is the
+`JsTemplateLiteralInAttribute` warning. It has a dedicated code because of how
+it fails: the page still builds and still looks built, while carrying dead links
+and unstyled elements wherever a slot was silently emptied.
+
+## Rule 5: a `style` value slot loses CSS-structural characters
+
+Semicolons, parentheses, braces, quotes and `@` are stripped from a slot
+interpolated into a style attribute. Development mode records a warning saying
+so; production mode strips silently.
+
+---
+
+# Frontmatter
+
+Delimited by `---` at column 1. Every directive is optional.
+
+UNKNOWN STATEMENTS ARE SILENTLY SKIPPED. A misspelled directive produces no
+diagnostic at all, which is why a `layout:` line (there is no such directive)
+appears to do nothing rather than to fail.
+
+| Directive | Syntax |
+|---|---|
+| `using` | `using "@components/Card"` or `using "./Card" as Renamed` |
+| `using type` | `using type { Post, Author } from "@types/content"` (tooling only, no render effect) |
+| `type` | `type Post { id: string  views?: number }` (stored as raw strings, NEVER enforced) |
+| `props` | `props { title: string  count?: number  featured: bool = false }` |
+| `middleware` | `middleware "auth"` or `middleware auth` |
+| `section { }` | see the `schema` topic |
+| `block { }` | see the `schema` topic |
+
+## props
+
+ONE DECLARATION PER LINE. (OBSERVED: putting three on one line parses as a
+single prop whose type expression swallows the rest.)
+
+```slurp
+---
+props {
+  title: string
+  count?: number
+  featured: bool = false
+}
+---
+```
+
+`?` marks a prop optional. A `= default` is supported and is evaluated in the
+CALLER's scope. Prop types are recorded and NEVER validated at render time, so a
+missing required prop is simply null.
+
+## Import names
+
+The local name is the alias if one is given, otherwise the last path segment. So
+`using "@components/Card"` introduces `Card`.
+
+## middleware
+
+This directive only RECORDS a name. Whether a file is compiled as middleware is a
+caller-supplied compile option, not a filename or frontmatter convention. The
+CLI and this MCP server both treat every file as non-middleware unless told
+otherwise, which is why `request.*` reports a scope violation by default.
+
+---
+
+# Section and block schemas
+
+A section or block declares its own editor surface in frontmatter. That
+declaration is the contract between the template and whatever renders a settings
+form over it, which is how a non-technical person edits a page safely.
+
+```slurp
+---
+section {
+  name: "Hero"
+  settings {
+    heading:    text = "Welcome" { label: "Heading" }
+    background: color = "#0a0a0a"
+    align:      select(left, center, right) = center
+    max_items:  number = 8 { min: 1, max: 24 }
+    show_badge: toggle = true
+    blurb:      richtext
+    logo:       image
+    cta:        link
+    marker:     icon
+  }
+  blocks {
+    @theme(heading, text, button)
+    faq_item { max: 12 settings { question: text  answer: richtext } }
+  }
+  max_per_page: 3
+}
+---
+<h1>${ section.settings.heading }</h1>
+{blocks}
+```
+
+## The nine setting kinds
+
+| Kind | Default when unset | Validation when merging saved state |
+|---|---|---|
+| `text` | `""` | must be a string |
+| `richtext` | `""` | string, run through the sanitizer allowlist |
+| `color` | `""` | `#hex` of 3, 4, 6 or 8 digits, or a named CSS colour; otherwise the default is kept |
+| `image` | `""` | string, URL-scheme filtered |
+| `icon` | `""` | `[a-z0-9-]+` only |
+| `link` | `""` | relative, anchor and query URLs kept; an absolute one must be http, https, mailto or tel, else it collapses to `""` |
+| `select(a, b, c)` | the FIRST option | must be exactly one of the options |
+| `number` | `0` | must be numeric, and is CLAMPED to `meta.min` and `meta.max` |
+| `toggle` | `false` | must be a boolean |
+
+Options in `select(...)` may be identifiers OR string literals. A common claim
+that they must be identifiers is false.
+
+Each setting takes an optional `= default` and an optional trailing
+`{ meta }` object of arbitrary keys, of which `label`, `min` and `max`
+have meaning.
+
+## section vs block
+
+`block { }` is the same grammar minus `max_per_page`, and it does not require
+a `name`. `section { }` does require one.
+
+A BLOCK'S TYPE IS ITS FILE NAME, not the `name` it declares.
+`blocks/social_row.slurp` is the type `social_row` whatever its `name:`
+says. The name is only a human label for an editor.
+
+## @theme targeting
+
+Inside a `blocks { }` group, a bare `@theme` accepts every theme block and
+`@theme(a, b)` whitelists specific ones.
+
+A BARE `@theme` ALWAYS WINS over a whitelist regardless of the order they
+appear in. Widening is never silently narrowed.
+
+An INLINE block definition always beats the shared theme catalog, so adding to
+the palette can never change an existing section.
+
+## Merge semantics: deliberately tolerant
+
+Saved editor state is merged over the schema so a theme upgrade can never break
+it. Unknown setting keys are dropped, type mismatches keep the default, numbers
+are clamped, unknown block types are dropped, per-type block counts are capped,
+and nesting is bounded.
+
+THE MOST SURPRISING CONSEQUENCE: without a block catalog, a `@theme`-targeted
+block is an unknown type and is DROPPED FROM THE RENDER while surviving intact
+in storage. The page renders as though nothing was added.
+
+---
+
+# Error codes
+
+The compiler declares 21 codes and EMITS 13 of them. The remaining 8 are declared for host integrations that add their own checks; the compiler will never produce them, so do not go hunting for the condition.
+
+Every diagnostic carries a code, a message, a file, a line, a column and a severity, so they are machine-consumable rather than prose to be pattern-matched.
+
+## Codes the compiler emits
+
+### `UnexpectedToken`
+
+The default parse and lex failure. Also raised when a construct that looks like a block tag is not one: {with} is lexed as a block keyword but no parser supports it, so every {with} produces "Unknown block: {with}".
+
+FIX: Check the tag exists. The usable block tags are if, each, match, fetch, repeat, try, slot, layout, head, sections and blocks. {error} and {loading} are branches, legal only inside {fetch} or {try}. {with} does not exist in any form.
+
+Wrong:
+```slurp
+{with user}${name}{/with}
+```
+
+Right:
+```slurp
+${ user.name }
+```
+
+### `UnclosedBlock`
+
+A block tag was opened and never closed, or an expression was left open.
+
+FIX: Add the closing tag. Note which tags need one and which do not: {each}, {match}, {fetch}, {repeat}, {try}, {layout}, {head} and {/if} all require a close, while {empty}, {else}, {else if}, {loading} and {error} are branch markers that take NO closing tag of their own.
+
+Wrong:
+```slurp
+{each p in products}<li>${p.name}</li>{empty}<li>none</li>{/empty}{/each}
+```
+
+Right:
+```slurp
+{each p in products}<li>${p.name}</li>{empty}<li>none</li>{/each}
+```
+
+### `InvalidFrontmatter`
+
+A malformed frontmatter directive or schema declaration. This is by far the largest family: a bad setting kind, a select default that is not one of its options, a duplicate setting key or block type, a section with no name, a max below 1, an empty @theme(), or any @target other than @theme.
+
+FIX: Read the message, which names the exact key or token. Two rules catch most of it: every setting kind must be one of text, richtext, color, image, icon, link, select, number or toggle; and a select default must appear in its own option list.
+
+Wrong:
+```slurp
+---
+section {
+  settings { align: select(left, center) = right }
+}
+---
+```
+
+Right:
+```slurp
+---
+section {
+  name: "Hero"
+  settings { align: select(left, center, right) = right }
+}
+---
+```
+
+NOTE: Unknown frontmatter STATEMENTS are silently skipped rather than reported, so a misspelled directive produces no diagnostic at all. This code fires only on a malformed one.
+
+### `CircularImport`
+
+Two templates import each other, directly or through a chain, or the chain exceeds 128 links.
+
+FIX: Break the cycle by extracting the shared part into a third file that neither of the two imports back.
+
+NOTE: Only reachable through the virtual-files compile path. Neither the `slurp` CLI nor this MCP server detects it, because neither builds a cross-file import graph.
+
+### `SecretEnvInTemplate`
+
+A template read env.SLURP_SECRET_something, in dotted or subscript form. Also fires for env[key] with a key that is not a compile-time constant, because such a key could resolve to a secret name.
+
+FIX: A secret must never reach a template, since the template output is sent to the browser. Read it on the server and pass only the derived, non-secret value through the render context.
+
+Wrong:
+```slurp
+<script>const k = ${ env.SLURP_SECRET_API_KEY | js };</script>
+```
+
+Right:
+```slurp
+<div data-configured={ integration.enabled }></div>
+```
+
+### `MiddlewareScopeViolation`
+
+Either request.* was used in a file that is not compiled as middleware, or a file that IS middleware read a path root other than request, env or loop.
+
+FIX: request.* is middleware-only. In an ordinary page, take what you need from the request on the server and pass it through the render context. Note that "middleware" is a compile OPTION, not a filename convention, so the CLI and this server both treat every file as non-middleware unless told otherwise.
+
+Wrong:
+```slurp
+{if request.cookies.session}<p>Welcome</p>{/if}
+```
+
+Right:
+```slurp
+{if user.signed_in}<p>Welcome</p>{/if}
+```
+
+### `IterationLimitExceeded`
+
+A budget was exhausted: render depth, a single filter value over 8 MiB, cumulative filter work over 64 MiB, output over 16 MiB, a collection truncated at 1000 items, or the global 1000000-iteration budget.
+
+FIX: Page or pre-slice the data on the server. A budget TRUNCATES; it never aborts the render, so the page still ships with a quietly shortened list.
+
+NOTE: Truncation is a WARNING, not an error, in every mode: the loop keeps its first N items and the render succeeds. On the CLI the diagnostic is produced either way but only printed with -v, so a build that drops a list tail still exits 0 with a quiet console unless you ask.
+
+### `MissingImageSrc`
+
+An <Image> was written with no src prop.
+
+FIX: Give it a src. There is no missing-dimension case: width and height default to 800 and 600 when absent, and both accept a literal such as width={400} as well as a context value.
+
+Wrong:
+```slurp
+<Image alt="Product" width={400} height={300} />
+```
+
+Right:
+```slurp
+<Image src={product.image} alt="Product" width={400} height={300} />
+```
+
+### `UnknownFilter`
+
+A filter name that is in neither table. The value table and the loop table are disjoint, so using one where the other belongs also lands here.
+
+FIX: Value filters (usable in ${ }): upper, lower, currency, truncate, fixed, date, default, plural, int, float, js, json, unsafe_js. Loop filters (usable ONLY in an {each} header): limit, sort, reverse, filter.
+
+Wrong:
+```slurp
+{each p in products | upper}<li>${p.name}</li>{/each}
+```
+
+Right:
+```slurp
+{each p in products | sort("name")}<li>${p.name}</li>{/each}
+```
+
+NOTE: The value is passed through UNFILTERED alongside the diagnostic, so the page renders and looks nearly right.
+
+### `InvalidFilterArgs`
+
+A required filter argument was missing or could not be read as a literal. In practice this is limit() and filter().
+
+FIX: Supply the argument as a literal. Filter arguments are read as literals throughout, so a variable is seen as the empty string.
+
+Wrong:
+```slurp
+{each p in products | limit(pageSize)}<li>${p.name}</li>{/each}
+```
+
+Right:
+```slurp
+{each p in products | limit(12)}<li>${p.name}</li>{/each}
+```
+
+### `RedirectOutsideMiddleware`
+
+A {redirect} or {next} appeared in a file that is not compiled as middleware.
+
+FIX: Both are middleware-only signals. Move the check into a middleware file, or perform the redirect on the server before rendering.
+
+Wrong:
+```slurp
+{if !user}{redirect "/login"}{/if}
+```
+
+Right:
+```slurp
+Handle the redirect in middleware, and let the page assume it is reachable.
+```
+
+### `UnsafeScriptInterpolation`
+
+Two distinct rules share this code, plus one CSS diagnostic. (1) An expression in a <script> body with neither | js nor | json. (2) A | js slot in a JavaScript-evaluated attribute that lands in statement or expression position rather than inside a quoted string. (3) As a development warning, CSS-structural characters stripped from a style value slot, and an undeclared slot in a JavaScript-evaluated attribute.
+
+FIX: In a <script> body, end the expression with | js when it sits inside a string literal you wrote, or | json for a bare value. In a JS attribute, quote the slot if you want | js, or switch to | json where the slot stands alone. Use | unsafe_js only for JavaScript the theme itself authored.
+
+Wrong:
+```slurp
+<script>var name = ${ user.name };</script>
+```
+
+Right:
+```slurp
+<script>var name = ${ user.name | json };</script>
+```
+
+NOTE: HTML entity escaping does not protect a script context: a raw-text element reaches the JavaScript engine without character references being decoded, so the ordinary text escaping is inert there. Note also that a JavaScript template literal cannot be written in a <script> body at all, because Slurp claims the "${" sequence itself.
+
+### `JsTemplateLiteralInAttribute`
+
+A quoted HTML attribute value contains a JavaScript template literal whose ${ } slot Slurp will interpolate itself, against the SERVER render context rather than the browser one.
+
+FIX: If the value is client-side, build the string by concatenation. If it is server-side data, drop the backticks and let Slurp interpolate.
+
+Wrong:
+```slurp
+<a :href="`/product/${item.slug}`">View</a>
+```
+
+Right:
+```slurp
+<a :href="'/product/' + item.slug">View</a>
+```
+
+NOTE: This one was worth a dedicated code because of HOW it fails. The slot renders EMPTY, with no runtime error and no other sign, so the result is a page that looks built and has dead links and unstyled elements scattered through it. It is easy to ship and hard to notice, which is why it is diagnosed at parse time rather than left to review.
+
+## Codes declared but never emitted by the compiler
+
+### `MissingFile`
+
+NOTE: Declared for host integrations. The compiler never emits it; the dev server has its own separate code of the same name.
+
+### `MissingRequiredProp`
+
+NOTE: Declared but never emitted. Prop types and requiredness are recorded in frontmatter and are NOT enforced at render time, so a missing required prop is silently null.
+
+### `UnknownProp`
+
+NOTE: Declared but never emitted. Passing a prop a component never declared is not an error.
+
+### `TypeMismatch`
+
+NOTE: Declared but never emitted. Type annotations in frontmatter are stored as raw strings and never checked.
+
+### `LayoutDepthExceeded`
+
+NOTE: Declared but never emitted UNDER THIS NAME. Layout nesting is bounded by the render depth limit, which reports IterationLimitExceeded instead.
+
+### `UnknownComponent`
+
+NOTE: Declared but never emitted. An unresolvable component renders a <div data-slurp-component="Name" data-slurp-props="..."> placeholder instead of failing, which is why an unresolved import looks like a working build.
+
+### `UnknownSlot`
+
+NOTE: Declared but never emitted. Only the slot names "default" and "head" are ever filled; any other name renders as a literal <slot name="x"> element.
+
+### `InfiniteLoop`
+
+NOTE: Declared but never emitted. A component or block that renders itself is caught by a cycle guard that SKIPS silently, so a recursive include produces missing output rather than an error.
+
+---
+
+# Gotchas
+
+Every entry here has cost a human real time on a real project. They are ordered by how often they bite, and each says whether a tool will catch it for you or whether nothing will.
+
+## 1. A quoted component prop is a LITERAL string
+
+Element attributes interpolate; component props do not. The same quoted text means two different things depending on whether the tag starts with an uppercase letter. This is the single most common mistake in the language, and the compiler says nothing about it: the prop simply arrives with the interpolation syntax intact as literal characters.
+
+Wrong:
+```slurp
+<Card title="Hi ${name}" />
+```
+
+Right:
+```slurp
+<Card title={`Hi ${name}`} />
+```
+
+Detected by: `slurp_lint`, rule `component-prop-literal-interpolation`. The compiler does not.
+
+## 2. A `${ }` inside a `<script>` body must end in `| js` or `| json`
+
+A script body is a raw-text element, so the HTML parser hands it to the JavaScript engine without decoding character references. The entity escaping that protects ordinary text is inert there. Use `| js` for a value sitting inside a string literal you wrote, and `| json` for a bare value that needs its own delimiters. `| unsafe_js` is deliberately not accepted.
+
+Wrong:
+```slurp
+<script>var n = ${ user.name };</script>
+```
+
+Right:
+```slurp
+<script>var n = ${ user.name | json };</script>
+```
+
+Detected by: `slurp_validate`, as an `UnsafeScriptInterpolation` error. This is a hard build failure.
+
+## 3. A JavaScript template literal in an attribute gets eaten
+
+Slurp interpolates `${ }` in attribute values itself, so a backtick template written for the browser has its slots consumed by the template engine and evaluated against the SERVER render context instead. A client-side variable therefore renders EMPTY, with no runtime error and no other sign of failure: you get dead links and unstyled elements on a page that otherwise looks fine. Write string concatenation instead.
+
+Wrong:
+```slurp
+<a :href="`/product/${item.slug}`">View</a>
+```
+
+Right:
+```slurp
+<a :href="'/product/' + item.slug">View</a>
+```
+
+Detected by: `slurp_validate`, as a `JsTemplateLiteralInAttribute` WARNING. It is a warning, not an error, so a build still succeeds.
+
+## 4. In JavaScript statement position, `| js` is an ERROR
+
+`| js` is a CLAIM that the slot sits inside a quoted JavaScript string, and a declared slot is then emitted verbatim. Outside a string that turns the auto-escaper off and puts nothing in its place, and escaping quote characters cannot contain a value landing next to a `;` or a `(`. An UNDECLARED slot in the same position is fine: it is auto-encoded as a self-delimiting JSON literal.
+
+Wrong:
+```slurp
+<button @click="add(${ id | js })">Add</button>
+```
+
+Right:
+```slurp
+<button @click="add(${ id | json })">Add</button>
+```
+
+Detected by: `slurp_validate`, as an `UnsafeScriptInterpolation` error.
+
+## 5. Filter arguments must be LITERALS
+
+Filter arguments are read as literals, never evaluated. A variable argument is seen as the empty string, so the filter falls back to its default or emits nothing. `currency(cur)` with `cur = "EUR"` renders a leading space and NO currency symbol at all. `default` is the sole exception: the renderer evaluates its argument in scope.
+
+Wrong:
+```slurp
+${ price | currency(settings.currency) }
+```
+
+Right:
+```slurp
+${ price | currency("EUR") }
+```
+
+Detected by: `slurp_lint`, rule `filter-arg-not-literal`. The compiler does not, except for `limit()` and `filter()` where the argument is required.
+
+## 6. `| date` parses ISO strings, not epoch milliseconds
+
+The parser takes the text before the first "T" or space and splits it on "-". Fewer than three parts and THE INPUT IS RETURNED UNCHANGED. Epoch milliseconds have no "-", so they render verbatim as a long number. There are also no time tokens at all: only YYYY, YY, MMMM, MMM, MM, M, DD and D exist.
+
+Wrong:
+```slurp
+${ 1700000000000 | date("MMM DD, YYYY") }
+```
+
+Right:
+```slurp
+${ "2026-08-03T10:00:00Z" | date("MMM DD, YYYY") }
+```
+
+Detected by: Nothing. Return RFC 3339 dates from the server and this cannot arise.
+
+## 7. Money arrives as a STRING
+
+A server decimal serialises to JSON as a string such as "49.990000", not as a number. In a template that is usually fine, because filters coerce. It matters in the JavaScript you emit: calling .toFixed on that value throws, because a string has no such method. Coerce first, or format server-side and pass the finished string.
+
+Wrong:
+```slurp
+<script>var t = ${ record.amount | json }.toFixed(2);</script>
+```
+
+Right:
+```slurp
+<script>var t = Number(${ record.amount | json }).toFixed(2);</script>
+```
+
+Detected by: Nothing. The compiler does not read the JavaScript you emit.
+
+## 8. A nested double quote inside `${ }` ends the attribute
+
+The lexer closes an attribute value at its first matching quote, before interpolation is considered. So a double-quoted string key inside a double-quoted attribute truncates the attribute and turns the remainder into stray attributes. Either use the brace form, which is not quote-delimited, or use single quotes inside the expression.
+
+Wrong:
+```slurp
+<div title="${ a["k"] }">
+```
+
+Right:
+```slurp
+<div title={ a["k"] }>
+```
+
+Detected by: `slurp_lint`, rule `unterminated-attribute-interpolation`. The compiler does not.
+
+## 9. There are NO callable functions
+
+A call parses and always evaluates to null, with no diagnostic, so it renders the empty string. Every JavaScript habit lands here: Math.max, items.map, String(x), parseInt. The only call-shaped construct in the language is a filter. There are also no array properties, so items.length is null too.
+
+Wrong:
+```slurp
+<p>${ Math.max(a, b) }</p>
+```
+
+Right:
+```slurp
+<p>${ a > b ? a : b }</p>
+```
+
+Detected by: `slurp_lint`, rules `call-always-null` and `array-length-property`. The compiler does not.
+
+## 10. Components and layouts get their own root scope
+
+A component renders with the page globals overlaid by its explicit props, with props winning on collision. That means it CAN read a page global it was never passed, which is often convenient. What it cannot see is the caller LOCAL bindings: an {each} loop variable and loop.index are invisible inside a component unless passed as props.
+
+Wrong:
+```slurp
+{each p in products}<Card />{/each}   {* Card cannot see p *}
+```
+
+Right:
+```slurp
+{each p in products}<Card product={p} />{/each}
+```
+
+Detected by: Nothing. It renders as empty values inside the component.
+
+## 11. `{$let}` creates no template binding
+
+A {$let} seeds CLIENT state. Server-side it emits only a <script type="application/json"> payload, so reading the name back in the same template renders the empty string.
+
+Wrong:
+```slurp
+{$let count = 0}<p>${ count }</p>
+```
+
+Right:
+```slurp
+Pass the value through the render context and read it directly.
+```
+
+Detected by: `slurp_lint`, rule `let-binding-not-readable`.
+
+## 12. An unresolvable component renders a placeholder, not an error
+
+A component whose import did not resolve does NOT fail the build. It renders a <div data-slurp-component="Name" data-slurp-props="..."> placeholder, so a typo in an import path looks like a clean build with a missing card. The same is true of this MCP server, which has no cross-file resolution at all: every component renders as a placeholder here.
+
+Detected by: Nothing. Check the rendered HTML for `data-slurp-component` attributes.
+
+## 13. A truncated loop still exits 0, and -v is what prints the warning
+
+Every budget truncates rather than failing, so a page that loses the tail of a list still builds successfully. The loop cap warns in both modes, but `slurp build` prints warnings only with `-v`, so the default console is quiet. Two advisories ARE development-only: the CSS-structural strip and the undeclared-JS-slot note. The `slurp_render` tool here uses development mode so those two are visible.
+
+Detected by: `slurp_render`. On the CLI, `slurp build -v` reports the loop cap; without `-v` it is silent.
+
+## 14. Comparisons do not coerce, but arithmetic does
+
+Arithmetic coerces freely: a non-numeric string, null, an array or an object all become 0, and `+` concatenates whenever either side is a string. Comparisons do the opposite: only number-to-number and string-to-string actually compare, and every other pairing compares Equal, so `>` is false and `>=` is true. So `"10" > 9` is FALSE. Division by zero yields 0 rather than an error or Infinity.
+
+Wrong:
+```slurp
+{if product.stock_string > 0}
+```
+
+Right:
+```slurp
+{if (product.stock_string | int) > 0}
+```
+
+Detected by: Nothing. Coerce explicitly with `| int` or `| float` when a value may be a string.
+
+## 15. `{with}` does not exist, and `{match}` has no `{case}`
+
+The lexer recognises `with` as a block keyword but no parser supports it, so every `{with}` is a hard error. Inside `{match}`, arms are a bare pattern then `->` then a body; there is no `{case}` keyword. Also note that `{each}` puts the ITEM name first and the index second.
+
+Wrong:
+```slurp
+{match s}{case "a"}A{/case}{/match}
+```
+
+Right:
+```slurp
+{match s}
+  "a" -> A
+  _   -> other
+{/match}
+```
+
+Detected by: `slurp_validate`, as `UnexpectedToken` errors.
+
+## 16. Unknown frontmatter directives are silently skipped
+
+A misspelled or non-existent frontmatter directive produces no diagnostic at all. There is no `layout` directive, for instance: use the `{layout "..."}` block tag in the body. Note also that `props` entries must be one per line.
+
+Detected by: Nothing. Use `slurp_schema` to see what the compiler actually read out of your frontmatter.
+
+## 17. A @theme block with no catalog is dropped from the render
+
+Without a block catalog, a @theme-targeted block is an unknown type and is dropped at merge time while surviving intact in storage. The page renders as though nothing was added, and the data is not lost. This is the most surprising behaviour in the schema subsystem.
+
+Detected by: Nothing. It is a host integration concern, not a template one.
+
+---
+
+# Limits
+
+Exceeding a budget TRUNCATES the output. It never aborts the render, so a page
+over budget still ships, quietly shortened.
+
+EVERY budget records a diagnostic, in both modes. What differs is whether the
+build FAILS: the two filter budgets are errors, everything else is a warning and
+the build still exits 0. So a 1500-item loop emits 1000 items, warns, and
+succeeds. On the CLI, `-v` is what prints warnings; without it the console is
+quiet even though the diagnostic exists.
+
+| Limit | Value |
+|---|---|
+| Parser nesting depth | 64 |
+| Render depth | 96 |
+| Iterations per loop | 1000 |
+| Total iterations per render | 1000000 |
+| Output size | 16 MiB |
+| Single filter value | 8 MiB |
+| Cumulative filter work | 64 MiB |
+| Security walk depth | 512 |
+| Lexer token count | 2000000 |
+| Lexer mode-stack depth | 512 |
+| `{html ... sanitize}` keyword lookahead | 4096 characters |
+| Import chain depth | 128 |
+| Block merge depth | 64 |
+| Blocks per type with no declared max | 200 |
+| `fixed(n)` precision | 100 |
+| Accumulated diagnostics | 1000, then further ones are dropped |
+
+The three memory caps are tunable per host; the rest are compiled in.
+
+CRITICAL FOR AUTHORING: the CSS-strip and undeclared-JS-slot advisories are
+recorded in DEVELOPMENT mode ONLY, so a production render applies both and says
+nothing. Loop truncation is NOT one of these - it warns in both modes. The
+`slurp_render` tool here uses development mode so the dev-only pair is visible.

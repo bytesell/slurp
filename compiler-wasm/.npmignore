@@ -1,0 +1,14 @@
+# Deliberately (almost) empty, and it MUST exist.
+#
+# npm falls back to `.gitignore` when a package has no `.npmignore`, and this
+# package's `.gitignore` excludes `pkg/` - the wasm-pack output, which is the
+# entire point of the package. `index.cjs` does `require('./pkg/...')`, so an
+# `npm pack` here produced a 4-file tarball that was MODULE_NOT_FOUND on
+# install, while `pnpm pack` produced the correct 7 files. The published
+# package would have been broken for npm and yarn users only.
+#
+# With this file present, `files` in package.json is the single allowlist that
+# decides what ships. Do not delete it, and do not add `pkg/` to it.
+#
+# wasm-pack also writes `pkg/.gitignore` containing `*`, which npm honours per
+# directory; `build.mjs` removes it after every build for the same reason.

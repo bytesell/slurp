@@ -1,0 +1,3 @@
+---
+section { name: "S" blocks { @theme(a, b } }
+---

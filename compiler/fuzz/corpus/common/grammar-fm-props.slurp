@@ -1,0 +1,4 @@
+---
+props { a: string, b: number, c: boolean }
+---
+${a}

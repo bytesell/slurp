@@ -1,0 +1,118 @@
+{
+  "name": "slurp-vscode",
+  "displayName": "Slurp",
+  "description": "Language support for Slurp templates",
+  "version": "0.1.0",
+  "license": "MIT",
+  "author": "ByteSell LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytesell/slurp.git",
+    "directory": "vscode-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/bytesell/slurp/issues"
+  },
+  "homepage": "https://github.com/bytesell/slurp#readme",
+  "//publisher": "This must match a real VS Code Marketplace publisher ID before `vsce publish` will work. `slurp` is a placeholder and has not been registered.",
+  "publisher": "slurp",
+  "//private": "This extension ships to the VS Code Marketplace via `vsce`, which ignores this field. It is set so that a stray `npm publish` or `pnpm -r publish` cannot push it to npm.",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Formatters",
+    "Linters"
+  ],
+  "activationEvents": [
+    "onLanguage:slurp"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "slurp",
+        "aliases": [
+          "Slurp",
+          "slurp"
+        ],
+        "extensions": [
+          ".slurp"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "slurp",
+        "scopeName": "text.html.slurp",
+        "path": "./syntaxes/slurp.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "slurp.validate",
+        "title": "Slurp: Validate File"
+      },
+      {
+        "command": "slurp.format",
+        "title": "Slurp: Format Document"
+      }
+    ],
+    "configuration": {
+      "title": "Slurp",
+      "properties": {
+        "slurp.formatOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Format .slurp files on save."
+        },
+        "slurp.validateOnType": {
+          "type": "boolean",
+          "default": true,
+          "description": "Validate .slurp files as you type."
+        },
+        "slurp.validateOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Validate .slurp files on save."
+        },
+        "slurp.componentsPath": {
+          "type": "string",
+          "default": "./components",
+          "description": "Path to the components directory, relative to the workspace folder. Absolute paths and paths containing \"..\" are ignored.",
+          "scope": "machine-overridable"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsup src/extension.ts --format cjs --external vscode --dts",
+    "test": "vitest run",
+    "package": "vsce package",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.10",
+    "vite": "^7.1.14",
+    "@types/node": "^20.0.0"
+  },
+  "dependencies": {
+    "@slurp/language": "workspace:*"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In an untrusted workspace, go-to-definition for components is disabled because slurp.componentsPath selects which directories are searched.",
+      "restrictedConfigurations": [
+        "slurp.componentsPath"
+      ]
+    }
+  }
+}

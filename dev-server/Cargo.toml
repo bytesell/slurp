@@ -1,0 +1,45 @@
+[package]
+name = "slurp-dev-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
+description = "Local development server for Slurp themes: file watching, WebSocket hot reload, JSON fixtures and a backend proxy."
+
+[[bin]]
+name = "slurp-dev"
+path = "src/main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+# TODO: upgrade to axum 0.8 (check ws feature availability first)
+axum = { version = "0.7", features = ["ws"] }
+notify = "6"
+futures = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+# The `version` is required to publish, not optional: cargo refuses a path
+# dependency with no version ("all dependencies must have a version specified
+# when publishing"), because the published crate drops the `path` and resolves
+# from crates.io instead. Without it this crate cannot be released at all.
+#
+# It duplicates `workspace.package.version`, so bump both together, and publish
+# slurp-compiler BEFORE slurp-dev-server or the release will not resolve.
+slurp-compiler = { path = "../compiler", version = "0.1.0" }
+# TLS: rustls, not the default native-tls. reqwest's default feature set pulls
+# `openssl` + `openssl-sys`, which makes a fresh Linux clone fail at LINK time
+# unless libssl-dev and pkg-config happen to be installed. rustls is pure Rust
+# and already in this tree, so this keeps `cargo build` working out of the box.
+# `charset` and `http2` are re-added because they are reqwest defaults that
+# `default-features = false` would otherwise drop.
+reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "charset", "http2", "rustls-tls"] }

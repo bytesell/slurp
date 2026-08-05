@@ -1,0 +1,1 @@
+{each x in xs}{if x}{next}{/if}${x}{/each}

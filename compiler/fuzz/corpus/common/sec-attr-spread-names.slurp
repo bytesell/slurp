@@ -1,0 +1,1 @@
+<div {html attrs}>x</div>@@@{"attrs": "onclick=\"alert(1)\" ONCLICK=x :onclick=y x-bind:onclick=z X-BIND:ONCLICK=w x-html=a x-data=b x-init=c x-effect=d"}

@@ -1,0 +1,553 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Slurp",
+  "scopeName": "text.html.slurp",
+  "fileTypes": ["slurp"],
+  "patterns": [
+    { "include": "#frontmatter" },
+    { "include": "#block-comments" },
+    { "include": "#block-tags" },
+    { "include": "#expressions" },
+    { "include": "#html-content" }
+  ],
+  "repository": {
+    "frontmatter": {
+      "comment": "--- frontmatter block at the top of the file ---",
+      "begin": "^---\\s*$",
+      "end": "^---\\s*$",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.frontmatter.begin.slurp" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.frontmatter.end.slurp" }
+      },
+      "contentName": "meta.frontmatter.slurp",
+      "patterns": [
+        { "include": "#frontmatter-using" },
+        { "include": "#frontmatter-type" },
+        { "include": "#frontmatter-props" },
+        { "include": "#strings" },
+        { "include": "#frontmatter-reactive" }
+      ]
+    },
+    "frontmatter-using": {
+      "comment": "using \"@path/Component\" - import declaration",
+      "match": "\\b(using)\\b(\\s+(\"[^\"]*\"|'[^']*'))?(?:\\s+(as)\\s+([a-zA-Z_][a-zA-Z0-9_]*))?",
+      "captures": {
+        "1": { "name": "keyword.control.using.slurp" },
+        "3": { "name": "string.quoted.double.slurp" },
+        "4": { "name": "keyword.control.as.slurp" },
+        "5": { "name": "entity.name.type.slurp" }
+      }
+    },
+    "frontmatter-type": {
+      "comment": "type TypeName { field: Type }",
+      "begin": "\\b(type)\\b\\s+([A-Z][a-zA-Z0-9_]*)\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": { "name": "keyword.other.type.slurp" },
+        "2": { "name": "entity.name.type.slurp" },
+        "3": { "name": "punctuation.definition.block.slurp" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.block.slurp" }
+      },
+      "patterns": [
+        { "include": "#type-field" }
+      ]
+    },
+    "type-field": {
+      "match": "([a-zA-Z_][a-zA-Z0-9_?]*)\\s*:\\s*([a-zA-Z][a-zA-Z0-9_<>\\[\\]|\\s]*)",
+      "captures": {
+        "1": { "name": "variable.other.property.slurp" },
+        "2": { "name": "entity.name.type.slurp" }
+      }
+    },
+    "frontmatter-props": {
+      "comment": "props { name: Type }",
+      "begin": "\\b(props)\\b\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": { "name": "keyword.other.props.slurp" },
+        "2": { "name": "punctuation.definition.block.slurp" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.block.slurp" }
+      },
+      "patterns": [
+        { "include": "#type-field" },
+        { "include": "#strings" }
+      ]
+    },
+    "frontmatter-reactive": {
+      "comment": "$varName = value - reactive variable declaration",
+      "match": "(\\$)([a-zA-Z_][a-zA-Z0-9_]*)\\s*=",
+      "captures": {
+        "1": { "name": "variable.other.reactive.slurp" },
+        "2": { "name": "variable.other.reactive.slurp" }
+      }
+    },
+    "block-comments": {
+      "comment": "{* block comment *}",
+      "begin": "\\{\\*",
+      "end": "\\*\\}",
+      "name": "comment.block.slurp",
+      "captures": {
+        "0": { "name": "punctuation.definition.comment.slurp" }
+      }
+    },
+    "block-tags": {
+      "comment": "Control flow and structural block tags",
+      "patterns": [
+        { "include": "#block-tag-if" },
+        { "include": "#block-tag-each" },
+        { "include": "#block-tag-fetch" },
+        { "include": "#block-tag-match" },
+        { "include": "#block-tag-repeat" },
+        { "include": "#block-tag-try" },
+        { "include": "#block-tag-closing" },
+        { "include": "#block-tag-else" },
+        { "include": "#block-tag-loading" },
+        { "include": "#block-tag-error" },
+        { "include": "#block-tag-empty" }
+      ]
+    },
+    "block-tag-if": {
+      "comment": "{if condition} ... {else if condition} ... {else} ... {/if}",
+      "begin": "(\\{)(if)\\b",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" },
+        "2": { "name": "keyword.control.block.slurp" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" }
+      },
+      "patterns": [
+        { "include": "#expressions-inline" }
+      ]
+    },
+    "block-tag-each": {
+      "comment": "{each item in collection | filter...}",
+      "begin": "(\\{)(each)\\b",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" },
+        "2": { "name": "keyword.control.block.slurp" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" }
+      },
+      "patterns": [
+        {
+          "match": "\\b(in)\\b",
+          "name": "keyword.control.block.slurp"
+        },
+        { "include": "#filters" },
+        { "include": "#loop-variables" },
+        { "include": "#global-variables" },
+        { "include": "#reactive-variable" }
+      ]
+    },
+    "block-tag-fetch": {
+      "comment": "{fetch name: Type from fn cache:300 retry:3 ...}",
+      "begin": "(\\{)(fetch)\\b",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" },
+        "2": { "name": "keyword.control.block.slurp" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" }
+      },
+      "patterns": [
+        {
+          "match": "\\b(from)\\b",
+          "name": "keyword.control.block.slurp"
+        },
+        {
+          "match": "\\b(paginate|infinite|poll|cache|retry|timeout|abort|abort:navigate)\\b(?:(:)([0-9]+))?",
+          "captures": {
+            "1": { "name": "keyword.other.fetch-option.slurp" },
+            "2": { "name": "punctuation.separator.slurp" },
+            "3": { "name": "constant.numeric.slurp" }
+          }
+        },
+        {
+          "match": "\\b(limit)\\s*=\\s*([0-9]+)",
+          "captures": {
+            "1": { "name": "keyword.other.fetch-option.slurp" },
+            "2": { "name": "constant.numeric.slurp" }
+          }
+        },
+        {
+          "match": "([a-zA-Z_][a-zA-Z0-9_]*)\\s*:\\s*([A-Z][a-zA-Z0-9_<>\\[\\]]*)",
+          "captures": {
+            "1": { "name": "variable.other.expression.slurp" },
+            "2": { "name": "entity.name.type.slurp" }
+          }
+        }
+      ]
+    },
+    "block-tag-match": {
+      "comment": "{match value} arms {/match}",
+      "begin": "(\\{)(match)\\b",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" },
+        "2": { "name": "keyword.control.block.slurp" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" }
+      },
+      "patterns": [
+        { "include": "#expressions-inline" }
+      ]
+    },
+    "block-tag-repeat": {
+      "comment": "{repeat n}",
+      "begin": "(\\{)(repeat)\\b",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" },
+        "2": { "name": "keyword.control.block.slurp" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" }
+      },
+      "patterns": [
+        {
+          "match": "[0-9]+",
+          "name": "constant.numeric.slurp"
+        },
+        { "include": "#expressions-inline" }
+      ]
+    },
+    "block-tag-try": {
+      "comment": "{try}",
+      "match": "(\\{)(try)(\\})",
+      "captures": {
+        "1": { "name": "punctuation.definition.block.slurp" },
+        "2": { "name": "keyword.control.block.slurp" },
+        "3": { "name": "punctuation.definition.block.slurp" }
+      }
+    },
+    "block-tag-closing": {
+      "comment": "{/if} {/each} {/fetch} {/match} {/repeat} {/try} {/loading} {/error} {/empty}",
+      "match": "(\\{)(\\/)(if|each|fetch|match|repeat|try|loading|error|empty)(\\})",
+      "captures": {
+        "1": { "name": "punctuation.definition.block.slurp" },
+        "2": { "name": "punctuation.definition.block.slurp" },
+        "3": { "name": "keyword.control.block.slurp" },
+        "4": { "name": "punctuation.definition.block.slurp" }
+      }
+    },
+    "block-tag-else": {
+      "comment": "{else} {else if condition}",
+      "begin": "(\\{)(else(?:\\s+if)?)\\b",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" },
+        "2": { "name": "keyword.control.block.slurp" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" }
+      },
+      "patterns": [
+        { "include": "#expressions-inline" }
+      ]
+    },
+    "block-tag-loading": {
+      "comment": "{loading}",
+      "match": "(\\{)(loading)(\\})",
+      "captures": {
+        "1": { "name": "punctuation.definition.block.slurp" },
+        "2": { "name": "keyword.control.block.slurp" },
+        "3": { "name": "punctuation.definition.block.slurp" }
+      }
+    },
+    "block-tag-error": {
+      "comment": "{error}",
+      "match": "(\\{)(error)(\\})",
+      "captures": {
+        "1": { "name": "punctuation.definition.block.slurp" },
+        "2": { "name": "keyword.control.block.slurp" },
+        "3": { "name": "punctuation.definition.block.slurp" }
+      }
+    },
+    "block-tag-empty": {
+      "comment": "{empty}",
+      "match": "(\\{)(empty)(\\})",
+      "captures": {
+        "1": { "name": "punctuation.definition.block.slurp" },
+        "2": { "name": "keyword.control.block.slurp" },
+        "3": { "name": "punctuation.definition.block.slurp" }
+      }
+    },
+    "expressions": {
+      "comment": "${ expression } interpolation in template body",
+      "begin": "(\\$\\{)",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "variable.other.expression.slurp" }
+      },
+      "endCaptures": {
+        "1": { "name": "variable.other.expression.slurp" }
+      },
+      "patterns": [
+        { "include": "#match-arrow" },
+        { "include": "#filters" },
+        { "include": "#math-functions" },
+        { "include": "#loop-variables" },
+        { "include": "#global-variables" },
+        { "include": "#reactive-variable" },
+        { "include": "#strings" },
+        { "include": "#numbers" }
+      ]
+    },
+    "expressions-inline": {
+      "comment": "Expression content used inside block tags (no ${ } wrapper)",
+      "patterns": [
+        { "include": "#filters" },
+        { "include": "#math-functions" },
+        { "include": "#loop-variables" },
+        { "include": "#global-variables" },
+        { "include": "#reactive-variable" },
+        { "include": "#strings" },
+        { "include": "#numbers" }
+      ]
+    },
+    "match-arrow": {
+      "comment": "-> arrow in match arms",
+      "match": "->",
+      "name": "keyword.operator.match.slurp"
+    },
+    "filters": {
+      "comment": "| filter or | filter(args) pipe chains",
+      "patterns": [
+        {
+          "match": "(\\|)\\s*(currency|upper|lower|truncate|fixed|date|default|plural|int|float|limit|sort|reverse|filter)\\b",
+          "captures": {
+            "1": { "name": "keyword.operator.filter.slurp" },
+            "2": { "name": "support.function.filter.slurp" }
+          }
+        },
+        {
+          "match": "(\\|)\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "keyword.operator.filter.slurp" },
+            "2": { "name": "support.function.filter.slurp" }
+          }
+        }
+      ]
+    },
+    "math-functions": {
+      "comment": "math.min, math.max, math.abs, math.round, math.floor, math.ceil",
+      "match": "\\b(math)\\.(min|max|abs|round|floor|ceil)\\b",
+      "captures": {
+        "1": { "name": "support.function.math.slurp" },
+        "2": { "name": "support.function.math.slurp" }
+      }
+    },
+    "loop-variables": {
+      "comment": "loop.index, loop.count, loop.first, loop.last",
+      "match": "\\b(loop)\\.(index|count|first|last)\\b",
+      "name": "variable.language.loop.slurp"
+    },
+    "global-variables": {
+      "comment": "seo.*, params.*, env.*, error.*, request.*",
+      "patterns": [
+        {
+          "match": "\\b(seo)\\.(title|description|image)\\b",
+          "name": "support.variable.global.slurp"
+        },
+        {
+          "match": "\\b(params)\\b(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)?",
+          "name": "support.variable.global.slurp"
+        },
+        {
+          "match": "\\b(env)\\.(dev|prod)\\b",
+          "name": "support.variable.global.slurp"
+        },
+        {
+          "match": "\\b(error)\\.(message|code|status)\\b",
+          "name": "support.variable.global.slurp"
+        },
+        {
+          "match": "\\b(request)\\.(cookies|headers|method|path)\\b",
+          "name": "support.variable.global.slurp"
+        }
+      ]
+    },
+    "reactive-variable": {
+      "comment": "$varName - reactive variable reference",
+      "match": "(\\$)([a-zA-Z_][a-zA-Z0-9_]*)",
+      "captures": {
+        "1": { "name": "variable.other.reactive.slurp" },
+        "2": { "name": "variable.other.reactive.slurp" }
+      }
+    },
+    "strings": {
+      "patterns": [
+        { "include": "#string-double" },
+        { "include": "#string-single" },
+        { "include": "#string-template" }
+      ]
+    },
+    "string-double": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.slurp",
+      "patterns": [
+        {
+          "match": "\\\\.",
+          "name": "constant.character.escape.slurp"
+        }
+      ]
+    },
+    "string-single": {
+      "begin": "'",
+      "end": "'",
+      "name": "string.quoted.single.slurp",
+      "patterns": [
+        {
+          "match": "\\\\.",
+          "name": "constant.character.escape.slurp"
+        }
+      ]
+    },
+    "string-template": {
+      "comment": "Backtick template strings with ${ } interpolation",
+      "begin": "`",
+      "end": "`",
+      "name": "string.template.slurp",
+      "patterns": [
+        {
+          "begin": "(\\$\\{)",
+          "end": "(\\})",
+          "beginCaptures": {
+            "1": { "name": "variable.other.template.slurp" }
+          },
+          "endCaptures": {
+            "1": { "name": "variable.other.template.slurp" }
+          },
+          "patterns": [
+            { "include": "#filters" },
+            { "include": "#reactive-variable" },
+            { "include": "#global-variables" },
+            { "include": "#loop-variables" },
+            { "include": "#numbers" }
+          ]
+        },
+        {
+          "match": "\\\\.",
+          "name": "constant.character.escape.slurp"
+        }
+      ]
+    },
+    "numbers": {
+      "match": "\\b[0-9]+(\\.[0-9]+)?\\b",
+      "name": "constant.numeric.slurp"
+    },
+    "html-content": {
+      "patterns": [
+        { "include": "#html-component-tag" },
+        { "include": "#html-tag" }
+      ]
+    },
+    "html-component-tag": {
+      "comment": "PascalCase component tags: <MyComponent prop={...} />",
+      "begin": "(<)([A-Z][a-zA-Z0-9_]*)",
+      "end": "(/?>)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.slurp" },
+        "2": { "name": "entity.name.tag.component.slurp" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.slurp" }
+      },
+      "patterns": [
+        { "include": "#tag-attributes" }
+      ]
+    },
+    "html-component-closing": {
+      "comment": "Closing component tags: </MyComponent>",
+      "match": "(</)([A-Z][a-zA-Z0-9_]*)(>)",
+      "captures": {
+        "1": { "name": "punctuation.definition.tag.slurp" },
+        "2": { "name": "entity.name.tag.component.slurp" },
+        "3": { "name": "punctuation.definition.tag.slurp" }
+      }
+    },
+    "html-tag": {
+      "comment": "Lowercase HTML tags with Slurp directives",
+      "begin": "(<)([a-z][a-zA-Z0-9_:-]*)",
+      "end": "(/?>)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.slurp" },
+        "2": { "name": "entity.name.tag.html.slurp" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.slurp" }
+      },
+      "patterns": [
+        { "include": "#tag-attributes" }
+      ]
+    },
+    "html-tag-closing": {
+      "comment": "Closing HTML tags",
+      "match": "(</)([a-z][a-zA-Z0-9_:-]*)(>)",
+      "captures": {
+        "1": { "name": "punctuation.definition.tag.slurp" },
+        "2": { "name": "entity.name.tag.html.slurp" },
+        "3": { "name": "punctuation.definition.tag.slurp" }
+      }
+    },
+    "tag-attributes": {
+      "patterns": [
+        { "include": "#directive-attribute" },
+        { "include": "#attr-expression-value" },
+        { "include": "#attr-string-value" },
+        { "include": "#attr-name" }
+      ]
+    },
+    "directive-attribute": {
+      "comment": "on:click, on:visible, on:submit etc. - event and lifecycle directives",
+      "match": "\\b(on:[a-zA-Z][a-zA-Z0-9_]*)\\b",
+      "name": "entity.other.attribute-name.directive.slurp"
+    },
+    "attr-expression-value": {
+      "comment": "attribute={expr} - expression attribute value",
+      "begin": "(=)(\\{)",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.separator.key-value.slurp" },
+        "2": { "name": "punctuation.definition.block.slurp" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.block.slurp" }
+      },
+      "patterns": [
+        { "include": "#expressions-inline" },
+        { "include": "#strings" },
+        { "include": "#numbers" }
+      ]
+    },
+    "attr-string-value": {
+      "comment": "attribute=\"value\" string attribute",
+      "begin": "=(?=\")",
+      "end": "(?<=\")",
+      "beginCaptures": {
+        "0": { "name": "punctuation.separator.key-value.slurp" }
+      },
+      "patterns": [
+        { "include": "#string-double" }
+      ]
+    },
+    "attr-name": {
+      "comment": "Plain attribute name",
+      "match": "\\b[a-zA-Z_][a-zA-Z0-9_:-]*\\b",
+      "name": "entity.other.attribute-name.slurp"
+    }
+  }
+}

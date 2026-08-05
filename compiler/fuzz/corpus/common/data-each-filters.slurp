@@ -1,0 +1,1 @@
+{each x in items | sort | filter}${x}{/each}

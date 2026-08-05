@@ -1,0 +1,2 @@
+<script>var a={b:1};function f(){return a?1:2}</script>
+<style>.a{color:red}.b:hover{x:y}</style>

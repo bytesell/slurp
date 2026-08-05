@@ -1,0 +1,4 @@
+using "@components/A"
+<A/>@@@using "@components/B"
+<B/>@@@using "@components/A"
+<A/>

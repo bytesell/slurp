@@ -1,0 +1,11 @@
+---
+section {
+  name: "S"
+  blocks {
+    row { max: 5 settings { t: text = "t" }
+      blocks { cell { settings { v: number = 0 } } }
+    }
+  }
+}
+---
+{blocks}

@@ -1,0 +1,51 @@
+name: Feature request
+description: Propose a change to the language, the CLI or the runtime
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Slurp is deliberately a small language. It has no callable functions, no
+        object or array literals, and no reactivity, and those are design
+        positions rather than gaps. A proposal that adds one of them needs to
+        argue the case, not just the use case.
+
+        Please open an issue before writing an implementation.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what stops you today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would the syntax or the API look like? Show it in use.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: |
+        In particular, whether the value can be computed on the server and
+        passed in through the render context, which is the intended answer to a
+        lot of these.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I have read the relevant section of SLURP_DOCS.md and this is not already implemented
+          required: true
+        - label: I understand slurp renders in a single server-side pass with no code execution, and my proposal fits that model
+          required: true

@@ -1,0 +1,1 @@
+<div id="a" class="b c" data-x="${v}" hidden><span :href="u" x-on:click="f()" @click="g()">t</span></div>

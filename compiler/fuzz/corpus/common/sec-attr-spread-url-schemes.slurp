@@ -1,0 +1,1 @@
+<a {html attrs}>x</a>@@@{"attrs": "href=\"javascript:alert(1)\" src=\"JaVaScRiPt:alert(1)\" action=\"﻿javascript:x\" poster=\"data:text/html,<script>alert(1)</script>\" cite=\"vbscript:msgbox(1)\""}

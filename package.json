@@ -1,0 +1,43 @@
+{
+  "name": "slurp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Slurp - a template compiler that turns .slurp files into HTML",
+  "license": "MIT",
+  "author": "ByteSell LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytesell/slurp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bytesell/slurp/issues"
+  },
+  "homepage": "https://github.com/bytesell/slurp#readme",
+  "workspaces": [
+    "compiler-wasm",
+    "mcp",
+    "runtime",
+    "language",
+    "language/prettier-plugin-slurp",
+    "vscode-extension",
+    "tests/integration"
+  ],
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "copy-check": "node scripts/check-copy-rule.mjs"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "//pnpm": "This override is DUPLICATED in pnpm-workspace.yaml on purpose. pnpm 9 (the version pinned above) reads it only from here; pnpm 10 dropped support for this field and reads it only from the workspace file, warning rather than failing. Keeping one copy alone silently drops the pin on whichever version is not covered - removing this block downgraded dompurify to 3.4.8 in a local test. Keep the two in sync, and delete this one only once packageManager is on pnpm 10+.",
+  "pnpm": {
+    "overrides": {
+      "dompurify": "^3.4.12"
+    }
+  }
+}

@@ -1,0 +1,114 @@
+---
+{*
+  A content shell: header chrome, an optional sidebar, and one content area.
+
+  THERE ARE NO NAMED SLOTS. A component has exactly ONE content slot, <slot />.
+  Only the names "default" and "head" are ever filled; <slot name="sidebar" />
+  renders as a LITERAL <slot> element, and a child written <nav slot="sidebar">
+  is not routed to it - it lands in the default slot like every other child,
+  while the named slot's fallback content renders as well. So you get both
+  copies, in the wrong place, with no diagnostic.
+
+  Anything that would have been a second slot is therefore a prop. Props carry
+  values, not markup, so a region with real markup in it wants its own
+  component (see Navbar and Footer) rather than a slot.
+*}
+props {
+  heading: string = ""
+  sidebarTitle: string = ""
+  showSidebar: boolean = false
+  year: number = 0
+}
+---
+
+<div class="shell">
+  <header class="shell__header">
+    <div class="shell__default-header">
+      <a href="/">Home</a>
+      {if heading}
+        <span class="shell__heading">${ heading }</span>
+      {/if}
+    </div>
+  </header>
+
+  <div class="shell__body">
+    {if showSidebar}
+      <aside class="shell__sidebar">
+        {if sidebarTitle}
+          <h2 class="shell__sidebar-title">${ sidebarTitle }</h2>
+        {/if}
+      </aside>
+    {/if}
+
+    <section class="shell__content">
+      {* The one and only slot. Every child of <Shell> arrives here. *}
+      <slot />
+    </section>
+  </div>
+
+  <footer class="shell__footer">
+    <div class="shell__default-footer">
+      {* No functions in the language, so the year is passed in. *}
+      <p>&copy; ${ year } Our Store</p>
+    </div>
+  </footer>
+</div>
+
+<style>
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.shell__header {
+  border-bottom: 1px solid #e5e7eb;
+}
+.shell__default-header {
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.shell__heading {
+  font-weight: 600;
+  color: #111827;
+}
+.shell__sidebar-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+  margin: 0;
+}
+.shell__body {
+  flex: 1;
+  display: flex;
+}
+.shell__sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  border-right: 1px solid #e5e7eb;
+  padding: 1.5rem;
+}
+.shell__content {
+  flex: 1;
+  padding: 1.5rem;
+}
+.shell__footer {
+  border-top: 1px solid #e5e7eb;
+}
+.shell__default-footer {
+  padding: 1rem 1.5rem;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+@media (max-width: 768px) {
+  .shell__body { flex-direction: column; }
+  .shell__sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+}
+</style>

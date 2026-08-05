@@ -1,0 +1,8 @@
+{match v}{if x}y{/if}{/match}
+{match v}${a}{/match}
+{match v}{else}{/match}
+{match v}`t`{/match}
+{match v}</div>{/match}
+{match v}---{/match}
+{match v}{html v}{/match}
+{match v}{* c *}{/match}

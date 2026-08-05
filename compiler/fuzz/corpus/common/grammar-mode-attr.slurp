@@ -1,0 +1,8 @@
+<div t="{if x}y{/if}">
+<div t="${a}">
+<div t="{else}">
+<div t="`t`">
+<div t="</div>">
+<div t="---">
+<div t="{html v}">
+<div t="{* c *}">

@@ -1,0 +1,4 @@
+﻿---
+props { a: string }
+---
+﻿{if﻿x}

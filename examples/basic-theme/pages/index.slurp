@@ -1,0 +1,189 @@
+---
+using "@components/ProductCard"
+using "@components/SkeletonCard"
+using "@components/Badge"
+
+type FeaturedSection {
+  title: string
+  products: Product[]
+}
+---
+
+{* The block form of {layout} is the one that fills the layout's head slot.
+   The element form <layout src="..."> renders {head} inline in the body. *}
+{layout "@layouts/base"}
+
+  {* --- Hero --- *}
+  <section class="hero">
+    <div class="hero__inner">
+      <Badge variant="new">Spring Collection 2026</Badge>
+      <h1 class="hero__heading">Crafted for those<br />who notice the details.</h1>
+      <p class="hero__sub">Premium leather goods, minimal design, lasting quality.</p>
+      <div class="hero__actions">
+        <a href="/collections/all" class="btn btn--primary">Shop Now</a>
+        <a href="/about" class="btn btn--ghost">Our Story</a>
+      </div>
+    </div>
+    <div class="hero__image">
+      <Image
+        src="https://images.unsplash.com/photo-1627123424574-724758594e93?w=1200"
+        alt="Premium leather wallet on a wooden surface"
+        width={800}
+        height={600}
+      />
+    </div>
+  </section>
+
+  {* --- Featured products --- *}
+  <section class="featured section">
+    <div class="section__inner">
+      <h2 class="section__heading">Featured Products</h2>
+
+      {* Branch order inside {fetch} is fixed: body, {loading}, {error}, {empty}.
+         None of the three branch markers takes a closing tag. *}
+      {fetch featured: FeaturedSection[] from getFeaturedProducts cache(300)}
+
+        <div class="featured-sections">
+          {each section in featured | limit(3)}
+            <div class="featured-section">
+              <h3 class="featured-section__title">${ section.title }</h3>
+              <div class="product-grid">
+                {each product in section.products | limit(4) | sort("price")}
+                  <ProductCard product={product} featured={loop.first} />
+                {empty}
+                  <p class="empty-state">No products in this section yet.</p>
+                {/each}
+              </div>
+            </div>
+          {/each}
+        </div>
+
+      {loading}
+        <div class="product-grid">
+          {repeat 8}
+            <SkeletonCard />
+          {/repeat}
+        </div>
+
+      {error}
+        <div class="error-banner" role="alert">
+          <p>Failed to load products: ${ error.message }</p>
+          <a href="/" class="btn btn--ghost">Retry</a>
+        </div>
+
+      {/fetch}
+    </div>
+  </section>
+
+  {* --- Promotional banner --- *}
+  <section class="promo section">
+    <div class="promo__inner">
+      <div class="promo__text">
+        <h2>Free shipping over $75</h2>
+        <p>All orders ship within 2 business days. Easy returns within 30 days.</p>
+        <a href="/collections/all" class="btn btn--primary">Browse All</a>
+      </div>
+    </div>
+  </section>
+
+  {* --- Dev debug --- *}
+  {if env.dev}
+    {debug featured}
+  {/if}
+
+{/layout}
+
+<style>
+/* --- Hero --- */
+.hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 3rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 4rem 1.5rem;
+}
+.hero__heading {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 800;
+  line-height: 1.15;
+  margin: 1rem 0;
+}
+.hero__sub {
+  color: #6b7280;
+  font-size: 1.125rem;
+  margin-bottom: 1.5rem;
+}
+.hero__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.hero__image img {
+  width: 100%;
+  border-radius: 1rem;
+  object-fit: cover;
+}
+
+/* --- Sections --- */
+.section { padding: 4rem 0; }
+.section__inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+.section__heading {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 2rem;
+}
+
+/* --- Featured --- */
+.featured-sections { display: flex; flex-direction: column; gap: 3rem; }
+.featured-section__title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+  color: #374151;
+}
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.25rem;
+}
+.empty-state { color: #9ca3af; font-size: 0.9375rem; }
+
+/* --- Promo --- */
+.promo { background: #111827; color: #f9fafb; }
+.promo__inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+.promo__inner h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+.promo__inner p { color: #d1d5db; margin-bottom: 1.5rem; }
+
+/* --- Error --- */
+.error-banner {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.error-banner p { color: #991b1b; margin: 0; }
+
+@media (max-width: 768px) {
+  .hero { grid-template-columns: 1fr; }
+  .hero__image { order: -1; }
+}
+</style>

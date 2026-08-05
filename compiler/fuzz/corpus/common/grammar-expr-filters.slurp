@@ -1,0 +1,1 @@
+${ x | upper | lower | trim | escape | json | date("%Y") | currency("USD") | truncate(10) | default("d") }
