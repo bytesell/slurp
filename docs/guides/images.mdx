@@ -1,0 +1,251 @@
+---
+title: "Images"
+description: "Plain img tags need nothing. The Image component needs a service, and this is what it does."
+---
+
+There are two ways to put an image on a page, and the first one is the one you
+already know.
+
+## Plain `<img>` is just HTML
+
+```slurp
+<img src={product.image} alt={product.title} width="600" height="400" />
+```
+
+No component, no service, no template syntax to learn. `src` and `alt`
+interpolate like any other attribute, and the tag comes out as written:
+
+```html
+<img alt=Notebook height=400 src=https://cdn.example.com/p/1.jpg width=600>
+```
+
+If you already serve images at the sizes and formats you want, stop here. The
+rest of this page is about the case where you do not.
+
+<Warning>
+  Quote or brace attribute values. Unquoted, `width=600` lexes the value as a
+  second attribute NAME, so `<img src="..." width=600 height=400 />` renders as
+  `<img 400 600 src=https://x.test/a.jpg>`. Both dimensions are gone and nothing
+  is reported.
+</Warning>
+
+## `<Image>` and what it emits
+
+`<Image>` is built into the compiler. It renders a `<picture>` offering AVIF and
+WebP with a JPEG fallback, all three pointing at an image service:
+
+```slurp
+<Image src={product.image} alt={product.title} width={600} height={400} />
+```
+
+```html
+<picture>
+  <source srcset="/_slurp/image?src=https://cdn.example.com/p/1.jpg&w=600&f=avif" type=image/avif>
+  <source srcset="/_slurp/image?src=https://cdn.example.com/p/1.jpg&w=600&f=webp" type=image/webp>
+  <img src="/_slurp/image?src=https://cdn.example.com/p/1.jpg&w=600&f=jpeg"
+       alt=Notebook decoding=async height=400 loading=lazy width=600>
+</picture>
+```
+
+That is wrapped for reading. The real output is one minified line.
+
+So `<Image>` is a URL generator. It does no work at build time and touches no
+pixels. Those URLs 404 until something is serving `/_slurp/image`.
+
+### Props
+
+| Prop | Default | Notes |
+|---|---|---|
+| `src` | required | The only error the component raises. |
+| `alt` | `""` | Emitted verbatim on the `<img>`. |
+| `width` | `800` | Sent to the service as `w`. |
+| `height` | `600` | The `<img>` attribute only. Never sent to the service. |
+| `priority` | absent | Drops `loading=lazy` so the image loads eagerly. |
+
+```
+error[MissingImageSrc]: <Image> is missing the src prop (1:1)
+```
+
+<Warning>
+  **Brace the dimensions.** `width={600}` works; `width=600` lexes as a boolean
+  attribute plus a second one named `600`, the value is lost, and the default of
+  800 is used instead. The page renders, the image is the wrong size, and
+  nothing is reported.
+
+  There is no `lazy` prop either. Lazy is already the default, and an
+  unrecognised prop is dropped silently.
+</Warning>
+
+### The URL is fixed and root-relative
+
+`/_slurp/image` is hardcoded. There is no base-path option and no way for a
+theme to point at another host, which means the service has to answer on the
+**same origin as the page**, behind your reverse proxy.
+
+<Warning>
+  **`src` has to be an absolute `http` or `https` URL.** A theme-local path
+  passes through unchanged and produces
+  `/_slurp/image?src=/static/logo.png&w=800&f=jpeg`, which the service rejects:
+
+  ```json
+  { "error": "invalid source URL" }
+  ```
+
+  Use a plain `<img>` for assets you serve yourself, and `<Image>` for remote
+  ones. A `src` that contains reserved characters is percent-encoded for you.
+</Warning>
+
+## Running the service
+
+```bash
+cargo install slurp-image
+slurp-image --port 3001
+```
+
+One route, `GET /_slurp/image`. Then proxy `/_slurp/image` from your web server
+to port 3001 so the page and the images share an origin.
+
+<Warning>
+  **The dev server does not serve this route.** `slurp-dev` returns 404 for
+  `/_slurp/image`, so images render as broken until you run `slurp-image`
+  alongside it and proxy the path yourself.
+</Warning>
+
+The defaults are closed on purpose, because this service fetches URLs an
+attacker may have chosen: it binds `127.0.0.1` and sends no CORS headers. Widen
+that deliberately.
+
+```bash
+slurp-image --bind 0.0.0.0 --cors-allow-origin https://example.com
+```
+
+There is no authentication, so put it behind a reverse proxy rather than on a
+public port.
+
+### Flags worth knowing
+
+| Flag | Default | |
+|---|---|---|
+| `--port` | `3001` | |
+| `--bind` | `127.0.0.1` | `0.0.0.0` to accept from the network. |
+| `--cors-allow-origin` | none | Repeatable. `*` allows any origin. |
+| `--cache-dir` | `/tmp/slurp-image-cache` | |
+| `--cache-ttl` | `3600` | Seconds. Also the `max-age` sent to browsers. |
+| `--max-output-pixels` | `8000000` | Output pixels after the resize. |
+| `--max-concurrent-transforms` | core count | Transforms are CPU-bound. |
+| `--request-timeout-secs` | `30` | Whole-request deadline. |
+
+`RUST_LOG` is the only environment variable it reads.
+
+## Requesting a transform
+
+```
+GET /_slurp/image?src=<url>&w=<width>&f=<format>
+```
+
+| Parameter | Required | Default | Accepted |
+|---|---|---|---|
+| `src` | yes | | absolute `http`/`https`, at most 4096 bytes, no userinfo, no control characters |
+| `w` | yes | | 1 to 8192 |
+| `f` | no | `webp` | `avif`, `webp`, `jpeg` (`jpg` is accepted for `jpeg`) |
+
+There is no `h` and no `q`, and the format parameter is `f`, not `fmt`. Height
+is not a transform input at all: the `<Image>` component uses it for the `<img>`
+attribute so the browser can reserve space.
+
+**The only transform is a width-only Lanczos3 resize.** It preserves aspect
+ratio and never upscales, so asking for a width larger than the source returns
+the source size. Quality is fixed.
+
+### Formats in and out
+
+| Format | As a source | As an output |
+|---|---|---|
+| JPEG | yes | yes |
+| PNG | yes | no |
+| GIF | yes | no |
+| WebP | yes | yes |
+| AVIF | no | yes |
+
+A PNG or GIF source is transcoded to one of the three output formats, never
+re-emitted as itself. An AVIF or HEIC source is recognised only so it can be
+reported as unsupported rather than as corrupt data.
+
+### Errors
+
+Every error is JSON, shaped `{"error": "..."}`.
+
+| Status | Meaning | Example |
+|---|---|---|
+| 400 | bad parameter or URL | `{"error":"w exceeds maximum allowed value of 8192"}` |
+| 403 | blocked by the SSRF guard | `{"error":"request blocked"}` |
+| 413 | source too large | |
+| 422 | body could not be decoded | |
+| 429 | rate limited | carries `Retry-After` |
+| 500 | encode failure | |
+| 502 | DNS or fetch failure | `{"error":"could not fetch source image"}` |
+
+A successful response carries the output MIME type and
+`cache-control: public, max-age=<cache-ttl>`.
+
+## What it refuses, and why
+
+The service takes a URL from a query string and fetches it, so it is a
+server-side request forgery primitive unless it is written not to be. The guards
+are not optional hardening, they are the feature:
+
+- **Scheme allowlist.** Only `http` and `https`. Anything else is
+  `invalid source URL`, including a URL carrying userinfo.
+- **DNS resolved up front,** every returned address required to be globally
+  routable unicast, and those addresses **pinned into the HTTP client** so a
+  second lookup cannot rebind to a private one. A request for
+  `http://127.0.0.1:8080/a.jpg` comes back `403 request blocked`.
+- **No redirects.** The redirect policy is `none()`, so a public URL cannot
+  bounce the fetcher inward.
+- **Magic-byte validation,** backed by a decoder-format allowlist, so a polyglot
+  file cannot be routed to a decoder other than the one its header declares.
+- **Source size capped** at 20 MiB, checked against `Content-Length` and again
+  while streaming, because the header can be absent or can lie.
+- **Decompression bomb protection.** Declared width times height times the
+  decoder's real bytes per pixel must fit under 50 MiB, checked before any pixel
+  buffer is allocated.
+- **Transforms run off the async workers** behind a concurrency limit, so a
+  burst of large images cannot starve the runtime.
+
+Fixed limits, not configurable by flag or environment variable: source 20 MiB,
+decoded 50 MiB, width 8192, fetch timeout 10 s, and a rate limit of 100 requests
+per 60 s per IP.
+
+<Note>
+  The rate limiter is an in-memory fixed-window counter. It resets on restart and
+  is not shared between instances, so treat it as a backstop and do real rate
+  limiting at the proxy.
+</Note>
+
+## Caching
+
+Two levels, both keyed on the exact `(src, w, f)` triple:
+
+1. an in-memory LRU, 512 entries by default,
+2. a disk cache under `--cache-dir`, with a background sweeper that evicts
+   expired entries and then the oldest ones to stay under
+   `--max-disk-cache-bytes` (2 GiB by default).
+
+An attacker requesting many distinct variants therefore cannot fill the disk.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Components" icon="cube" href="/guides/components">
+    Props, and why a quoted prop is a literal string.
+  </Card>
+  <Card title="Image service reference" icon="server" href="/reference/image-service">
+    Every parameter, limit and status code.
+  </Card>
+  <Card title="Security model" icon="shield-check" href="/security-model">
+    The order the guards run in, and what they do not cover.
+  </Card>
+  <Card title="Dev server" icon="bolt" href="/tooling/dev-server">
+    What it serves, and what it deliberately does not.
+  </Card>
+</CardGroup>

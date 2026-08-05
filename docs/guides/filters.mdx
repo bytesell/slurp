@@ -1,0 +1,395 @@
+---
+title: "Filters"
+description: "Formatting values on the way out: text, numbers, money, dates and collections, and why arguments must be literals."
+---
+
+A filter transforms a value as it is rendered. Filters are the only
+call-shaped construct in Slurp, so they are where all the formatting lives:
+there are no functions to call and no methods on a value.
+
+```slurp
+<h1>${ post.title | upper }</h1>
+```
+
+```html
+<h1>HELLO THERE</h1>
+```
+
+They chain left to right:
+
+```slurp
+<p>${ post.title | lower | truncate(8) }</p>
+```
+
+```html
+<p>hello th...
+```
+
+This page covers the filters by the job they do. For the complete alphabetical
+list with the null behaviour of each one, see
+[the filter reference](/reference/filters).
+
+## Arguments must be literals
+
+This is the rule to internalise before anything else, because breaking it
+fails silently.
+
+```slurp
+<p>[${ product.price | currency(settings.currency) }]</p>
+```
+
+```html
+<p>[ 12.50]
+```
+
+A filter argument is read as a literal and never evaluated. A variable argument
+is seen as the empty string, so `currency` falls back to no symbol at all and
+you get a leading space where the currency marker should be. The compiler says
+nothing.
+
+```slurp
+<p>${ product.price | currency("EUR") }</p>
+```
+
+```html
+<p>€12,50
+```
+
+The reason is the same reason there are no functions: an argument that could be
+an arbitrary expression is a place for a template to compute, and Slurp exists
+to render templates that cannot compute. Keeping arguments literal keeps a
+filter a fixed, auditable transformation.
+
+<Note>
+  `default` is the one exception. Its argument is evaluated in scope, which is
+  what makes `default(user.name)` useful. Every other filter reads its
+  arguments literally.
+</Note>
+
+If you need a currency chosen at runtime, branch on it or format the value
+server-side and pass the finished string through.
+
+## Filters bind loosest
+
+A filter applies to the whole expression to its left, including a ternary.
+
+```slurp
+<p>${ post.status == "archived" ? "live" : "draft" | upper }</p>
+```
+
+```html
+<p>LIVE
+```
+
+The status is `archived`, so the ternary chose `"live"`, and `upper` then
+applied to that result rather than to the `"draft"` it sits next to.
+Parenthesise if you meant the other thing:
+
+```slurp
+<p>${ post.status == "archived" ? "live" : ("draft" | upper) }</p>
+```
+
+```html
+<p>live
+```
+
+A filter also cannot be followed by a binary operator. `${ n | int + 1 }` is a
+parse error; write `${ (n | int) + 1 }`.
+
+## Text
+
+`upper`, `lower` and `truncate(n, suffix)`.
+
+```slurp
+<p>${ post.body | truncate(20, "...") }</p>
+```
+
+```html
+<p>A long piece of writ...
+```
+
+`truncate` counts characters rather than bytes, so it is safe on non-ASCII
+text, and it appends the suffix only when it actually cut something. The
+default length is 50 and the default suffix is three dots.
+
+<Warning>
+  `truncate` does not understand HTML. If a cut lands inside a tag the rest of
+  that tag is dropped, and nothing balances the tags you left open. Truncate
+  plain text, not markup.
+</Warning>
+
+## Numbers
+
+`int` and `float` coerce, `fixed(n)` formats.
+
+```slurp
+<p>${ product.rating | fixed(1) }</p>
+<p>${ product.stock | int }</p>
+<p>${ order.total | float }</p>
+```
+
+```html
+<p>4.3<p>10<p>49.99
+```
+
+`fixed` is what you reach for instead of `toFixed`, and it returns a string
+with exactly that many decimal places.
+
+`int` and `float` parse all-or-nothing. `"12abc"` becomes 0, not 12, and so
+does anything else that is not cleanly a number, including null, arrays and
+objects.
+
+Coercion matters more than it looks, because comparisons in Slurp do not
+coerce. `{if product.stock > 0}` is false when stock is the string `"10"`.
+Write `{if (product.stock | int) > 0}`. That trap is explained in full under
+[displaying data](/guides/displaying-data#arithmetic-coerces-comparison-does-not).
+
+## Money
+
+```slurp
+<p>${ product.price | currency("USD") }</p>
+<p>${ product.price | currency("EUR") }</p>
+<p>${ product.price | currency("JPY") }</p>
+<p>${ product.price | currency("SEK") }</p>
+```
+
+```html
+<p>$12.50<p>€12,50<p>¥13<p>SEK 12.50
+```
+
+Known codes are USD, EUR, GBP, JPY, CAD, AUD and CHF. Three things about the
+output are worth knowing up front:
+
+- The symbol always prefixes, for every code, so EUR renders as a leading euro
+  sign rather than the trailing one much of Europe writes. Grouping and the
+  decimal separator do follow the code.
+- Only JPY uses zero decimals. Everything else uses two, and rounds once, so
+  `19.999` renders as `$20.00`.
+- An unknown code is not an error. The code plus a space becomes the symbol,
+  which is how `SEK 12.50` comes out and is a reasonable fallback.
+
+### Money arrives as a string
+
+A server decimal serialises to JSON as a string such as `"49.990000"`, not as
+a number. Filters coerce, so this is invisible most of the time:
+
+```slurp
+<p>${ order.total | currency("USD") }</p>
+```
+
+```html
+<p>$49.99
+```
+
+It stops being invisible in JavaScript you emit, where the value is a string
+and has no numeric methods:
+
+```slurp
+<script>var total = Number(${ order.total | json }).toFixed(2);</script>
+```
+
+```html
+<script>var total = Number("49.990000").toFixed(2);</script>
+```
+
+Without the `Number(...)` wrapper that is `"49.990000".toFixed(2)`, which
+throws at runtime. The compiler does not read the JavaScript you emit, so
+nothing warns. Where you can, format with `| currency` or `| fixed` server-side
+and pass the finished string.
+
+## Dates
+
+```slurp
+<p>${ post.published_at | date("MMMM D, YYYY") }</p>
+<p>${ post.published_at | date("YYYY-MM-DD") }</p>
+<p>${ post.published_at | date }</p>
+```
+
+```html
+<p>August 3, 2026<p>2026-08-03<p>Aug 03, 2026
+```
+
+The complete token set is `YYYY`, `YY`, `MMMM`, `MMM`, `MM`, `M`, `DD` and `D`.
+There are no time tokens at all: no hours, minutes, seconds, timezone or
+day-of-week. If you need a time, format it server-side.
+
+There is also no escaping in the format string, so a stray `D` or `M` in
+surrounding text gets substituted. Keep the format to the date and write the
+words outside the filter.
+
+<Warning>
+  `| date` parses ISO strings, not epoch milliseconds. The parser takes the
+  text before the first `T` or space and splits it on `-`; fewer than three
+  parts and the input is returned unchanged.
+</Warning>
+
+```slurp
+<p>[${ 1700000000000 | date("MMM DD, YYYY") }]</p>
+```
+
+```html
+<p>[1700000000000]
+```
+
+The number renders verbatim with no diagnostic, which is a confusing thing to
+find on a page. Return RFC 3339 strings from the server and it cannot arise.
+
+## Fallbacks and counts
+
+`default` substitutes when a value is empty, where empty means null, the empty
+string, the empty array or the empty object. Note that `0` and `false` are not
+empty and pass straight through.
+
+```slurp
+<p>${ user.nickname | default("Anonymous") }</p>
+<p>${ user.nickname | default(user.name) }</p>
+```
+
+```html
+<p>Anonymous<p>Bo
+```
+
+`plural` picks a word from a count:
+
+```slurp
+<p>${ order.count | plural("item") }</p>
+<p>${ order.count | plural("entry", "entries") }</p>
+```
+
+```html
+<p>3 items<p>3 entries
+```
+
+<Warning>
+  The output includes the number. Writing
+  `${ order.count } ${ order.count | plural("item") }` renders `3 3 items`. The
+  second argument is only needed when adding an `s` is wrong.
+</Warning>
+
+## Collections
+
+Four filters work only in an `{each}` header, and they run before iteration.
+They are a separate set from everything above.
+
+```slurp
+{each p in products | sort("price")}<li>${ p.name }</li>{/each}
+```
+
+```html
+<li>Pen<li>Notebook<li>Desk
+```
+
+| Filter | What it does |
+|---|---|
+| `limit(n)` | keeps the first n items |
+| `sort(key, dir)` | sorts ascending; both arguments optional, so bare `sort` orders a list of plain values |
+| `reverse` | reverses the collection |
+| `filter(key, value)` | keeps items whose `item[key]` equals `value` |
+
+They chain, in the order you write them:
+
+```slurp
+{each p in products | filter("featured", true) | limit(2)}<li>${ p.name }</li>{/each}
+```
+
+```html
+<li>Notebook<li>Desk
+```
+
+Two sharp edges:
+
+```slurp
+{each p in products | sort("price", "DESC")}<li>${ p.name }</li>{/each}
+```
+
+```html
+<li>Pen<li>Notebook<li>Desk
+```
+
+Only the exact lowercase string `"desc"` reverses. `"DESC"` and `"descending"`
+both silently mean ascending.
+
+And `filter` compares strictly, exactly like `==`. `filter("stock", "3")` never
+matches a numeric `3`, and items that are not objects or that lack the key are
+dropped rather than kept.
+
+`sort` is stable, and it orders cross-type pairs by type rank rather than
+erratically, so a mixed collection sorts deterministically.
+
+## Sending values to JavaScript
+
+`js` and `json` exist for one job: putting a value safely inside a `<script>`
+body or a JavaScript-evaluated attribute. Every `${ }` in a script body must
+end in one of them, and which one depends on where the slot sits.
+
+```slurp
+<script>var name = ${ user.name | json };</script>
+```
+
+That is its own topic, with rules the compiler enforces at build time. See
+[Scripts and attributes](/guides/scripts-and-attributes).
+
+## When a filter goes wrong
+
+Filters fail in three different ways, and knowing which is which saves time.
+
+**An unknown filter fails the build.** So does using a loop filter in value
+position, or a value filter in an `{each}` header. The two sets are disjoint
+and the compiler checks both directions:
+
+```slurp
+<p>${ post.title | shout }</p>
+{each p in products | upper}<li>${ p.name }</li>{/each}
+<p>${ products | limit(2) }</p>
+```
+
+```
+error[UnknownFilter]: Unknown filter: shout (1:20)
+error[UnknownFilter]: Unknown loop filter: upper (2:23)
+error[UnknownFilter]: Unknown filter: limit (3:18)
+```
+
+**A missing or non-numeric `limit()` argument fails the build**, because that
+argument is required rather than defaulted:
+
+```slurp
+{each p in products | limit(count)}<li>${ p.name }</li>{/each}
+```
+
+```
+error[InvalidFilterArgs]: Filter 'limit' argument 0 must be a number (1:23)
+```
+
+**Anything else is silent.** A non-literal argument to `filter()` empties the
+collection, which then renders the `{empty}` branch:
+
+```slurp
+[{each p in products | filter("featured", settings.currency)}<li>${ p.name }</li>{empty}<p>Nothing matched.</p>{/each}]
+```
+
+```html
+[<p>Nothing matched.</p>]
+```
+
+<Tip>
+  A loop filter that errors empties the collection rather than raising, so a
+  broken filter looks exactly like missing data. If an `{empty}` branch appears
+  when you know the data is there, read the filter arguments first.
+</Tip>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Filter reference" icon="book" href="/reference/filters">
+    All 17 filters alphabetically, with null behaviour and traps.
+  </Card>
+  <Card title="Control flow" icon="code-branch" href="/guides/control-flow">
+    Where the loop filters go, and the iteration budget.
+  </Card>
+  <Card title="Scripts and attributes" icon="code" href="/guides/scripts-and-attributes">
+    When `| js` applies and when `| json` does.
+  </Card>
+  <Card title="Common mistakes" icon="triangle-exclamation" href="/troubleshooting/common-mistakes">
+    The silent failures, collected in one place.
+  </Card>
+</CardGroup>

@@ -1,0 +1,262 @@
+---
+title: "Layouts and slots"
+description: "Shared page chrome, the two layout forms, and getting tags into the head."
+---
+
+A layout is the shell every page shares: the doctype, the `<head>`, the nav and
+the footer. The page supplies only its own content, which lands at the layout's
+`<slot />`.
+
+## Write one
+
+Put it in `layouts/` so it is checked but never emitted as a page.
+
+```slurp layouts/base.slurp
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>${ seo.title }</title>
+  <slot name="head" />
+</head>
+<body>
+  <header>${ site.title }</header>
+  <main><slot /></main>
+</body>
+</html>
+```
+
+Enter it from a page with the `{layout}` block:
+
+```slurp index.slurp
+{layout "@layouts/base"}
+  {head}<link rel="canonical" href="/" />{/head}
+  <h1>Products</h1>
+{/layout}
+```
+
+The page's children replace `<slot />`, and the `{head}` block replaces
+`<slot name="head" />`.
+
+```html dist/index.html
+<!doctype html><html lang=en><meta charset=utf-8><title>Our Store</title><link href=/ rel=canonical><body><header>My Shop</header><main><h1>Products</h1></main>
+```
+
+The output is minified, and the canonical link landed in the head rather than
+next to the `<h1>`.
+
+## The two forms are not equivalent
+
+There is also an element form, `<layout src="@layouts/base">`. It fills the
+default slot the same way, and that is all it does.
+
+<Warning>
+  The element form builds its node with no head slot. A `{head}` block inside it
+  is treated as an ordinary child and renders inline in the body, usually inside
+  `<main>`, where those tags do nothing.
+
+  ```slurp
+  <layout src="@layouts/base">
+    {head}<link rel="canonical" href="/" />{/head}   {* ends up in the body *}
+    <h1>Products</h1>
+  </layout>
+  ```
+
+  Use `{layout "..."}` whenever the page contributes anything to the head. It
+  costs nothing and the failure it avoids is silent.
+</Warning>
+
+The `src` must be a quoted string. `<layout src={expr}>` reads as empty, the
+layout is never entered, and the page renders bare.
+
+## Rules for the head block
+
+A `{head}` must be a direct child of the `{layout}` block. The extraction scans
+the block's top-level children only.
+
+```slurp
+{layout "@layouts/base"}
+  {if seo.canonical}
+    {head}<link rel="canonical" href="/" />{/head}   {* NOT extracted *}
+  {/if}
+{/layout}
+```
+
+That nested block renders inline in the body instead. Put the condition inside
+the head block, or in the layout.
+
+A `{head}` inside a component is not extracted either, for the same reason: only
+the layout's own children are scanned.
+
+If a page writes two `{head}` blocks, the last one wins and the first is
+discarded with no diagnostic.
+
+## Own the title in the layout
+
+Both the layout and the page can write to `<head>`, so decide once which owns
+`<title>`. The convention the example theme uses is that the layout owns the
+title and description, driven by an `seo` value in the render context, and the
+head slot is for additional tags such as a canonical link or structured data.
+
+```slurp layouts/base.slurp
+{if seo.title}
+  <title>${ seo.title }</title>
+{/if}
+{if seo.description}
+  <meta name="description" content="${ seo.description }" />
+{/if}
+<slot name="head" />
+```
+
+Guarding both means a page that supplies no `seo` gets neither an empty
+`<title>` nor an empty description, and is free to emit its own. Without the
+guard a page that emits a title in its head block produces two.
+
+## A layout takes no props
+
+This is the one place a layout differs sharply from a component, and it is not
+obvious.
+
+<Warning>
+  A layout renders against the page globals and nothing else. Props are not
+  passed to it by either form, and a `props` block's defaults are NOT applied.
+
+  ```slurp layouts/tiny.slurp
+  ---
+  props { heading: string = "(default heading)" }
+  ---
+  <section>heading=[${ heading }]<slot /></section>
+  ```
+
+  ```slurp
+  <layout src="@layouts/tiny" heading={"passed"}><p>b</p></layout>
+  {layout "@layouts/tiny"}<p>b</p>{/layout}
+  ```
+
+  Both render `heading=[]`. The attribute is ignored and the default never
+  applies.
+</Warning>
+
+So a `props` block in a layout is documentation for the reader. To vary a
+layout per page, put the value in the render context and read it as a global,
+which is exactly what `seo` is doing above.
+
+## Named slots do not exist
+
+Only `default` and `head` are ever filled. Any other name renders as a literal
+`<slot>` element carrying its fallback content.
+
+```slurp layouts/base.slurp
+<body>
+  <main><slot /></main>
+  <aside><slot name="sidebar">FALLBACK</slot></aside>
+</body>
+```
+
+```slurp index.slurp
+{layout "@layouts/base"}
+  <nav slot="sidebar">I asked for the sidebar</nav>
+{/layout}
+```
+
+```html dist/index.html
+<body><main><nav slot=sidebar>I asked for the sidebar</nav></main><aside><slot name=sidebar>FALLBACK</slot></aside>
+```
+
+You get both copies, in the wrong place, with no diagnostic. The child went to
+the default slot like every other child, and the named slot rendered its
+fallback.
+
+Anything that would have been a second slot becomes a global the layout reads,
+or its own component that the page places in the default slot.
+
+## Two more slot behaviours
+
+<AccordionGroup>
+  <Accordion title="Several default slots duplicate the content">
+    Slot content is cloned per slot. A layout with two `<slot />` elements
+    renders the page body twice. That is occasionally what you want, and much
+    more often a typo.
+  </Accordion>
+  <Accordion title="A layout with no slot drops the page">
+    `{layout "@layouts/noslot"}<p>lost</p>{/layout}` renders the layout and
+    nothing else. The page content is discarded silently.
+  </Accordion>
+</AccordionGroup>
+
+## Nesting
+
+A layout can enter another layout, which is how a section shell wraps the site
+shell.
+
+```slurp layouts/docs.slurp
+{layout "@layouts/base"}
+  <div class="docs"><slot /></div>
+{/layout}
+```
+
+A page entering `@layouts/docs` gets both. A layout that enters itself is
+stopped by a cycle guard rather than an error.
+
+Imports are per file. A layout that uses a component imports it in its own
+frontmatter; it does not inherit the page's `using` lines.
+
+```slurp layouts/base.slurp
+---
+using "@components/Navbar"
+using "@components/Footer"
+---
+<body>
+  <Navbar />
+  <main><slot /></main>
+  <Footer />
+</body>
+```
+
+## When a layout does not resolve
+
+Like a component, an unresolved layout does not fail the build and is not
+reported by `validate --warnings`. The page content survives, wrapped in HTML
+comments that the minifier then strips, and a literal `<slot></slot>` is left in
+the output.
+
+```html
+<slot></slot><p>missing layout
+```
+
+A page that suddenly has no chrome and a stray `<slot>` in it is a misspelled
+layout path.
+
+## Layout or component?
+
+Both are `.slurp` files that other files include, and both are checked without
+being emitted. The difference is what they can take.
+
+| | Layout | Component |
+|---|---|---|
+| Receives props | No | Yes |
+| Prop defaults apply | No | Yes |
+| Reads page globals | Yes | Yes |
+| Head slot | Yes | No |
+| Children | One default slot | One default slot |
+
+Reach for a layout when the thing wraps a whole page and needs to reach the
+head. Reach for a component everywhere else, including for regions inside a
+layout, because a component can be parameterised and a layout cannot.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Components" icon="puzzle-piece" href="/guides/components">
+    Props, scope, and the quoted-prop trap.
+  </Card>
+  <Card title="Pages and routing" icon="file-code" href="/guides/pages">
+    How a `.slurp` file becomes an HTML file.
+  </Card>
+  <Card title="Sections and blocks" icon="table-cells" href="/guides/sections-and-blocks">
+    Making parts of a page editable without editing the template.
+  </Card>
+  <Card title="Common mistakes" icon="triangle-exclamation" href="/troubleshooting/common-mistakes">
+    The silent failures, collected in one place.
+  </Card>
+</CardGroup>

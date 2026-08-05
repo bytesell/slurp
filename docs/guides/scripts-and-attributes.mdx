@@ -1,0 +1,367 @@
+---
+title: "Scripts and attributes"
+description: "Getting server values into HTML attributes and script bodies, and choosing between | js and | json."
+---
+
+Most of the time `${ }` needs no thought: you write it, and the value comes out
+escaped for wherever it landed. Attributes and `<script>` bodies are where that
+stops being uniform, because a browser reads those two places with different
+parsers and no single escaper is correct in both.
+
+This page is the practical version of that. If you have hit
+`error[UnsafeScriptInterpolation]` and want the fix, skip to
+[Choosing between `| js` and `| json`](#choosing-between-js-and-json).
+
+## Ordinary attributes need nothing
+
+Any quoted attribute interpolates, and the value is escaped for an attribute
+value on the way out.
+
+```slurp
+<div data-product-id="${ product.id }" data-name="${ product.name }">
+<span class="badge badge-${ product.slug }">
+```
+
+```html
+<div data-product-id="42" data-name="Wrench &amp; Co &lt;b&gt;">
+<span class="badge badge-wrench">
+```
+
+A `data-` attribute is the simplest way to hand a value to client-side code:
+publish it in markup, read it back with `dataset` in your own script. Nothing on
+this page applies to it.
+
+<Note>
+  `slurp build` minifies its output, so the HTML on disk may drop quotes and
+  decode entities that are unambiguous in position (`data-product-id=42`). The
+  examples here show what the compiler emits, before that pass. Both forms parse
+  identically.
+</Note>
+
+## A `<script>` body will not guess
+
+Write an interpolation in a script body with no filter and the build fails:
+
+```slurp
+<script>var n = ${ product.id };</script>
+```
+
+```
+error[UnsafeScriptInterpolation]: an expression in a <script> body must carry
+the `| js` filter (data inside a JS string literal) or `| json` (a bare JSON
+value); HTML entity escaping does not protect a script context, because a
+raw-text element is handed to the JS engine without decoding character
+references. ...
+```
+
+The reason is worth one paragraph, because it explains every other rule below.
+`<script>` is a **raw text element**: the HTML parser hands its contents to the
+JavaScript engine without decoding character references. So the entity escaping
+that makes `${ }` safe in ordinary text does nothing at all there, and every
+JavaScript metacharacter except `<` passes through untouched. There is no single
+correct escaper either, because a value can land inside a string literal or in
+code position, and those need different treatments. So the compiler refuses
+rather than picking one.
+
+Two filters satisfy the rule, `| js` and `| json`. `| unsafe_js` deliberately
+does not.
+
+## Choosing between `| js` and `| json`
+
+One question decides it:
+
+**Did you write quotes around the slot?**
+
+<CardGroup cols={2}>
+  <Card title="Yes: use | js" icon="quote-left">
+    The value goes inside a string literal you wrote. `| js` backslash-escapes
+    the JavaScript metacharacters and adds no quotes of its own.
+  </Card>
+  <Card title="No: use | json" icon="code">
+    The value stands alone in code position. `| json` emits a complete,
+    self-delimiting JSON literal, so a string arrives with its own quotes.
+  </Card>
+</CardGroup>
+
+```slurp
+<script>
+  var a = "${ product.name | js }";
+  var b = ${ product.name | json };
+</script>
+```
+
+```html
+<script>
+  var a = "Wrench & Co \x3Cb>";
+  var b = "Wrench & Co <b>";
+</script>
+```
+
+Both are correct and both produce the same JavaScript string. `| json` also
+handles values that are not strings, which `| js` does not:
+
+```slurp
+<script>
+  var cart    = ${ cart | json };
+  var missing = ${ nope | json };
+</script>
+```
+
+```html
+<script>
+  var cart    = {"count":3};
+  var missing = null;
+</script>
+```
+
+<Tip>
+  When in doubt, write `| json` with no quotes around it. It is self-delimiting
+  whatever the value turns out to be, including an object, a number, or nothing
+  at all.
+</Tip>
+
+### What going wrong looks like
+
+`| js` in code position compiles, because the filter is present and that is all
+the script-body rule checks. What it emits is a bare, unquoted value:
+
+```slurp
+<script>var name = ${ product.name | js };</script>
+```
+
+```html
+<script>var name = Wrench & Co \x3Cb>;</script>
+```
+
+That is a syntax error in the browser, and with a different value it would be
+worse than a syntax error. Numbers happen to survive this mistake, which is how
+it reaches production: `var n = ${ product.id | js }` renders `var n = 42;` and
+works fine right up until the field is a string.
+
+### A JavaScript template literal cannot be written in a script body
+
+Slurp claims the `${` sequence itself, so there is no way to write a backtick
+template in a script body. The compiler says so as part of the same error:
+
+```slurp
+<script>let t = `${ hours }h`;</script>
+```
+
+```
+error[UnsafeScriptInterpolation]: ... A JavaScript template literal (`a ${b}`)
+cannot be written in a <script> body at all - slurp reads `${` as its own
+interpolation - so build the string by concatenation instead
+```
+
+Concatenate instead: `let t = hours + "h";`.
+
+## Passing a whole object to the page
+
+For anything larger than a value or two, do not build JavaScript at all. Emit a
+JSON payload and parse it:
+
+```slurp
+<script type="application/json" id="cart">${ cart | json }</script>
+<script src="/js/cart.js" defer></script>
+```
+
+```html
+<script type="application/json" id="cart">{"count":3}</script>
+```
+
+Then in `cart.js`:
+
+```js
+const cart = JSON.parse(document.getElementById('cart').textContent);
+```
+
+This keeps your JavaScript in a real `.js` file where an editor and a linter can
+see it, and the only thing the template generates is data. `{$let name = expr}`
+does the same thing with slurp's own spelling, emitting a
+`<script type="application/json" data-slurp-let="name">` payload for the browser
+runtime to pick up.
+
+## JavaScript-evaluated attributes
+
+An attribute counts as JavaScript-evaluated if it is a native `on*` handler or
+one of the Alpine forms. The full set:
+
+- anything starting with `@` or `x-on:`
+- anything starting with `:` or `x-bind:`
+- any name longer than two characters starting with `on`
+- `x-data` `x-init` `x-effect` `x-show` `x-text` `x-html` `x-if` `x-for` `x-model`
+
+Modifier suffixes are stripped, so `x-model.lazy` is recognised.
+
+Here the compiler does not refuse, because it can read the author's own text
+around the slot and work out where the value lands. **Position decides the
+filter**, and the same question from the last section answers it:
+
+```slurp
+<button @click="add('${ product.slug | js }')">   {* inside quotes you wrote *}
+<button @click="add(${ product.id | json })">     {* standing alone *}
+```
+
+```html
+<button @click="add(&#39;wrench&#39;)">
+<button @click="add(42)">
+```
+
+The entities in the first output are the attribute layer escaping on top; the
+browser decodes them back to quotes before Alpine ever sees the string, so the
+two passes compose without either weakening the other.
+
+Getting the position wrong is an error rather than a silent problem:
+
+```slurp
+<button @click="add(${ product.id | js })">Add</button>
+```
+
+```
+error[UnsafeScriptInterpolation]: `| js` declares that this slot sits inside a
+JavaScript string literal, but in the JavaScript-evaluated attribute `@click` it
+does not - it lands in statement or expression position, where escaping the
+quote characters cannot contain a value (`;` and `(` have no JS string escape).
+Quote the slot (`'${ v | js }'`), or use `| json` for a bare JSON value, or
+`| unsafe_js` if it is JavaScript the theme itself wrote
+```
+
+`| js` is a **claim about context**, and a declared slot is then passed through
+verbatim. A false claim turns the automatic escaper off and puts nothing in its
+place, which is why it is refused rather than ignored.
+
+### You can leave the filter off
+
+An undeclared slot in a JavaScript-evaluated attribute is not an error. The
+compiler escapes it for the position it found:
+
+```slurp
+<button @click="add('${ payload }')">
+<div x-show="n == ${ cart.count }">
+<div x-data="{ id: ${ product.id }, open: false }">
+```
+
+```html
+<button @click="add(&#39;\&#39;);alert(1);(\&#39;&#39;)">
+<div x-show="n == 3">
+<div x-data="{ id: 42, open: false }">
+```
+
+The first is a hostile value (`');alert(1);('`) neutralised inside the string it
+was written into. The other two are the ordinary numeric case, which is why
+leaving the filter off has to stay legal: comparing against a count or a loop
+index is a normal thing to write and cannot be proved safe or unsafe statically.
+
+In development mode the renderer records an advisory on every undeclared slot,
+naming the attribute and telling you which filter would state your intent. It is
+silent in `slurp build`, which always renders in production mode.
+
+<Note>
+  `| unsafe_js` is the escape hatch for the opposite case: JavaScript the theme
+  itself wrote, passed in as a prop and composed into a handler. Escaping that
+  would corrupt working code. It means "this is code, not data", so never route
+  a value from outside the theme through it.
+</Note>
+
+## A `style` value loses its punctuation
+
+There is no useful escape for CSS, so a slot interpolated into `style`,
+`:style` or `x-bind:style` has the structural characters **removed**:
+`;` `{` `}` `(` `)` `"` `'` `\` `@` `*` `<` `>` and NUL.
+
+```slurp
+<div style="background:url(${ path })">
+```
+
+With `path` set to `a);color:red;x:url(b`:
+
+```html
+<div style="background:url(acolor:redx:urlb)">
+```
+
+`:` and `/` are kept, because neither can open a new declaration on its own and
+both are needed by the `background:url(...)` shape this exists to support.
+
+The consequence for ordinary use is that a value carrying legitimate punctuation
+arrives mangled. A CSS custom property set from a schema `color` setting is
+fine; anything that needs a function call, a quoted font name or a semicolon
+belongs in a class instead. Development mode warns when the strip actually
+changed a value.
+
+<Warning>
+  A `<style>` **body** is a different matter: it is a raw text element, so
+  `${ }` inside one is not interpolated at all and is emitted as literal
+  characters. Block tags do not run there either. Put dynamic values in a
+  `style` attribute or in a custom property, not in a stylesheet body.
+</Warning>
+
+## Two traps that fail quietly
+
+### A JavaScript template literal in an attribute gets eaten
+
+```slurp
+<a :href="`/product/${ item.slug }`">View</a>
+```
+
+Slurp interpolates `${ }` in attribute values itself, so this slot is evaluated
+against the **server** render context rather than the browser's. If `item` is a
+client-side variable it resolves to nothing and the link renders as
+`` `/product/` ``, with no runtime error and nothing else to notice. You get a
+page that looks built and has dead links scattered through it.
+
+This is diagnosed as a `JsTemplateLiteralInAttribute` warning, which `slurp
+validate --warnings` and `slurp build -v` will show you. It is a warning rather
+than an error because interpolating a genuine server value inside backticks is
+legal, and the compiler cannot tell the two apart.
+
+```slurp
+<a :href="'/product/' + item.slug">View</a>   {* client-side value *}
+<a href="/product/${ item.slug }">View</a>    {* server-side value *}
+```
+
+### A nested double quote ends the attribute
+
+```slurp
+<div title="${ product["slug"] }">
+```
+
+```html
+<div title=" product[" slug>
+```
+
+The lexer closes an attribute value at its first matching quote, before
+interpolation is considered, so the rest of the expression becomes stray
+attributes. Nothing is reported by the compiler. Use single quotes inside the
+expression, or the brace form, which is not quote-delimited:
+
+```slurp
+<div title="${ product['slug'] }">
+<div title={ product["slug"] }>
+```
+
+## What catches what
+
+| Mistake | Caught by |
+|---|---|
+| No filter in a `<script>` body | Compile error, `UnsafeScriptInterpolation` |
+| JS template literal in a `<script>` body | Compile error, the same code |
+| `\| js` in code position in a JS attribute | Compile error, the same code |
+| JS template literal in an attribute | Warning, `JsTemplateLiteralInAttribute` |
+| Undeclared slot in a JS attribute | Development-mode advisory only |
+| CSS characters stripped from a `style` slot | Development-mode advisory only |
+| `\| js` in code position in a `<script>` body | Nothing. It emits a bare value |
+| Nested double quote in an attribute | Nothing from the compiler. The MCP server's `slurp_lint` has a rule for it |
+| `${ }` in a `<style>` body | Nothing. It renders as literal text |
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="How escaping works" icon="lock" href="/guides/escaping">
+    The full set of contexts, what each one does, and where the trust boundary
+    sits.
+  </Card>
+  <Card title="Security model" icon="shield-check" href="/security-model">
+    The threat model behind these rules, with the enforcing symbol named for
+    each one.
+  </Card>
+</CardGroup>

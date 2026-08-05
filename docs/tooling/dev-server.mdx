@@ -1,0 +1,264 @@
+---
+title: "Dev server"
+description: "Serving a theme locally with hot reload, canned data and no backend."
+---
+
+`slurp-dev` serves a built theme on `127.0.0.1`, watches it, and pushes a reload
+to the browser when a file changes. It can answer the theme's API calls from a
+JSON file, so a page that fetches data renders with nothing else running.
+
+```bash
+slurp dev
+```
+
+That serves the current directory on `http://localhost:3000`.
+
+<Warning>
+  It serves **built HTML**, not `.slurp` sources. `slurp dev` in a directory of
+  templates returns 404 for every page, because it is looking for
+  `pages/index.html` and there isn't one. Build first, and serve the output, or
+  use `--source-dir` below to get the rebuild loop.
+</Warning>
+
+## Install it
+
+`slurp dev` is a launcher. The server itself is a separate binary from a
+separate crate, and the launcher looks for it next to the `slurp` binary, then
+on `PATH`:
+
+```bash
+cargo install slurp-dev-server
+```
+
+Without it you get exit code 127 and a message saying how to build it. From a
+clone, `cargo build -p slurp-dev-server` puts `slurp-dev` next to `slurp` in
+`target/debug` or `target/release`, which is where the launcher looks first.
+
+## The two ways to run it
+
+<Tabs>
+  <Tab title="Serve a build">
+    ```bash
+    slurp build --output dist
+    cd dist && slurp dev
+    ```
+
+    Simple, and what `slurp dev` supports directly. Reloads fire on any watched
+    file changing, but nothing recompiles your templates: you rebuild yourself.
+  </Tab>
+  <Tab title="Watch sources and rebuild">
+    ```bash
+    slurp-dev --theme-dir dist --source-dir . --port 3000
+    ```
+
+    The real editing loop. Every `.slurp` change under `--source-dir` triggers a
+    full `slurp build` into `--theme-dir`, then a reload. This is the mode worth
+    using, and it is only reachable by running `slurp-dev` directly, because
+    `slurp dev` forwards just `--port` and `--fixtures`.
+  </Tab>
+</Tabs>
+
+## Flags
+
+These are `slurp-dev`'s own flags. Through `slurp dev` you get `--port` and
+`--fixtures`, plus a `--bind` that is accepted and ignored.
+
+<ParamField query="--port" type="number" default="3000">
+  TCP port for the HTTP server and the reload WebSocket. They share one port.
+</ParamField>
+
+<ParamField query="--theme-dir" type="path" default=".">
+  The directory to serve. Pages come from `pages/*.html` inside it, and
+  everything else is served as a static asset.
+</ParamField>
+
+<ParamField query="--source-dir" type="path">
+  Template sources. Setting it makes the server run `slurp build` into
+  `--theme-dir` at startup and again after every `.slurp` change, and enables
+  server-side rendering for dynamic `[param]` routes.
+</ParamField>
+
+<ParamField query="--fixtures" type="path">
+  A JSON file, or a directory holding `fixtures.json`, mapping a request path to
+  a canned response. See [Fixtures](#fixtures).
+</ParamField>
+
+<ParamField query="--backend-url" type="url">
+  Proxy `/api/*` and `/auth/*` here, and resolve relative `{fetch}` URLs against
+  it. Combines with `--fixtures`: a fixture wins, and a miss falls through to the
+  backend.
+</ParamField>
+
+<ParamField query="--globals" type="path">
+  A JSON file seeded into every SSR render context, the same file you would pass
+  to `slurp build --globals`.
+</ParamField>
+
+<ParamField query="--css-watch-cmd" type="string">
+  A CSS build command to run in watch mode alongside the server, killed when the
+  server exits. It is run through the platform shell, so `PATH` and
+  `node_modules/.bin` resolve as they would in a terminal.
+</ParamField>
+
+<ParamField query="--allow-host" type="host">
+  An extra hostname the server will answer to. Repeatable. See
+  [Security posture](#security-posture).
+</ParamField>
+
+<Note>
+  `--globals` seeds the **SSR** context only. It is not passed through to the
+  `slurp build` that `--source-dir` runs, so a value used by a statically built
+  page still renders empty in this mode. Pass it to your own `slurp build` as
+  well if a page depends on it.
+</Note>
+
+## How reload works
+
+It is a **full page reload**, not module-level hot swapping. There is no state
+preservation and nothing is patched in place.
+
+The server injects three lines before `</head>` (falling back to `</body>`, then
+to the end of the document) into every HTML page it serves:
+
+```html
+<script>window.SLURP_MODE = 'dev'</script>
+<meta name="slurp-hmr-port" content="3000" />
+<script src="/_slurp/hmr-client.js"></script>
+```
+
+That client opens a WebSocket to `/_slurp/ws` and reconnects every second if it
+drops. Three message types come back:
+
+| Message | Effect in the browser |
+|---|---|
+| `{"type":"reload","pages":[...]}` | `location.reload()`. |
+| `{"type":"error","errors":[...]}` | A full-screen overlay listing each code, message and position. |
+| `{"type":"clear"}` | Removes the overlay. |
+
+What triggers them: the watcher looks at `.slurp`, `.css`, `.js`, `.ts`,
+`.json`, `.png`, `.jpg`, `.jpeg`, `.svg` and `.webp` files under `--theme-dir`,
+debounced 50 ms so one save is one rebuild. A change to a non-template file
+broadcasts `pages: ["*"]`, meaning everything. A change to a `.slurp` file is
+walked through an import graph first, so editing a component reloads the pages
+that import it, not just the component.
+
+A parse error in a watched `.slurp` file pushes the overlay rather than reloading
+into a broken page, and fixing the file clears it.
+
+<Tip>
+  The server logs nothing by default. Its built-in filter names a target the
+  binary does not use, so you have to ask for logs explicitly:
+  `RUST_LOG=slurp_dev=info slurp-dev --port 3000`. That prints the theme
+  directory it resolved, the watcher starting, the fixture count and whether the
+  backend answered, which is usually enough to explain "why is nothing
+  happening".
+</Tip>
+
+## Fixtures
+
+A fixtures file is a flat JSON object mapping a request path to the response to
+return for it:
+
+```json fixtures.json
+{
+  "/api/config": { "name": "Demo Store" },
+  "/api/products": [ { "name": "Widget", "price": 9.5 } ]
+}
+```
+
+```bash
+slurp dev --fixtures fixtures.json
+```
+
+Two things are answered from it: `/api/*` and `/auth/*` requests the page makes
+from the browser, and `{fetch}` URLs during SSR. A lookup tries the exact string
+first, then the path with any query string stripped, so `/api/products?limit=10`
+still matches a `/api/products` fixture.
+
+Slurp knows nothing about what the paths mean. It replays whatever JSON the file
+records.
+
+A miss with no `--backend-url` is a 404 that names the path so you can add it:
+
+```
+no fixture for /api/nope (add it to your fixtures file)
+```
+
+Passing a directory instead of a file reads `fixtures.json` inside it. A file
+that does not parse, or that is not a JSON object, exits 1 at startup rather
+than starting up half-configured.
+
+## Dynamic routes
+
+With `--source-dir` set, a request for an extensionless path that no built page
+matches is tried against a bracket file: `pages/[slug].html` catches
+`/some-product`, matching from the deepest segment first.
+
+The server then re-compiles the corresponding `.slurp` source with the route
+parameter in the context, resolves the template's `{fetch}` URLs (from fixtures
+first, then the backend, forwarding the request's `Cookie` header), and renders
+in development mode. If that fails it falls back to serving the pre-built bracket
+file as-is, which is usually a skeleton.
+
+## Security posture
+
+It binds `127.0.0.1` unconditionally, and that is not the interesting part.
+Binding loopback does not stop a web page you have open from talking to it, so
+there are two checks that do:
+
+- **Host.** A request whose `Host` header names anything but `localhost`,
+  `127.0.0.1` or `[::1]` is refused with a 403 explaining why. This is what
+  makes DNS rebinding fail: an attacker pointing their own domain at
+  `127.0.0.1` makes the browser treat their page as same-origin with your dev
+  server, and the `Host` header is the only place that lie is visible.
+- **Origin.** A present but foreign `Origin` is refused on every route. Without
+  it, a cross-site simple request could drive the backend proxy with your
+  cookies attached. An absent `Origin` is allowed, because a normal navigation
+  and a plain `curl` both send none.
+
+The WebSocket is stricter: a missing or `null` Origin is refused there too, since
+a real browser handshake always carries one. Without that check any page on the
+internet could open a socket to `ws://localhost:3000/_slurp/ws` and read the
+build errors, which carry absolute local filesystem paths.
+
+If you point a hosts-file entry at the server, opt it in by name:
+
+```bash
+slurp-dev --allow-host mytheme.test
+```
+
+That admits `mytheme.test` and nothing else. Path traversal is refused in every
+encoding, including through the dynamic-route and SSR branches, and the proxy
+deliberately does not relay the upstream's `access-control-allow-origin` header:
+a permissive dev backend answering `*` must not hand a foreign page read access
+to responses fetched with your cookies.
+
+<Warning>
+  **This is a development server. Do not expose it.** It is not hardened for
+  network exposure, it sets `cache-control: no-store` on everything, it does no
+  compression, and it will happily proxy to whatever `--backend-url` you gave
+  it. Ship the output of `slurp build` from an ordinary static host instead.
+</Warning>
+
+## Status
+
+`slurp-dev-server` is 0.1.0 and its CLI surface is unstable. `slurp dev`
+forwards a deliberately small part of it, and the flags it does not forward may
+still move.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="CLI" icon="terminal" href="/tooling/cli">
+    Building and validating from the shell.
+  </Card>
+  <Card title="Editor setup" icon="code" href="/tooling/editor-setup">
+    Highlighting and formatting while you write.
+  </Card>
+  <Card title="Pages" icon="file-code" href="/guides/pages">
+    Routing, and how a page becomes a file.
+  </Card>
+  <Card title="Common mistakes" icon="triangle-exclamation" href="/troubleshooting/common-mistakes">
+    Why a page can reload cleanly and still be wrong.
+  </Card>
+</CardGroup>

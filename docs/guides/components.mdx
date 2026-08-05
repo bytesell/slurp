@@ -1,0 +1,269 @@
+---
+title: "Components"
+description: "Declaring props, importing components, and the quoted-prop trap that fails silently."
+---
+
+A component is a `.slurp` file you include from somewhere else. It takes props,
+renders markup, and can accept children through a `<slot />`.
+
+## Write one
+
+Put it in `components/` so it is checked but never emitted as a page.
+
+```slurp components/Card.slurp
+---
+props {
+  title: string
+  featured: boolean = false
+}
+---
+<article class={"card", "card--featured": featured}>
+  <h3>${ title }</h3>
+  <slot />
+</article>
+```
+
+Import it in the frontmatter of whatever uses it, then use it as a tag:
+
+```slurp index.slurp
+---
+using "@components/Card"
+---
+<Card title={site.title} featured>
+  <p>Anything here lands in the slot.</p>
+</Card>
+```
+
+A tag is a component if its first character is uppercase. `<Card />` is a
+component; `<card />` is a plain HTML element and is emitted as one. There is no
+registration step beyond the `using` line.
+
+## The one thing to get right
+
+<Warning>
+  A quoted COMPONENT prop is a literal string. A quoted ELEMENT attribute
+  interpolates. The same characters mean two different things depending on
+  whether the tag starts with an uppercase letter, and nothing reports the
+  difference.
+
+  ```slurp
+  <span data-x="Hi ${name}"></span>   {* element: renders "Hi World"  *}
+  <Card title="Hi ${name}" />         {* component: renders "Hi ${name}" *}
+  <Card title={`Hi ${name}`} />       {* component, correct: "Hi World" *}
+  ```
+
+  This is the most common mistake in the language. If a prop shows up on the
+  page as literal `${...}` text, this is why.
+</Warning>
+
+To pass a value, brace it. To build a string around a value, brace a template
+literal.
+
+## Prop forms
+
+| Written | The component receives |
+|---|---|
+| `prop={expr}` | The evaluated expression. This is the form you want. |
+| ``prop={`text ${x}`}`` | A template literal, interpolated. |
+| `prop="text"` | A literal string. Never interpolated. |
+| `prop` | Boolean `true`. |
+| `prop=123` | TWO props. An unquoted value lexes as an attribute name, so you get `prop = true` and a second prop named `123`. Write `prop={123}`. |
+| `...spread` | A parse error. Both `<Card ...props />` and `<Card ...spread={props} />` fail. Pass props explicitly. |
+
+## Props are documentation, with one real effect
+
+The `props` block records names and types for tooling. Types are never checked
+at render time, so a missing prop is simply null and renders as the empty
+string. No error, no warning.
+
+Two things follow from that:
+
+- **An undeclared prop still arrives.** Passing `<Card note={"hi"} />` makes
+  `note` readable inside the component even though `props` never mentions it.
+  Declaring it is for the reader and for your editor, not for the renderer.
+- **A `= default` is the one part that is not decoration.** Omit `featured`
+  above and the component sees `false`, not null. The default expression is
+  evaluated in the caller's scope, so it can read the caller's globals.
+
+Write one declaration per line:
+
+```slurp
+---
+props {
+  title: string
+  count?: number
+  featured: boolean = false
+}
+---
+```
+
+<Warning>
+  A type expression runs to the end of the line. Two declarations sharing a line
+  with no comma between them merge into one:
+
+  ```slurp
+  props { a: string  b: string = "fallback" }
+  ```
+
+  `a` swallows `b`'s declaration as part of its own type and takes `"fallback"`
+  as its own default. `b` is never recorded, so `b`'s default never applies.
+  A comma fixes it, but one per line is clearer than either.
+</Warning>
+
+## Scope: page globals, overlaid by props
+
+A component renders in its own root scope. It sees the page globals, with
+whatever was passed to it layered on top and winning on a name collision.
+
+So a component can read a global it was never passed:
+
+```slurp components/Footer.slurp
+<footer>&copy; ${ year } ${ site.title }</footer>
+```
+
+What it cannot see is the caller's local bindings. An `{each}` loop variable and
+`loop.index` do not exist inside a component.
+
+<Warning>
+  ```slurp
+  {each product in products}
+    <Card />               {* Card cannot see `product`. Renders empty. *}
+  {/each}
+  ```
+
+  Pass it in:
+
+  ```slurp
+  {each product in products}
+    <Card title={product.title} />
+  {/each}
+  ```
+
+  Nothing reports this. It renders as blanks inside the component.
+</Warning>
+
+`loop.index` works the same way. It is a caller-side value, so build the string
+in the caller and pass the result:
+
+```slurp
+{each p in products}
+  <Card title={`#${loop.index} ${p.title}`} />
+{/each}
+```
+
+## Children and the slot
+
+Children of a component tag land at its `<slot />`.
+
+```slurp components/Badge.slurp
+<span class="badge"><slot /></span>
+```
+
+```slurp
+<Badge>Sale</Badge>
+```
+
+Two rules worth knowing before you rely on it:
+
+<AccordionGroup>
+  <Accordion title="A component with no slot discards its children">
+    `<NoSlot>children here</NoSlot>` renders the component and drops the text.
+    Silently. If content vanishes, check that the component has a `<slot />`.
+  </Accordion>
+  <Accordion title="There are no named slots">
+    A component has exactly one content slot. `<slot name="sidebar" />` renders
+    as a literal `<slot>` element carrying its fallback content, and a child
+    written `<nav slot="sidebar">` is not routed to it: it lands in the default
+    slot with everything else. You get both copies, in the wrong place, with no
+    diagnostic.
+
+    Anything that would have been a second slot becomes a prop, or its own
+    component. See [Layouts and slots](/guides/layouts) for the one exception,
+    which is the layout head slot.
+  </Accordion>
+</AccordionGroup>
+
+## Passing a list
+
+There is no special array prop. Pass the array and loop inside the component.
+
+```slurp components/List.slurp
+---
+props {
+  items: any
+}
+---
+<ul>
+  {each item in items}
+    <li>${ item.title }</li>
+  {empty}
+    <li>Nothing yet.</li>
+  {/each}
+</ul>
+```
+
+```slurp
+<List items={products} />
+```
+
+`any` is the honest annotation when you are not declaring the element shape.
+Writing `items: Product[]` renders identically, because no annotation is ever
+enforced, so pick whichever reads better for the next person.
+
+## Importing
+
+| Written | Local name |
+|---|---|
+| `using "@components/Card"` | `Card` |
+| `using "@components/Card" as Panel` | `Panel` |
+| `using "@components/ui/Button"` | `Button` |
+
+The `@` path is the file's path from the input root with the extension dropped,
+so `components/ui/Button.slurp` is `@components/ui/Button`. Nested directories
+work. Relative paths such as `"./components/Card"` do not resolve on the CLI.
+
+Imports are per file. A component that uses another component imports it itself;
+it does not inherit the page's imports.
+
+```slurp components/Outer.slurp
+---
+using "@components/Inner"
+---
+<div class="outer"><Inner label={"from outer"} /><slot /></div>
+```
+
+## When a component does not resolve
+
+<Warning>
+  An unresolvable component does NOT fail the build, and neither `build
+  --verbose` nor `validate --warnings` mentions it. It renders a placeholder
+  carrying the name and the props it was given, with its children inside:
+
+  ```html
+  <div data-slurp-props='{"title":"Hi"}' data-slurp-component=Card></div>
+  ```
+
+  So a typo in an import path looks like a clean build with a missing card. If a
+  component is not appearing, grep the output for `data-slurp-component`.
+</Warning>
+
+The same placeholder appears when a component includes itself. Recursion is
+stopped by a cycle guard rather than by an error, so `<Recur />` renders one
+level and then a placeholder.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Layouts and slots" icon="layer-group" href="/guides/layouts">
+    Shared chrome, and why a layout takes no props.
+  </Card>
+  <Card title="Displaying data" icon="code" href="/guides/displaying-data">
+    What `${ }` can contain, and what it deliberately cannot.
+  </Card>
+  <Card title="Control flow" icon="code-branch" href="/guides/control-flow">
+    `{if}`, `{each}`, `{match}` and the loop variables.
+  </Card>
+  <Card title="Common mistakes" icon="triangle-exclamation" href="/troubleshooting/common-mistakes">
+    The silent failures, collected in one place.
+  </Card>
+</CardGroup>

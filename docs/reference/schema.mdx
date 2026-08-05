@@ -1,0 +1,268 @@
+---
+title: "Schemas"
+description: "The section and block schema grammar in full: every setting kind, constraints, defaults, nested blocks, @theme targeting and the merge rules."
+---
+
+A section or block declares its own editor surface in frontmatter. That declaration
+is the contract between the template and whatever renders a settings form over it,
+which is how a non-technical person edits a page without touching the template.
+
+```slurp
+---
+section {
+  name: "Hero"
+  settings {
+    heading:    text = "Welcome" { label: "Heading" }
+    background: color = "#0a0a0a"
+    align:      select(left, center, right) = center
+    max_items:  number = 8 { min: 1, max: 24 }
+    show_badge: toggle = true
+    blurb:      richtext
+    logo:       image
+    cta:        link
+    marker:     icon
+  }
+  blocks {
+    @theme(heading, text, button)
+    faq_item { max: 12 settings { question: text  answer: richtext } }
+  }
+  max_per_page: 3
+}
+---
+<h1>${ section.settings.heading }</h1>
+{blocks}
+```
+
+## Grammar
+
+```text
+section_stmt  ::= "section" "{" section_entry* "}"
+block_stmt    ::= "block" "{" block_entry* "}"
+
+section_entry ::= "name" ":" (string | ident)
+                | "settings" "{" setting_def* "}"
+                | "blocks" "{" blocks_entry* "}"
+                | "max_per_page" ":" number     (>= 1)
+
+block_entry   ::= same as section_entry, MINUS max_per_page
+
+setting_def   ::= ident ":" setting_kind ("=" value)? ("{" meta_entry* "}")?
+setting_kind  ::= "text" | "richtext" | "color" | "image" | "icon" | "link"
+                | "number" | "toggle" | "select" "(" option ("," option)* ")"
+option        ::= ident | string
+
+blocks_entry  ::= "@theme" ("(" name ("," name)* ")")?
+                | ident "{" ("max" ":" number)?
+                          ("settings" "{" setting_def* "}")?
+                          ("blocks" "{" blocks_entry* "}")? "}"
+
+meta_entry    ::= ident ":" value
+value         ::= string | ident | number | "-" number | bool | "null"
+```
+
+Commas between entries are optional and are skipped wherever they appear.
+
+`section { }` requires a `name`; omitting it is `section block requires a name`.
+`block { }` does not require one.
+
+<Note>
+  **A block's TYPE is its file name**, not the `name` it declares.
+  `blocks/social_row.slurp` is the type `social_row` whatever its `name:` says. The
+  name is only a human label for the editor. A block file in a subdirectory
+  (`blocks/a/b.slurp`) is ignored at catalog-build time, because the renderer refuses
+  a `/` in a block type.
+</Note>
+
+## The nine setting kinds
+
+| Kind | Default when unset | Accepted saved value |
+|---|---|---|
+| `text` | `""` | any string |
+| `richtext` | `""` | a string, run through the `{html sanitize}` allowlist |
+| `color` | `""` | `#hex` of 3, 4, 6 or 8 digits, or a named CSS colour |
+| `image` | `""` | a string, URL-scheme filtered like `link` |
+| `icon` | `""` | `[a-z0-9-]+` only |
+| `link` | `""` | relative, anchor and query URLs kept as-is; an absolute one must be `http`, `https`, `mailto` or `tel` |
+| `select(a, b, c)` | the FIRST option | must be exactly one of the options |
+| `number` | `0` | must be numeric, and is CLAMPED to `meta.min` and `meta.max` |
+| `toggle` | `false` | must be a boolean |
+
+A value that fails its kind's check is DROPPED and the default is kept. Nothing is
+reported: validation happens at the merge boundary, in the host, not at compile
+time.
+
+### Defaults
+
+`= default` is optional. Without one, the kind's default from the table above is
+used. A default is written as a string, a bare identifier, a number, a negative
+number, a boolean or `null`:
+
+```slurp
+heading: text = "Welcome"
+align:   select(left, center, right) = center
+align:   select(left, center, right) = "center"    {* also valid *}
+offset:  number = -4
+```
+
+A `select` default that is not one of its own options is an error:
+
+```
+error[InvalidFrontmatter]: Default 'right' for setting 'align'
+is not one of the select options
+```
+
+<Note>
+  **`select(...)` options may be identifiers OR string literals**, and so may the
+  default. `select(left, center)` and `select("left", "center")` parse identically.
+  A claim in circulation that options must be bare identifiers is false; both were
+  checked against the compiler.
+
+  `select()` with no options is `select needs at least one option`.
+</Note>
+
+### Meta
+
+A trailing `{ ... }` object carries arbitrary keys. Three have meaning:
+
+| Key | Used by |
+|---|---|
+| `label` | The editor, as the field's display label |
+| `min` | `number`, as a clamp floor |
+| `max` | `number`, as a clamp ceiling |
+
+```slurp
+max_items: number = 8 { min: 1, max: 24, label: "How many" }
+```
+
+Any other key is stored and passed through untouched.
+
+### Colour values
+
+`color` accepts a `#hex` of exactly 3, 4, 6 or 8 hex digits, or a CSS colour
+keyword from a real allowlist (the named colours plus `transparent`,
+`currentcolor`, `inherit`, `initial`). Anything else keeps the default, so a colour
+setting can never carry `;`, `(` or `url(...)` into an attribute or a style context.
+
+### Link and image values
+
+Both run through the same URL gate. A value with no scheme (a relative path, an
+anchor, a query string) is kept as written. A value WITH a scheme must be `http`,
+`https`, `mailto` or `tel`; anything else collapses to `""`.
+
+`image` gets this gate too, and that matters: it is validated where the value
+ENTERS rather than where a theme happens to use it, because a theme is free to put
+it in `background:url(...)` where no render-site check would fire.
+
+## Uniqueness and bounds at parse time
+
+| Rule | Message on violation |
+|---|---|
+| Setting keys unique within a `settings { }` | `Duplicate setting key 'a'` |
+| Block types unique within a `blocks { }` | `Duplicate block type 'f'` |
+| `max` must be `>= 1` | `Expected positive number for max, found NumberLiteral(0.0)` |
+| `max_per_page` must be `>= 1` | `Expected positive number for max_per_page` |
+| At most one `section { }` per file | `Duplicate section block in frontmatter` |
+| At most one `block { }` per file | `Duplicate block schema in frontmatter` |
+
+A file may carry both a `section { }` and a `block { }`.
+
+## Nested blocks
+
+A block definition may declare its own `blocks { }` group, recursively. The nesting
+is bounded by the parser's depth limit of 64.
+
+```slurp
+blocks {
+  group {
+    max: 4
+    settings { align: select(left, center) = left }
+    blocks {
+      @theme(button, icon)
+    }
+  }
+}
+```
+
+## `@theme` targeting
+
+Inside a `blocks { }` group, `@theme` says which THEME-LEVEL blocks (the ones in
+`blocks/*.slurp`) may be inserted here.
+
+| Form | Meaning |
+|---|---|
+| `@theme` | Accept every theme block |
+| `@theme(a, b)` | Accept only those named |
+| `@theme()` | Error: `needs at least one block name` |
+| `@anything_else` | Error: `Unknown block target (only @theme is supported)` |
+
+Two resolution rules that are not obvious from the syntax:
+
+- **A bare `@theme` always wins over a whitelist**, regardless of the order the two
+  appear in. Widening is never silently narrowed.
+- **An inline block definition always beats the shared theme catalog**, so adding a
+  block to the palette can never change an existing section's behaviour.
+
+## Merge semantics
+
+Saved editor state is merged over the schema at render time, deliberately
+TOLERANTLY, so a theme upgrade can never break stored state:
+
+| Situation | Result |
+|---|---|
+| A saved key the schema no longer declares | Dropped |
+| A saved value of the wrong type for its kind | The schema default is kept |
+| A `number` outside `min`/`max` | Clamped |
+| A `select` value not in the option list | The default is kept |
+| A block of an unknown type | Dropped |
+| More blocks of one type than its `max` | The excess is dropped |
+| Nesting deeper than 64 | Truncated to an empty list |
+
+None of this is reported. The saved state itself is never modified; the merge only
+decides what the render sees.
+
+`id` and `type` on a section, and `id` on a block, pass a separate character gate
+because they are editor-minted strings that templates put into attributes, CSS
+selectors and JS strings. A value carrying a quote, an angle bracket, a backslash, a
+backtick or whitespace is DROPPED rather than rewritten.
+
+<Warning>
+  **The most surprising consequence: without a block catalog, a `@theme`-targeted
+  block is an unknown type and is DROPPED FROM THE RENDER while surviving intact in
+  storage.** The page renders as though nothing was added, and nothing is reported.
+
+  That is why the catalog is threaded through the merge rather than defaulted. It is
+  a host integration concern, not something a template author can guard against.
+</Warning>
+
+## Hard ceilings
+
+| Limit | Value |
+|---|---|
+| Blocks per type with no declared `max` | 200 |
+| Block merge depth | 64 |
+| Parser nesting depth (bounds schema nesting) | 64 |
+
+The 200 is a defensive ceiling, not an editor rule: a schema `max` is the real
+per-type cap, and its absence means "as many as the editor allows" up to this bound.
+
+## Reading a schema from a template
+
+```slurp
+${ section.settings.heading }
+${ section.id }
+${ block.settings.question }
+{blocks}
+```
+
+`section` is the merged object `{ id, type, settings, blocks }`. Inside a block file
+the same shape is bound to `block` instead, which is what lets `{blocks}` nest.
+
+<Warning>
+  **`slurp build` supplies no section state, so it applies no schema defaults.** A
+  page whose `section { }` declares `heading: text = "Welcome"` renders
+  `${ section.settings.heading }` as the empty string under the CLI, not as
+  `Welcome`, and `{blocks}` renders nothing.
+
+  Defaults are applied by the host's `render_section` call, which is what merges
+  saved state over the schema. Do not read a blank CLI render as a broken schema.
+</Warning>

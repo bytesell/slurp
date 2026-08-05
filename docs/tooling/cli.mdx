@@ -1,0 +1,322 @@
+---
+title: "CLI"
+description: "Every subcommand and flag of the slurp binary, with what each one is actually for."
+---
+
+`cargo install slurp-compiler` gives you one binary, `slurp`, with four
+subcommands:
+
+```bash
+slurp build      # compile a tree of templates to HTML
+slurp validate   # check without building
+slurp dev        # launch the hot-reload dev server
+slurp gitignore  # write a .gitignore for a theme
+```
+
+Nothing takes a positional argument. Every input is a named flag, so
+`slurp build ./site` is a usage error and `slurp build --input ./site` is what
+you meant.
+
+## Turn on --verbose first
+
+Slurp is total and tolerant: a loop past its budget is truncated, a missing
+property renders empty, and neither aborts the build. Those are recorded as
+warnings, and `slurp build` prints warnings **only** under `--verbose`.
+
+```bash
+slurp build --verbose
+```
+
+<Warning>
+  A build with no `-v` and no errors tells you almost nothing about whether the
+  page is right. This is the single most useful habit while developing.
+</Warning>
+
+The same is true of `validate`, where the flag is spelled `--warnings`:
+
+```bash
+slurp validate --warnings
+```
+
+The two differ in one detail worth knowing. `validate` always prints the warning
+**count** in its summary line, even without `-w`, so you can tell there is
+something to look at:
+
+```
+Validation ok: 1 file(s), 0 error(s), 1 warning(s).
+```
+
+`build` prints no such count. If you never pass `-v`, a warning leaves no trace
+at all.
+
+## slurp build
+
+Compiles every `.slurp` file under the input tree and writes HTML for the ones
+that are pages.
+
+```bash
+slurp build --input . --output dist --globals data.json --verbose
+```
+
+<ParamField query="--input, -i" type="path" default=".">
+  Directory to compile. The walk skips symlinks, dot-directories,
+  `node_modules`, `dist`, `target`, and the output directory itself however it
+  is spelled.
+</ParamField>
+
+<ParamField query="--output, -o" type="path" default="dist">
+  Where HTML and static assets are written.
+</ParamField>
+
+<ParamField query="--globals" type="path">
+  A JSON file whose top-level keys are seeded into the render context as
+  globals. Named-but-unreadable, or valid JSON that is not an object, is a hard
+  error rather than a silent empty context.
+</ParamField>
+
+<ParamField query="--middleware" type="dir">
+  Marks a directory as middleware, relative to `--input`. Repeatable. Without it,
+  a correct middleware file fails the build. See [Middleware](#middleware) below.
+</ParamField>
+
+<ParamField query="--verbose, -v" type="flag">
+  Print warnings, plus a line per file showing what was emitted, checked or
+  skipped.
+</ParamField>
+
+### What gets emitted
+
+Not every template becomes a file, and the rule is a blocklist rather than an
+allowlist of `pages/`:
+
+| Location | Compiled | Emitted |
+|---|---|---|
+| `components/` | yes | no |
+| `layouts/` | yes | no |
+| a `--middleware` directory | yes | no |
+| anything else, including a bare `index.slurp` | yes | yes |
+
+Components and layouts are still compiled, so a syntax error or a security
+violation in a component that no page imports yet still fails the build. They
+are not emitted because a layout rendered on its own is a fragment carrying
+literal `<slot>` elements, and nothing can route to it.
+
+`--verbose` shows the split:
+
+```bash
+slurp build --globals data.json --middleware middleware --verbose
+```
+
+```
+Building 4 file(s)...
+  .\components\Product.slurp (component, checked only)
+  .\layouts\base.slurp (layout, checked only)
+  .\middleware\auth.slurp (middleware, not emitted)
+  .\pages\index.slurp → dist\pages\index.html
+Build complete. 1 page(s) emitted, 2 component/layout file(s) checked, 1 middleware file(s) checked.
+```
+
+If a build emits nothing at all, it says so on stderr rather than reporting a
+cheerful zero.
+
+### Static assets
+
+Every non-`.slurp` file in the input tree is copied to the output, preserving
+its relative path. `css/site.css` becomes `dist/css/site.css` with no
+configuration.
+
+<Note>
+  The one exception is the file you passed to `--globals`. It is build input,
+  not a site asset, and copying it would publish it at a guessable path.
+  A globals file you do **not** pass on that run is copied like anything else.
+</Note>
+
+Output is minified. The quickstart's two products come out as one line:
+
+```html dist/index.html
+<!doctype html><body><h1>My Shop</h1><p>Pen - $3.00<p>Notebook - $12.50
+```
+
+### Middleware
+
+Middleware obeys inverted scope rules. `request.*`, `{redirect}` and `{next}`
+are legal only there, and most other path roots are illegal there. The compiler
+cannot guess which files those are, because a host may put middleware anywhere,
+so you tell it:
+
+```bash
+slurp build --middleware middleware --middleware auth/guards
+```
+
+Leave the flag off and a perfectly correct middleware file fails:
+
+```
+error[MiddlewareScopeViolation]: request.* is only accessible in middleware files (1:6)
+
+Build failed with 1 error(s).
+```
+
+The flag is matched on resolved paths, so `./middleware`, `middleware/` and
+`middleware` all name the same directory, and a sibling called
+`middleware-helpers/` is not caught by it. A directory that does not exist
+selects nothing, which leaves its files checked under the stricter page rules.
+
+## slurp validate
+
+Parses and security-checks every `.slurp` file without writing anything. This is
+the fast pre-commit gate, and it enforces what a build enforces rather than only
+what parses.
+
+```bash
+slurp validate --dir . --middleware middleware --warnings
+```
+
+<ParamField query="--dir, -d" type="path" default=".">
+  Directory to scan. Skips the same things the build walk does: symlinks,
+  dot-directories, `node_modules`, `dist` and `target`.
+</ParamField>
+
+<ParamField query="--middleware" type="dir">
+  Identical to the build flag, and required for the same reason.
+</ParamField>
+
+<ParamField query="--warnings, -w" type="flag">
+  Print the warnings, not just count them.
+</ParamField>
+
+Diagnostics carry a code, a message and a file position:
+
+```
+warning[JsTemplateLiteralInAttribute]: a JavaScript template literal (backticks) in the attribute `:href` contains a `${ }` slot ... (.\index.slurp:1:10)
+Validation ok: 1 file(s), 0 error(s), 1 warning(s).
+```
+
+<Tip>
+  Hold on to the code in brackets. It is what
+  [Errors](/reference/errors) is indexed by, and it is what to pass to the MCP
+  server's `slurp_reference` tool when you are working with an agent.
+</Tip>
+
+Two things `validate` does not do: it does not resolve imports across files, so
+a typo in a component path is not reported here (it renders as a placeholder),
+and the security walk stops at its first violation per file.
+
+## slurp dev
+
+Starts the hot-reload development server on the current directory.
+
+```bash
+slurp dev --port 3000
+```
+
+<ParamField query="--port, -p" type="number" default="3000">
+  TCP port for both the HTTP server and the reload WebSocket.
+</ParamField>
+
+<ParamField query="--bind, -b" type="string" default="127.0.0.1">
+  Accepted and then ignored. Any value other than `127.0.0.1` prints
+  `note: slurp-dev binds 127.0.0.1; --bind <value> is ignored.` and the server
+  still binds loopback.
+</ParamField>
+
+<ParamField query="--fixtures" type="path">
+  A JSON file (or a directory holding `fixtures.json`) mapping a request path to
+  a canned JSON response, so a theme previews with no backend running.
+</ParamField>
+
+`slurp dev` is a launcher, not the server. It locates the `slurp-dev` binary
+next to itself, falls back to `PATH`, and passes on only `--port` and
+`--fixtures`. If it cannot find one it exits 127 and tells you how to build it:
+
+```
+Could not launch the dev server binary `slurp-dev.exe`.
+Build it with `cargo build -p slurp-dev-server`, then re-run `slurp dev`
+```
+
+The server has more options than these three, and reaching them means running
+`slurp-dev` directly. See [Dev server](/tooling/dev-server).
+
+## slurp gitignore
+
+Writes a `.gitignore` suited to a theme. Most of its value is the section at the
+bottom listing what must **not** be ignored, chiefly a compiled stylesheet:
+ignoring that produces a theme that publishes and renders as unstyled HTML while
+every static check stays green.
+
+```bash
+slurp gitignore
+```
+
+<ParamField query="--path, -p" type="path" default=".">
+  Directory to write into. A path that is not a directory is an error.
+</ParamField>
+
+<ParamField query="--append" type="flag">
+  Add the rules to the end of an existing file, under a header saying where they
+  came from. Cannot be combined with `--force`.
+</ParamField>
+
+<ParamField query="--force" type="flag">
+  Replace an existing file.
+</ParamField>
+
+<ParamField query="--stdout" type="flag">
+  Print the template and write nothing. Checked before everything else, so this
+  works regardless of what is already on disk.
+</ParamField>
+
+Refusing to clobber is the default. Run it where a `.gitignore` already exists
+and it exits 1 with the three ways forward:
+
+```
+.\.gitignore already exists.
+
+  --append   add these rules to the end of it
+  --force    replace it
+  --stdout   print the template and write nothing
+```
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success. Also what an empty tree gives: "No .slurp files found" is not an error. |
+| `1` | Compile errors, an unreadable or non-object `--globals` file, a `gitignore` refusal, or a `--path` that is not a directory. |
+| `2` | Usage error from argument parsing: an unknown flag, a stray positional, or `--append` with `--force`. |
+| `127` | `slurp dev` could not find the `slurp-dev` binary. |
+
+`slurp dev` otherwise exits with whatever the server exited with.
+
+<Note>
+  A zero exit from `build` means no template raised an error. It does not mean
+  the pages are right. See
+  [Common mistakes](/troubleshooting/common-mistakes) for the failures that
+  produce a clean build and a broken page.
+</Note>
+
+## In CI
+
+```bash
+slurp validate --dir . --middleware middleware --warnings
+slurp build --input . --output dist --globals ci-globals.json --verbose
+```
+
+`validate` first is worth the extra seconds: it fails on the same errors without
+writing an output tree, so a failing pipeline leaves nothing half-built behind.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Dev server" icon="server" href="/tooling/dev-server">
+    Fixtures, reloads, and what it deliberately is not.
+  </Card>
+  <Card title="Working with agents" icon="robot" href="/tooling/agents">
+    The MCP server, which answers the same questions without a shell.
+  </Card>
+  <Card title="Errors" icon="circle-exclamation" href="/reference/errors">
+    Every diagnostic code, and what to do about it.
+  </Card>
+  <Card title="Limits" icon="gauge" href="/troubleshooting/limits">
+    The budgets that truncate rather than fail.
+  </Card>
+</CardGroup>

@@ -1,0 +1,498 @@
+---
+title: "Filters"
+description: "Every value filter and loop filter, with signatures, argument rules, real rendered output and caveats."
+---
+
+A filter transforms a value on its way out. Apply it with `|`, and chain
+left to right:
+
+```slurp
+${ name | lower | truncate(20) }
+```
+
+There are **13 value filters** and **4 loop filters**. The two tables are disjoint:
+using one where the other belongs is an `UnknownFilter` error.
+
+<Warning>
+  **Filter arguments must be LITERALS.** An argument is read only as a string,
+  number or boolean literal. Anything else yields the empty string, with no
+  diagnostic, so the filter silently falls back to its default or emits nothing.
+
+  ```slurp
+  ${ 1234.5 | currency(cur) }   {* renders " 1,234.50" - a leading space, no symbol *}
+  ${ 1234.5 | currency("EUR") } {* renders "€1.234,50" *}
+  ```
+
+  `default` is the only exception: the renderer evaluates its argument in scope.
+</Warning>
+
+Two more rules that shape how a filter mistake presents itself:
+
+- An **unknown value filter** records the diagnostic AND passes the value through
+  unfiltered, so the render itself continues. On the CLI the diagnostic is an error,
+  so `slurp build` fails and emits no file.
+- A **loop-filter error EMPTIES the collection**, which then renders the `{empty}`
+  branch. A broken `limit()` looks like missing data, not like an error.
+
+An unknown filter is also a **render-time** error, not a parse-time one:
+`slurp validate` reports nothing for `${ x | wat }`, and `slurp build` reports
+`error[UnknownFilter]: Unknown filter: wat`. The same is true of
+`InvalidFilterArgs` and `MissingImageSrc`.
+
+## Value filters
+
+Usable anywhere an expression is.
+
+| Filter | Signature | Returns |
+|---|---|---|
+| [`currency`](#currency) | `currency(code = "USD")` | string |
+| [`date`](#date) | `date(format = "MMM DD, YYYY")` | string |
+| [`default`](#default) | `default(fallback?)` | the value or the fallback |
+| [`fixed`](#fixed) | `fixed(n = 2)` | string |
+| [`float`](#float) | `float` | number |
+| [`int`](#int) | `int` | number |
+| [`js`](#js) | `js` | string |
+| [`json`](#json) | `json` | string |
+| [`lower`](#lower) | `lower` | string |
+| [`plural`](#plural) | `plural(one = "item", many = one + "s")` | string |
+| [`truncate`](#truncate) | `truncate(n = 50, suffix = "...")` | string |
+| [`unsafe_js`](#unsafe-js) | `unsafe_js` | string |
+| [`upper`](#upper) | `upper` | string |
+
+---
+
+### `currency`
+
+`currency(code = "USD")`
+
+Formats a number as money. The symbol always PREFIXES, for every code.
+
+| Code | Symbol | Decimals | Group | Decimal point |
+|---|---|---|---|---|
+| `USD` | `$` | 2 | `,` | `.` |
+| `EUR` | € | 2 | `.` | `,` |
+| `GBP` | £ | 2 | `,` | `.` |
+| `JPY` | ¥ | **0** | `,` | n/a |
+| `CAD` | `CA$` | 2 | `,` | `.` |
+| `AUD` | `AU$` | 2 | `,` | `.` |
+| `CHF` | `CHF ` (trailing space) | 2 | `'` | `.` |
+| anything else | the code plus a space | 2 | `,` | `.` |
+
+```slurp
+${ 1234.5 | currency }          {* $1,234.50 *}
+${ 1234.5 | currency("EUR") }   {* €1.234,50 *}
+${ 1234.5 | currency("CHF") }   {* CHF 1'234.50 *}
+${ 1234.5 | currency("SEK") }   {* SEK 1,234.50 *}
+${ 999.6  | currency("JPY") }   {* ¥1,000 *}
+${ -50    | currency("USD") }   {* -$50.00 *}
+${ 19.999 | currency("USD") }   {* $20.00 *}
+${ null   | currency("USD") }   {* $0.00 *}
+${ "49.990000" | currency("USD") } {* $49.99 *}
+```
+
+**Caveats.** An unknown code is not an error, so a typo produces `USDD 10.00`
+rather than a diagnostic. A negative puts the sign outside the symbol. Rounding
+happens once in minor units, so the fraction carries into the integer part.
+`null`, an array, an object and a non-numeric string all become 0, so the filter
+renders the zero amount rather than blank. A non-literal argument leaves the symbol
+as a single space.
+
+Crypto amounts do not belong here: they are asset-denominated and high precision,
+and 2-decimal rounding destroys them.
+
+---
+
+### `date`
+
+`date(format = "MMM DD, YYYY")`
+
+Formats an ISO date string. The complete token set:
+
+| Token | Example |
+|---|---|
+| `YYYY` | `2026` |
+| `YY` | `26` |
+| `MMMM` | `August` |
+| `MMM` | `Aug` |
+| `MM` | `08` |
+| `M` | `8` |
+| `DD` | `03` |
+| `D` | `3` |
+
+**There are no time tokens at all.** No hours, minutes, seconds, timezone or
+day-of-week.
+
+```slurp
+${ "2026-08-03T10:30:00Z" | date }                    {* Aug 03, 2026 *}
+${ "2026-08-03T10:30:00Z" | date("MMMM D, YYYY") }    {* August 3, 2026 *}
+${ "2024-12-01" | date("DD/MM/YY") }                  {* 01/12/24 *}
+${ "2024-12-01" | date("M-D-YYYY") }                  {* 12-1-2024 *}
+```
+
+**Caveats.** Parsing takes the text before the first `T` or space and splits it on
+`-`. If that yields fewer than three parts, **the input is returned unchanged**.
+Epoch milliseconds have no `-`, so they render verbatim as a long number with no
+diagnostic:
+
+```slurp
+${ 1700000000000 | date("MMM DD, YYYY") }   {* renders 1700000000000 *}
+```
+
+Pass RFC 3339 or `YYYY-MM-DD` strings, never epoch numbers.
+
+There is also no escaping in the format string, so a literal `D` or `M` in
+surrounding text is substituted:
+
+```slurp
+${ "2024-12-01" | date("Day: D") }   {* renders "1ay: 1" *}
+```
+
+---
+
+### `default`
+
+`default(fallback?)`
+
+Substitutes the fallback when the value is empty. "Empty" means `null`, the empty
+string, the empty array or the empty object. With no argument it yields the empty
+string.
+
+```slurp
+${ null | default("N/A") }   {* N/A *}
+${ ""   | default("N/A") }   {* N/A *}
+${ 0    | default("N/A") }   {* 0    - zero is NOT empty *}
+${ false | default("N/A") }  {* false - nor is false *}
+${ null | default(user.name) } {* the value of user.name *}
+```
+
+**Caveats.** This is the ONLY filter whose argument is evaluated as an expression
+in scope. Every other filter reads its arguments as literals, which is why
+`default(user.name)` works and `currency(user.code)` does not.
+
+Because there are no array literals, `default([])` is a parse error.
+
+---
+
+### `fixed`
+
+`fixed(n = 2)`
+
+Formats a number with exactly n decimal places. Returns a STRING.
+
+```slurp
+${ 1234.5 | fixed }     {* 1234.50 *}
+${ 1234.5 | fixed(0) }  {* 1234 *}
+${ 1234.5 | fixed(4) }  {* 1234.5000 *}
+${ null   | fixed(2) }  {* 0.00 *}
+```
+
+**Caveats.** `null`, an array, an object and a non-numeric string all become 0. A
+requested precision above 100 is silently clamped to 100. There is no grouping;
+for money use `currency`.
+
+---
+
+### `float`
+
+`float`
+
+Coerces to a floating-point number. Returns a NUMBER.
+
+```slurp
+${ "49.990000" | float }   {* 49.99 *}
+${ "1.5x"      | float }   {* 0 *}
+${ null        | float }   {* 0 *}
+```
+
+**Caveats.** String parsing is all-or-nothing, with no prefix parsing, so `"1.5x"`
+is 0 rather than 1.5. `null`, arrays and objects become 0.
+
+---
+
+### `int`
+
+`int`
+
+Coerces to a whole number, truncating floats toward zero. Returns a NUMBER.
+
+```slurp
+${ "42"   | int }   {* 42 *}
+${ 1234.5 | int }   {* 1234 *}
+${ true   | int }   {* 1 *}
+${ "12abc" | int }  {* 0 *}
+${ null   | int }   {* 0 *}
+${ arr    | int }   {* 0, for any array or object *}
+```
+
+**Caveats.** Same all-or-nothing string parsing as `float`: `"12abc"` is 0, not 12.
+A numeric string with a fraction does parse, and truncates: `"42.7"` is 42.
+
+---
+
+### `js`
+
+`js`
+
+Escapes a value for placement INSIDE a JavaScript string literal you wrote
+yourself. It escapes the backslash, both quote characters, the backtick, `$`,
+newlines, U+2028, U+2029, `<` and `/`. It does NOT add the surrounding quotes.
+
+```slurp
+<button @click="add('${ id | js }')">Add</button>
+<script>var n = '${ user.name | js }';</script>
+```
+
+With `user.name = "Bo"`, `| js` renders `Bo` and you supply the quotes.
+
+<Warning>
+  `| js` is a CLAIM about position, and a false claim is refused at compile time.
+  Using it where the slot is not inside a quoted string is an
+  `UnsafeScriptInterpolation` error, because escaping quote characters cannot
+  contain a value that lands next to a `;` or a `(`.
+
+  ```slurp
+  <button @click="add(${ id | js })">   {* ERROR *}
+  <button @click="add(${ id | json })"> {* correct *}
+  ```
+</Warning>
+
+You rarely need `js` for its escaping alone: in a JS-evaluated attribute the same
+escaper is applied automatically to an undeclared slot inside a string literal.
+Writing it silences the development-mode advisory and states the intent.
+
+---
+
+### `json`
+
+`json`
+
+Serialises the value as a complete JSON literal, script-safely. Every `<` is
+rewritten as a unicode escape so the value cannot form `</script>` or `<!--`, and
+U+2028 / U+2029 go the same way. All three are legal JSON string escapes, so the
+output is still valid JSON.
+
+```slurp
+<script>const config = ${ page.config | json };</script>
+<div x-data="{ n: ${ count | json } }"></div>
+```
+
+Real output, with `name = "Bo"` and `obj = { a: 1, b: "x" }`:
+
+| Expression | Renders |
+|---|---|
+| `${ name \| json }` | `"Bo"`, WITH its quotes |
+| `${ obj \| json }` | `{"a":1,"b":"x"}` |
+| `${ "<b>" \| json }` | a quoted string whose `<` arrives as a unicode escape |
+
+**Caveats.** Because it is self-delimiting, this is the right choice in JavaScript
+statement or expression position, where `| js` is refused. Do not wrap it in your
+own quotes as well. `null` serialises as the JSON literal `null`.
+
+---
+
+### `lower`
+
+`lower`
+
+Lowercases the stringified value, with full Unicode case mapping.
+
+```slurp
+${ "Bo Smith" | lower }   {* bo smith *}
+```
+
+**Caveats.** `null` renders as the empty string. An array or object is first
+serialised to JSON and then lowercased, which lowercases its KEYS too.
+
+---
+
+### `plural`
+
+`plural(one = "item", many = one + "s")`
+
+Picks a singular or plural word based on a count.
+
+```slurp
+${ 5   | plural("item") }             {* 5 items *}
+${ 1   | plural("item") }             {* 1 item *}
+${ 0   | plural("item", "items") }    {* 0 items *}
+${ 2.5 | plural("item") }             {* 2.5 items *}
+${ null | plural("item") }            {* 0 items *}
+```
+
+<Warning>
+  **The output includes the number.** `${ 5 | plural("item") }` renders `5 items`,
+  not `items`. Writing `${ count } ${ count | plural("item") }` prints the number
+  twice.
+</Warning>
+
+A `null` or non-numeric value counts as 0, so the plural word is used.
+
+---
+
+### `truncate`
+
+`truncate(n = 50, suffix = "...")`
+
+Shortens a string to n CHARACTERS, not bytes, so it is Unicode-safe. The suffix is
+appended only when it actually truncated.
+
+```slurp
+${ "The quick brown fox" | truncate(10) }             {* The quick ... *}
+${ "The quick brown fox" | truncate(10, " [more]") }  {* The quick [more] *}
+${ "Bo Smith" | truncate(50) }                        {* Bo Smith *}
+```
+
+**Caveats.** `null` becomes the empty string, which is length 0 and never
+truncates.
+
+If truncation lands inside an unterminated HTML tag, everything from that `<`
+onward is dropped before the suffix is added. That prevents half a tag from
+swallowing the rest of the page, but it means truncating markup can produce almost
+nothing:
+
+```slurp
+{* value: <a href="https://example.com">link</a> and more text *}
+${ value | truncate(12) }   {* renders just "..." *}
+```
+
+It does not balance tags, so truncating HTML is still unsafe. Truncate the text,
+not the markup.
+
+---
+
+### `unsafe_js`
+
+`unsafe_js`
+
+No escaping at all. It exists so a theme can declare that a value IS JavaScript the
+theme itself wrote, rather than data.
+
+```slurp
+<span x-text="${ valueExpression | unsafe_js }"></span>
+```
+
+<Warning>
+  Never route data through it. It is not reachable by untrusted data without an
+  XSS. It is also deliberately NOT accepted as the declaring filter in a
+  `<script>` body: the raw hatch there is `{html expr}`.
+</Warning>
+
+---
+
+### `upper`
+
+`upper`
+
+Uppercases the stringified value, with full Unicode case mapping.
+
+```slurp
+${ "Bo Smith" | upper }   {* BO SMITH *}
+${ "straße"   | upper }   {* STRASSE: the sharp s expands to two letters *}
+${ null       | upper }   {* the empty string *}
+${ obj        | upper }   {* {"A":1,"B":"X"} - the KEYS are uppercased too *}
+```
+
+---
+
+## Loop filters
+
+Usable ONLY in an `{each}` header, where they transform the collection before
+iteration. Chained left to right.
+
+| Filter | Signature | Argument required? |
+|---|---|---|
+| [`filter`](#filter) | `filter(key, value)` | yes, both |
+| [`limit`](#limit) | `limit(n)` | yes |
+| [`reverse`](#reverse) | `reverse` | no |
+| [`sort`](#sort) | `sort(key?, dir?)` | no |
+
+---
+
+### `filter`
+
+`filter(key, value)`
+
+Keeps items whose `item[key]` equals `value`. Both arguments must be literals.
+
+```slurp
+{* products = Banana(featured true), Apple(featured false), Cherry(featured true) *}
+{each p in products | filter("featured", true)}<b>${ p.name }</b>{/each}
+{* renders Banana Cherry *}
+```
+
+**Caveats.** Items that are not objects, or that lack the key, are DROPPED.
+Comparison is type-strict, so `filter("id", "1")` never matches a numeric `1` and
+the loop falls to its `{empty}` branch.
+
+Passing a variable as the key makes the key the empty string, so every item is
+dropped and the loop renders `{empty}`. Nothing is reported.
+
+---
+
+### `limit`
+
+`limit(n)`
+
+Truncates the collection to the first n items.
+
+```slurp
+{each p in products | limit(12)}<li>${ p.name }</li>{/each}
+```
+
+**Caveats.** The argument is REQUIRED and must be a literal number. A missing one
+reports `Filter 'limit' requires at least 1 argument(s)`; a variable reports
+`Filter 'limit' argument 0 must be a number`. Both are `InvalidFilterArgs`, both
+are render-time, and both empty the collection.
+
+---
+
+### `reverse`
+
+`reverse`
+
+Reverses the collection.
+
+```slurp
+{each p in products | limit(2) | reverse}<b>${ p.name }</b>{/each}
+```
+
+An empty or null collection stays empty.
+
+---
+
+### `sort`
+
+`sort(key?, dir?)`
+
+Sorts ascending by default. With a key, sorts by that field on each item, falling
+back to the whole item when the key is absent. The sort is stable.
+
+```slurp
+{each p in products | sort("price")}<b>${ p.name }</b>{/each}
+{* cheapest first: Apple Cherry Banana *}
+
+{each p in products | sort("price", "desc")}<b>${ p.name }</b>{/each}
+{* Banana Cherry Apple *}
+```
+
+<Warning>
+  **Only the exact string `"desc"` reverses.** `"DESC"` and `"descending"` both
+  mean ascending, silently. There is no `"asc"` keyword either; ascending is simply
+  what happens when the second argument is anything other than `"desc"`.
+</Warning>
+
+Cross-type pairs are ordered by type rank, so a mixed collection sorts
+deterministically rather than erratically:
+
+```slurp
+{* mixed = [3, "a", 1, true, null] *}
+{each v in mixed | sort}[${ v }]{/each}
+{* renders [][true][1][3][a] - null, bool, number, string *}
+```
+
+The full rank is null, bool, number, string, array, object. Arrays compare by length
+then elementwise (to a depth of 32, past which length alone decides); objects
+compare by length only, because an object has no intrinsic order.
+
+Without a key, objects therefore sort by how many fields they have, which is almost
+never what you want. Pass a key when sorting objects.

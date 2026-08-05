@@ -1,0 +1,625 @@
+---
+title: "Embedding with Rust"
+description: "Compiling Slurp templates from inside a Rust application: the entry points, the context, error handling, registries and the security walk."
+---
+
+The `slurp-compiler` crate is the CLI and the library. Embedding it is the path
+Slurp is actually designed for: the CLI is a thin wrapper, and everything below
+is what a host server calls per request.
+
+<Warning>
+  Slurp is **0.1.0, pre-1.0**. This API will change without a deprecation cycle
+  until 1.0. Pin an exact version if you depend on it.
+</Warning>
+
+## Adding the dependency
+
+```toml Cargo.toml
+[dependencies]
+slurp-compiler = "0.1"
+serde_json = "1"
+```
+
+`serde_json` is not optional in practice: the render context is a
+`serde_json::Value` and every schema extraction returns one.
+
+The minimum supported Rust version is **1.88**.
+
+## The shortest useful thing
+
+```rust
+use slurp_compiler::{CompileOptions, compile_template};
+
+let html = compile_template(
+    "<h1>${ site.title }</h1>",
+    CompileOptions {
+        context_json: Some(r#"{"site":{"title":"Shop"}}"#.to_string()),
+        ..Default::default()
+    },
+)?;
+
+assert_eq!(html, "<h1>Shop</h1>");
+```
+
+## Two shapes of entry point, and why
+
+There are two families, and picking the wrong one is the first thing to get
+right.
+
+<CardGroup cols={2}>
+  <Card title="Result-returning" icon="circle-exclamation">
+    `compile_template`, `compile_with_options`. Return
+    `Result<String, CompileError>`, giving you the **first** error and nothing
+    else. Good for a request handler that either serves a page or serves a 500.
+  </Card>
+  <Card title="Diagnostic-returning" icon="list-check">
+    `compile`, `compile_with_registry`, `compile_with_render_options`,
+    `render*`. Return `(String, ErrorAccumulator)`, giving you every error
+    **and** every warning. Good for a build, a publish gate, or anything that
+    reports to a human.
+  </Card>
+</CardGroup>
+
+The difference matters more than it looks, because **warnings are where the
+truncations live**. A `Result`-returning call that succeeds tells you nothing
+about whether a loop was capped at 1,000 items or the output budget cut the page
+in half. Only the accumulator carries that. See
+[Limits](/troubleshooting/limits).
+
+---
+
+## `compile_template`
+
+```rust
+pub fn compile_template(
+    source: &str,
+    options: CompileOptions,
+) -> Result<String, CompileError>
+```
+
+Compiles one template string in `BuildMode::Production`. The file name recorded
+on every diagnostic is the literal `"template"`, since there is no path to use.
+`CompileError` implements `Display` as
+`[Code] message at file:line:column (severity)`, so this prints as
+`... at template:3:12 (error)`.
+
+It runs, in order: parse, the compile-time security walk, then render. Any of the
+three failing returns the first error.
+
+### `CompileOptions`
+
+```rust
+pub struct CompileOptions {
+    pub context_json: Option<String>,
+    pub is_middleware: bool,
+    pub virtual_files: Option<HashMap<String, String>>,
+    pub entry_file: Option<String>,
+    pub budget: MemoryBudget,
+}
+```
+
+It derives `Default`, so `..Default::default()` is the normal way to build one.
+
+<ParamField path="context_json" type="Option<String>" default="None">
+  The render context, as a **JSON string** rather than a `serde_json::Value`.
+
+  **Invalid JSON is silently treated as `{}`.** There is no error for it. Every
+  path in the template then resolves to null and the page renders as though the
+  data were missing, which looks exactly like a template bug. Validate the JSON
+  yourself before calling, or use [`compile`](#compile) instead, which takes a
+  `&serde_json::Value` and cannot have this problem.
+</ParamField>
+
+<ParamField path="is_middleware" type="bool" default="false">
+  Compile under middleware rules. They are genuinely inverted, not merely looser:
+  `request.*`, `{redirect}` and `{next}` are legal **only** when this is `true`,
+  and every other path root except `env` and `loop` is illegal when it is.
+
+  It is a compile option rather than a path convention, because a host may keep
+  middleware anywhere. A caller with no way to know passes `false`, which is what
+  the CLI does.
+</ParamField>
+
+<ParamField path="virtual_files" type="Option<HashMap<String, String>>" default="None">
+  A virtual file system for multi-file compilation, used only by
+  `compile_with_options` below. `compile_template` ignores it.
+</ParamField>
+
+<ParamField path="entry_file" type="Option<String>" default="None">
+  Which key in `virtual_files` is the entry point. Defaults to `"entry.slurp"`.
+  `compile_template` ignores it.
+</ParamField>
+
+<ParamField path="budget" type="MemoryBudget" default="MemoryBudget::DEFAULT">
+  Per-render allocation caps: 8 MiB per filter value, 64 MiB of cumulative filter
+  work, 16 MiB of output. See [Limits](/troubleshooting/limits#memory-budgets)
+  for what each one defends against and how to size it.
+</ParamField>
+
+---
+
+## `compile_with_options`
+
+```rust
+pub fn compile_with_options(
+    options: CompileOptions,
+) -> Result<String, CompileError>
+```
+
+Compiles from `options.virtual_files`, starting at `options.entry_file`. Circular
+imports are detected up front, before anything is compiled.
+
+```rust
+use std::collections::HashMap;
+use slurp_compiler::{CompileOptions, compile_with_options};
+
+let mut files = HashMap::new();
+files.insert("entry.slurp".to_string(), "<p>${ a }</p>".to_string());
+
+let html = compile_with_options(CompileOptions {
+    context_json: Some(r#"{"a":"vfs"}"#.into()),
+    virtual_files: Some(files),
+    entry_file: Some("entry.slurp".into()),
+    ..Default::default()
+})?;
+
+assert_eq!(html, "<p>vfs</p>");
+```
+
+<Note>
+  With no `virtual_files`, or with an `entry_file` that is not a key in the map,
+  this compiles the **empty string** and returns `Ok("")`. It is not an error.
+</Note>
+
+Note that `virtual_files` drives **circular-import detection**, not component
+resolution. Resolving `<Card />` against a set of files is the
+[file registry](#components-and-layouts-the-file-registry), which is a separate
+mechanism.
+
+---
+
+## `compile`
+
+```rust
+pub fn compile(
+    source: &str,
+    file: impl Into<String>,
+    context: &serde_json::Value,
+    mode: BuildMode,
+) -> (String, ErrorAccumulator)
+```
+
+The entry point the CLI uses, and usually the right one for a host. It takes a
+real `serde_json::Value`, a real file name for diagnostics, and returns every
+diagnostic rather than the first.
+
+```rust
+use serde_json::json;
+use slurp_compiler::{BuildMode, compile};
+
+let (html, diag) = compile(
+    "${ msg }",
+    "page.slurp",
+    &json!({ "msg": "<b>hi</b>" }),
+    BuildMode::Production,
+);
+
+assert_eq!(html, "&lt;b&gt;hi&lt;/b&gt;");
+assert!(!diag.has_errors());
+```
+
+**On any error, `html` is empty.** Check `diag.has_errors()` before serving it,
+or you will serve a blank page instead of a 500.
+
+### `BuildMode`
+
+```rust
+pub enum BuildMode {
+    Development,
+    Production,
+}
+```
+
+`Development` renders `{debug expr}` nodes as a visible `<pre data-slurp-debug>`
+element and records two extra advisory warnings: CSS-structural characters
+stripped from a `style` value, and an un-annotated interpolation in a
+JavaScript-evaluated attribute. `Production` strips `{debug}` entirely and stays
+silent about both.
+
+The **budget** diagnostics are not among the development-only pair. Loop
+truncation, the output-byte budget and the render-depth budget are recorded in
+both modes, because each one silently removes content from the page.
+
+---
+
+## Components and layouts: the file registry
+
+`compile` on its own resolves nothing. A `<Card />` whose import cannot be
+resolved renders a placeholder and does **not** fail:
+
+```html
+<div data-slurp-component="Card" data-slurp-props="{&quot;title&quot;:&quot;Ann&quot;}"></div>
+```
+
+To resolve imports, supply a registry mapping paths to source:
+
+```rust
+use std::collections::HashMap;
+use std::sync::Arc;
+use serde_json::json;
+use slurp_compiler::{BuildMode, compile_with_registry};
+
+let mut registry = HashMap::new();
+registry.insert(
+    "@components/Card".to_string(),
+    "---\nprops {\n  title: any\n}\n---\n<p>${ title }</p>".to_string(),
+);
+
+let (html, diag) = compile_with_registry(
+    "---\nusing \"@components/Card\"\n---\n<Card title={ name } />",
+    "page.slurp",
+    &json!({ "name": "Ann" }),
+    BuildMode::Production,
+    Arc::new(registry),
+);
+
+assert!(html.contains("<p>Ann</p>"));
+assert!(!diag.has_errors());
+```
+
+<Warning>
+  **The registry key is exactly the path written in the template**, so
+  `@components/Card` for `using "@components/Card"` and `@layouts/base` for
+  `<layout src="@layouts/base">`. A filesystem-shaped key such as
+  `components/Card.slurp` does **not** resolve, and the failure is the silent
+  placeholder above rather than an error.
+
+  A host that also does route resolution by file path usually needs both key
+  forms in the map. Insert both; they are cheap and they answer different
+  questions.
+</Warning>
+
+An unresolvable **layout** has a different signature, a comment wrapper around an
+unfilled `<slot>`:
+
+```html
+<!-- layout:@layouts/base --><slot></slot><p>page content</p><!-- /layout:@layouts/base -->
+```
+
+Grep your output for `data-slurp-component` and `<!-- layout:` in tests. They are
+the only evidence that resolution failed.
+
+The registry is an `Arc<HashMap<..>>` so it can be built once per theme and
+cloned per request. Parsed component ASTs are memoised per render, so a component
+used a hundred times in a loop is parsed once.
+
+---
+
+## `RenderOptions`, for everything at once
+
+`compile_with_registry` cannot set a memory budget and `compile` cannot set a
+registry. `RenderOptions` carries both.
+
+```rust
+pub struct RenderOptions {
+    pub mode: BuildMode,
+    pub file_registry: Arc<HashMap<String, String>>,
+    pub budget: MemoryBudget,
+}
+```
+
+```rust
+use slurp_compiler::{BuildMode, MemoryBudget, RenderOptions, compile_with_render_options};
+
+let options = RenderOptions::new(BuildMode::Production)
+    .with_registry(registry)
+    .with_budget(MemoryBudget::scaled(0.25));
+
+let (html, diag) = compile_with_render_options(&source, "page.slurp", &context, &options);
+```
+
+`compile` and `compile_with_registry` both delegate here with
+`MemoryBudget::DEFAULT`, so adding options to an existing call site cannot change
+behaviour by accident.
+
+---
+
+## The security walk
+
+This is the part to get right, because it is what makes rendering an untrusted
+template defensible.
+
+The walk enforces rules that live **outside the parser**, so a file that parses
+cleanly can still be refused:
+
+- an unfiltered `${ }` in a `<script>` body,
+- a `| js` slot in JavaScript statement position, where escaping quote characters
+  cannot contain the value,
+- `env.SLURP_SECRET_*`, in any file, including the bracket form `env["..."]` and
+  any non-constant `env[k]`,
+- `request.*` outside middleware, and anything but `request`, `env` and `loop`
+  inside it,
+- `{redirect}` and `{next}` outside middleware.
+
+### Which entry points run it
+
+| Function | Security walk | Notes |
+|---|---|---|
+| `compile_template` | Yes | `is_middleware` from `CompileOptions` |
+| `compile_with_options` | Yes | `is_middleware` from `CompileOptions` |
+| `compile` | Yes | always as a page (`is_middleware = false`) |
+| `compile_with_registry` | Yes | always as a page |
+| `compile_with_render_options` | Yes | always as a page |
+| `parse` | **No** | lex and parse only |
+| `render`, `render_with_options`, `render_with_registry` | **No** | you must have run it yourself |
+| `render_section` and the `sections::*` family | **No** | same |
+| `extract_schema`, `extract_block_schema` | **No** | parse only |
+
+The three `compile_with_*` functions hardcode `is_middleware = false` on purpose.
+Every entry point that reaches them compiles a **page**; passing `true` would
+relax the page rules, and taking a caller-supplied flag would let a page opt out
+of them. A middleware file is never compiled at all: the CLI checks it with
+`check_security(.., true)` and stops there, and a server resolves it at request
+time.
+
+### Running it yourself
+
+If you parse once and render many times, run the walk after parsing and before
+the first render.
+
+```rust
+use serde_json::json;
+use slurp_compiler::{BuildMode, check_security, parse, render};
+
+let (doc, parse_diag) = parse(source, "page.slurp")?;
+if parse_diag.has_errors() {
+    return Err(/* ... */);
+}
+
+check_security(&doc, "page.slurp", false)?;
+
+// Now the document may be rendered repeatedly with different contexts.
+let (html, diag) = render(&doc, &json!({ "x": 1 }), BuildMode::Production);
+```
+
+```rust
+pub fn check_security(
+    doc: &ast::Document,
+    file: &str,
+    is_middleware: bool,
+) -> Result<(), CompileError>
+```
+
+<Warning>
+  The walk returns on its **first** violation. It is a `Result`, not an
+  accumulator, so at most one security diagnostic comes back per call. Fix the
+  reported one and run it again to see the next.
+</Warning>
+
+`is_middleware` must match the value the eventual compile will use, because the
+rules genuinely differ.
+
+---
+
+## Rendering a parsed document
+
+```rust
+pub fn render(
+    doc: &Document,
+    context: &serde_json::Value,
+    mode: BuildMode,
+) -> (String, ErrorAccumulator)
+
+pub fn render_with_registry(
+    doc: &Document,
+    context: &serde_json::Value,
+    mode: BuildMode,
+    file_registry: Arc<HashMap<String, String>>,
+) -> (String, ErrorAccumulator)
+
+pub fn render_with_options(
+    doc: &Document,
+    context: &serde_json::Value,
+    options: &RenderOptions,
+) -> (String, ErrorAccumulator)
+```
+
+`render` takes three arguments and has no `file` parameter, so its diagnostics
+carry an empty file name. Like `compile`, it returns diagnostics rather than a
+`Result`, because **rendering is total**: it always produces a string, and every
+failure mode is either an empty value or a truncation.
+
+`parse` is the other half:
+
+```rust
+pub fn parse(
+    source: &str,
+    file: impl Into<String>,
+) -> CompileResult<(Document, ErrorAccumulator)>
+```
+
+`Err` means lexing failed outright. `Ok` with a non-empty `diag.errors` means the
+parser recovered enough to build an AST but the source is still broken. Check
+both.
+
+---
+
+## Error handling
+
+```rust
+pub struct CompileError {
+    pub file: String,
+    pub line: usize,
+    pub column: usize,
+    pub message: String,
+    pub severity: Severity,
+    pub code: ErrorCode,
+}
+
+pub enum Severity { Error, Warning, Info }
+
+pub type CompileResult<T> = Result<T, CompileError>;
+```
+
+`ErrorCode` is `#[non_exhaustive]`, so match on it with a catch-all arm. See
+[Error codes](/reference/errors) for the full list, including the eight codes
+that are declared for host integrations and that the compiler itself never
+emits.
+
+### `ErrorAccumulator`
+
+```rust
+pub struct ErrorAccumulator {
+    pub errors: Vec<CompileError>,
+    pub warnings: Vec<CompileError>,
+}
+```
+
+- `push(e)` files by severity: `Error` into `errors`, `Warning` and `Info` into
+  `warnings`.
+- `has_errors()` is your gate before serving the HTML.
+- `all()` iterates errors then warnings.
+- `MAX_DIAGNOSTICS` is **1,000** combined. Past that, `push` is a no-op, because
+  a pathological input can raise a diagnostic per token. If you see exactly
+  1,000, assume there are more.
+
+A practical handler:
+
+```rust
+let (html, diag) = compile_with_render_options(&source, &path, &context, &options);
+
+if diag.has_errors() {
+    for e in &diag.errors {
+        tracing::error!(code = ?e.code, file = %e.file, line = e.line, "{}", e.message);
+    }
+    return Err(RenderFailed);
+}
+
+// Warnings are not fatal, but they are how you learn the page was truncated.
+for w in &diag.warnings {
+    tracing::warn!(code = ?w.code, "{}", w.message);
+}
+
+Ok(html)
+```
+
+---
+
+## Sections and theme blocks
+
+Sections are the editor-facing half of the language: a template declares a typed
+schema in its frontmatter, a host stores per-instance state as JSON, and the two
+are merged at render time.
+
+```rust
+use slurp_compiler::{extract_schema, extract_block_schema};
+
+// Returns Ok((None, diag)) when the template declares no section schema.
+let (schema, diag) = extract_schema(source, "sections/Hero.slurp")?;
+
+// The same, for a `block { }` schema in blocks/<name>.slurp.
+let (block, diag) = extract_block_schema(source, "blocks/button.slurp")?;
+```
+
+Rendering one section, in four variants of increasing capability:
+
+```rust
+pub fn render_section(
+    doc: &Document,
+    section_state: &Value,
+    context: &Value,
+    mode: BuildMode,
+) -> (String, ErrorAccumulator)
+
+pub fn render_section_with_registry(/* + Arc<HashMap<String, String>> */) -> _;
+pub fn render_section_with_registry_and_blocks(/* + &BlockCatalog */) -> _;
+pub fn render_section_with_options(
+    doc: &Document,
+    section_state: &Value,
+    context: &Value,
+    catalog: &BlockCatalog,
+    options: &RenderOptions,
+) -> (String, ErrorAccumulator);
+```
+
+The merge is deliberately **tolerant**: unknown setting keys are dropped,
+out-of-range numbers are clamped to the schema's `min` and `max`, and nothing is
+rejected. That tolerance is what lets saved state survive a theme update.
+
+### The catalog is not optional if you use `@theme`
+
+```rust
+pub type BlockCatalog = HashMap<String, BlockDef>;
+
+pub fn catalog_entry(block_type: &str, schema: &ast::BlockSchema) -> BlockDef;
+pub fn theme_block_type(path: &str) -> Option<&str>;   // "blocks/button.slurp" -> "button"
+
+pub fn merged_section_value(schema: &SectionSchema, state: &Value) -> Value;
+pub fn merged_section_value_with(
+    schema: &SectionSchema,
+    state: &Value,
+    catalog: &BlockCatalog,
+) -> Value;
+```
+
+<Warning>
+  **Without a catalog, a `@theme`-targeted block is an unknown type and is
+  dropped at merge time**, while surviving intact in storage. The page renders as
+  though nothing was added and nothing is lost, so it presents as an editor that
+  saves and does not display. This is the most surprising behaviour in the schema
+  subsystem.
+
+  Build the catalog from the theme's `blocks/<name>.slurp` files with
+  `theme_block_type` and `catalog_entry`, then use `merged_section_value_with`
+  and `render_section_with_registry_and_blocks`. The catalog-free variants are
+  correct only for a theme that uses no `@theme` targeting.
+</Warning>
+
+Blocks are also capped: nesting is merged to depth 64, and a type with no
+declared `max` is capped at 200 instances. Both drop silently. See
+[Limits](/troubleshooting/limits#section-and-block-ceilings).
+
+---
+
+## Other exports
+
+```rust
+pub fn sanitize_html(input: &str) -> String
+```
+
+The same ammonia-backed sanitizer `{html expr sanitize}` uses, exposed so a host
+can sanitize on its own boundary with the identical allow-list.
+
+```rust
+pub fn eval_fetch_urls(
+    doc: &ast::Document,
+    context: &serde_json::Value,
+) -> Vec<(String, String)>
+```
+
+Returns `(variable_name, evaluated_url)` for every `{fetch}` node in a document.
+The dev server uses it to pre-fetch API data before SSR. It walks the body and
+all three side branches, and stops descending past 512 levels, silently.
+
+Also re-exported: `Document`, `parse`, the `sections::*` family, `SECTIONS_HTML_KEY`
+and `section_group_html_key`, which are the reserved context keys a host uses to
+inject pre-rendered section HTML for `{sections}` and `{sections "name"}`.
+
+---
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Limits" icon="gauge" href="/troubleshooting/limits">
+    Every budget, and how to size `MemoryBudget` for your host.
+  </Card>
+  <Card title="Error codes" icon="circle-exclamation" href="/reference/errors">
+    What each `ErrorCode` means, and which ones never occur.
+  </Card>
+  <Card title="JavaScript API" icon="js" href="/reference/javascript-api">
+    The same compiler through WASM, for editors and browsers.
+  </Card>
+  <Card title="Sections and blocks" icon="table-cells" href="/guides/sections-and-blocks">
+    The schema language these functions consume.
+  </Card>
+</CardGroup>

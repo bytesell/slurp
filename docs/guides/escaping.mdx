@@ -1,0 +1,360 @@
+---
+title: "How escaping works"
+description: "What Slurp escapes for you, what it deliberately does not, and where the line sits when you did not write the template."
+---
+
+Every `${ }` is escaped, and it is escaped for the exact place it lands rather
+than by one general-purpose rule. This page is what that means in practice:
+which contexts get which treatment, shown by rendering hostile values and
+printing the real output, plus the three places where the answer is deliberately
+"not escaped" and you have to know it.
+
+The full threat model, with the enforcing function named for every property, is
+in the [security model](/security-model). This page is the working version.
+
+<Note>
+  Every output below is what the compiler emits. `slurp build` then minifies,
+  which may drop quotes and decode entities that are unambiguous in position.
+  The two forms parse identically.
+</Note>
+
+## HTML text
+
+Five characters are encoded: `&` `<` `>` `"` `'`.
+
+```slurp
+<p>${ review.body }</p>
+```
+
+With `review.body` set to `<script>alert('xss')</script>`:
+
+```html
+<p>&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;</p>
+```
+
+It renders as visible text. `/` is deliberately left alone, because it has no
+meaning in HTML text and encoding it would corrupt every URL and date string
+that passes through.
+
+This is compile-time, always on, and there is no opt-out short of `{html}`.
+
+## Attribute values
+
+An attribute value gets the same five characters plus a backtick, which is more
+than a double-quoted attribute strictly needs. The extra characters are there so a
+value cannot break out even if the surrounding quoting is later changed.
+
+```slurp
+<div title="${ review.body }">
+```
+
+```html
+<div title="&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;">
+```
+
+## URL attributes
+
+`href` `src` `xlink:href` `poster` `formaction` `action` `cite` `background`
+`data` `ping` `srcset` are checked for a script scheme. A `javascript:`,
+`data:` or `vbscript:` value collapses to empty rather than the attribute being
+dropped, so the markup shape does not change:
+
+```slurp
+<a href="${ link }">Visit</a>
+```
+
+With `link` set to `javascript:alert(1)`:
+
+```html
+<a href="">Visit</a>
+```
+
+Detection strips control characters, Unicode whitespace, zero-width characters
+and bidi controls before matching, so padding the scheme with invisible
+characters does not get past it.
+
+`srcset` is on the list but is checked only at its leading scheme, and a
+`srcset` value is a comma-separated list of candidates. A scheme in the second
+or later candidate is not caught. Those URLs are fetched as images rather than
+executed, so it is a resource-load question, but do not treat `srcset` as
+validated.
+
+<Warning>
+  The check runs on the **finished** attribute value, which means it is
+  effective on a plain `href` or `src` and not on the bound Alpine form. On
+  `:href` the value is a JavaScript expression, so the interpolated slot arrives
+  wrapped in JSON quotes and the leading-scheme test no longer matches:
+
+  ```slurp
+  <a :href="${ link }">Visit</a>
+  ```
+
+  ```html
+  <a :href="&quot;javascript:alert(1)&quot;">Visit</a>
+  ```
+
+  Alpine evaluates that expression to the string and sets the URL. Route
+  untrusted URLs through a plain `href`, and validate them on the server if they
+  must go anywhere else. There is a `link` schema setting kind that does exactly
+  that check at the point a value is saved; see
+  [Sections and blocks](/guides/sections-and-blocks).
+</Warning>
+
+## JavaScript-evaluated attributes
+
+Native `on*` handlers and the Alpine attributes are evaluated as JavaScript by
+the browser, and entity escaping alone does not protect them: the HTML parser
+decodes character references **before** the JavaScript engine reads the value,
+so `&#39;` is a `'` again at exactly the layer that matters.
+
+Slurp escapes each slot according to where it lands in the author's own text.
+Inside a string literal you wrote, the JavaScript metacharacters are
+backslash-escaped:
+
+```slurp
+<button @click="add('${ payload }')">
+```
+
+With `payload` set to `');alert(1);('`:
+
+```html
+<button @click="add(&#39;\&#39;);alert(1);(\&#39;&#39;)">
+```
+
+The browser decodes the entities, the backslashes remain, and the value stays a
+single string.
+
+In code position there is nothing to escape into, because `;` and `(` have no
+JavaScript string escape. The value is encoded as a JSON literal instead, which
+is self-delimiting whatever it contains:
+
+```slurp
+<div x-init="n = ${ payload }">
+```
+
+```html
+<div x-init="n = &quot;&#39;);alert(1);(&#39;&quot;">
+```
+
+Choosing a filter here, and the compile errors around it, are covered in
+[Scripts and attributes](/guides/scripts-and-attributes).
+
+## `style` attributes
+
+CSS has no escaping that works in every grammatical position, so the structural
+characters are **removed** from a slot in `style`, `:style` or `x-bind:style`:
+`;` `{` `}` `(` `)` `"` `'` `\` `@` `*` `<` `>` and NUL.
+
+```slurp
+<div style="background:url(${ path })">
+```
+
+With `path` set to `a);color:red;x:url(b`:
+
+```html
+<div style="background:url(acolor:redx:urlb)">
+```
+
+The injected declaration is gone. `:` and `/` survive because neither opens a
+declaration on its own and both are needed by the legitimate shape.
+
+A `<style>` **body** is a raw text element, so `${ }` there is not interpolated
+at all and emits as literal characters. There is no way to put a value into a
+stylesheet body, which is also why there is nothing to neutralise.
+
+## `srcdoc`
+
+An `iframe srcdoc` holds an entire document: the attribute parser decodes it
+once and then the result is parsed as HTML, which undoes attribute escaping
+completely. So the value is run through the same allowlist sanitizer that
+`{html expr sanitize}` uses, at the layer the iframe will actually see:
+
+```slurp
+<iframe srcdoc="${ doc }"></iframe>
+```
+
+With `doc` set to `<p>Hi <em>there</em></p><script>alert(1)</script><a href="javascript:alert(1)" target="_blank">x</a>`:
+
+```html
+<iframe srcdoc="&lt;p&gt;Hi &lt;em&gt;there&lt;/em&gt;&lt;/p&gt;&lt;a target=&quot;_blank&quot; rel=&quot;noopener noreferrer&quot;&gt;x&lt;/a&gt;"></iframe>
+```
+
+The script is gone, the `javascript:` href is gone, the markup survives, and the
+anchor picked up `rel="noopener noreferrer"` on the way through. Sanitizing
+rather than escaping is what keeps `srcdoc` usable for the one thing it is for.
+
+This applies to the plain attribute. The bound form (`:srcdoc`) is a JavaScript
+expression, so the rules in the previous section cover it instead.
+
+## Raw HTML: `{html}` and `sanitize`
+
+`{html expr}` is the only way to emit unescaped markup, and it is a statement
+that you trust the value:
+
+```slurp
+<div>{html body}</div>
+```
+
+```html
+<div><p>Hi <em>there</em></p><script>alert(1)</script><a href="javascript:alert(1)" target="_blank">x</a></div>
+```
+
+Everything came through, script included. Use this only for HTML your own
+application produced.
+
+`{html expr sanitize}` runs the same input through an allowlist:
+
+```slurp
+<div>{html body sanitize}</div>
+```
+
+```html
+<div><p>Hi <em>there</em></p><a target="_blank" rel="noopener noreferrer">x</a></div>
+```
+
+The allowlist is the contract: anything not on it is stripped, including tags
+that do not exist yet. `script`, `iframe`, `form`, `style` and friends are
+absent from it rather than being special-cased, and every `on*` handler
+disappears because no attribute outside the list is ever kept. Permitted URL
+schemes are `http`, `https` and `mailto`. The full tag and attribute lists are
+in the [security model](/security-model#raw-html-output).
+
+Two things `sanitize` does not do, worth knowing before you rely on it:
+
+- `img`, `source` and `picture` survive with `src`, so sanitized content can
+  still load an off-origin image. That is a tracking beacon: it leaks the
+  reader's IP address and a referrer to whoever wrote the content.
+- `class` and `id` survive, so content can adopt your stylesheet's classes and
+  collide with element IDs your own scripts query.
+
+If no HTML at all should appear, use a plain `${ }` rather than a sanitizer.
+
+## The three places nothing is escaped
+
+These are deliberate. Each one exists because the alternative would break a
+legitimate use, and each one means the same thing: **only put values the theme
+itself controls here.**
+
+### `attr={ expr }` on a JavaScript-evaluated attribute
+
+The brace form carries no surrounding author text, so there is no quote context
+to read and the renderer does not guess. The value gets attribute escaping only,
+which is inert in an attribute the browser will evaluate:
+
+```slurp
+<button @click={ handler }>Buy</button>
+```
+
+With `handler` set to `');alert(1);('`:
+
+```html
+<button @click="&#39;);alert(1);(&#39;">Buy</button>
+```
+
+The browser decodes that back to `');alert(1);('` and hands it to Alpine. This
+form is for composing handlers out of theme-written expressions, which is why it
+is not escaped. Use the quoted form for anything carrying data.
+
+`srcdoc` is the one exception: it is sanitized no matter who composed it,
+because the value becomes a whole document.
+
+### `{html expr}` without `sanitize`
+
+Covered above. It is the raw hatch, and it is doing what it says.
+
+### `{html expr}` as an attribute spread
+
+The spread form forwards whole attributes:
+
+```slurp
+<input {html attrs} />
+```
+
+With `attrs` set to `class="x" onclick="alert(1)" x-show="open"`:
+
+```html
+<input class="x" x-show="open" />
+```
+
+The `onclick` was dropped, which looks like a sanitizer and is not one. The name
+gate rejects native `on*` handlers (including the `:onclick` and
+`x-bind:onclick` aliases) plus `x-html`, `x-data`, `x-init` and `x-effect`, and
+that is all it can do: `x-show` survived, and Alpine evaluates `x-show` as
+JavaScript. An allowlist that admits `:disabled="loading"` cannot also exclude
+`:title="alert(1)"`, because they are the same construct. What the gate buys is
+narrowing, not safety. **Never route untrusted data into an attribute spread.**
+
+## When you did not write the template
+
+Slurp exists to render templates from somewhere else, so it is worth being
+precise about which half of that is the engine's job.
+
+**What the engine guarantees.** A template is data transformed into markup: no
+code runs at render time, there are no callable functions, and rendering
+performs no network request and reads no file the host did not hand it. Every
+`${ }` is escaped for its context. The budgets on iteration, depth, output size
+and filter memory bound what any single render can cost. A template author who
+wants to inject script has to go through one of the three unescaped forms above,
+all of which are greppable.
+
+**What the host has to do.** Three of these come up every time:
+
+<AccordionGroup>
+  <Accordion title="Call validate_full, not validate">
+    Several rules live in the compiler's security walk rather than in the
+    parser: an unfiltered `${ }` in a `<script>` body, a false `| js` claim,
+    `env.SLURP_SECRET_*`, and `request.*` or `{redirect}` outside middleware.
+    The WASM `validate` export does not run that walk, so a tool calling it will
+    report a file clean that `slurp build` then rejects. An authoring tool,
+    publish gate or CI check should call `validate_full`.
+  </Accordion>
+  <Accordion title="Keep secrets out of the render context">
+    The compiler never reads the process environment. `env` is an ordinary
+    context root that the host populates, exactly like `product` or `site`. The
+    compiler refuses a template that names `env.SLURP_SECRET_*`, which catches an
+    author naming a secret the obvious way, and it cannot catch a host that put a
+    secret in the context under a different key. If you populate `env` from the
+    process environment, copy across an explicit allowlist.
+  </Accordion>
+  <Accordion title="Do not use a WASM render as the production render">
+    `render` and `render_dev` do not run the security walk. The render-time
+    backstops still fire, so a `<script>` body slot and a false `| js` claim are
+    still caught, but the middleware and secret-env rules are not.
+  </Accordion>
+</AccordionGroup>
+
+Rendering is also **total**: missing data becomes the empty string, budgets
+truncate rather than aborting, and unknown editor settings are dropped rather
+than rejected. That is what makes an untrusted template safe to render in a
+shared service, and it is also why a badly wrong template still returns a 200.
+Build with `--verbose` and read
+[Common mistakes](/troubleshooting/common-mistakes).
+
+## Summary
+
+| Where the value lands | What happens |
+|---|---|
+| HTML text | `& < > " '` encoded |
+| Attribute value | The same five plus a backtick, encoded |
+| `href` `src` and the other URL attributes | Script schemes collapse to empty |
+| JS attribute, inside a string you wrote | JavaScript string escaping |
+| JS attribute, code position | Encoded as a JSON literal |
+| `style` / `:style` | CSS-structural characters removed |
+| `srcdoc` | Allowlist sanitizer |
+| `<script>` body | Compile error unless `\| js` or `\| json` |
+| `<style>` body | Not interpolated at all |
+| `attr={ expr }` on a JS attribute | Attribute escaping only, which is inert there |
+| `{html expr}` | Nothing |
+| `{html expr sanitize}` | Allowlist sanitizer |
+| `{html expr}` as an attribute spread | Unsafe names dropped, values untouched |
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Scripts and attributes" icon="code" href="/guides/scripts-and-attributes">
+    The practical side: `| js` versus `| json`, and the errors around them.
+  </Card>
+  <Card title="Security model" icon="shield-check" href="/security-model">
+    The threat model, the image optimizer and dev server, and the known limits.
+  </Card>
+</CardGroup>

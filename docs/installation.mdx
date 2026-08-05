@@ -1,0 +1,266 @@
+---
+title: "Installation"
+description: "The compiler, plus the optional pieces and what each one is actually for."
+---
+
+One thing is required: the `slurp` CLI. Everything else on this page solves a
+specific problem, so skip anything whose problem you do not have. The
+["Which of these do I need"](#which-of-these-do-i-need) table is the short
+answer.
+
+## The compiler
+
+```bash
+cargo install slurp-compiler
+```
+
+The crate is `slurp-compiler` and the binary it installs is `slurp`. That one
+binary does everything: `build`, `validate`, `dev` and `gitignore`.
+
+<Note>
+  Requires a Rust toolchain, **1.88 or newer**. Slurp is on edition 2024, and
+  its dependency tree pushes the floor from 1.85 up to 1.88. An older toolchain
+  fails with `feature "edition2024" is required` rather than a version message,
+  so run `rustup update stable` if you see that.
+</Note>
+
+### Verify it
+
+```bash
+slurp --version
+```
+
+```
+slurp 0.1.0
+```
+
+A version number only proves the binary runs. Point it at a project to prove it
+works:
+
+```bash
+slurp validate --dir .
+```
+
+```
+Validation ok: 4 file(s), 0 error(s), 0 warning(s).
+```
+
+`validate` exits 0 on success and 1 if anything failed, so it is safe to put in
+a script or a pre-commit hook.
+
+## Which of these do I need
+
+| Piece | Install | Reach for it when |
+|---|---|---|
+| `slurp` CLI | `cargo install slurp-compiler` | Always. It builds and validates. |
+| `slurp-dev` | `cargo install slurp-dev-server` | You want hot reload while editing. |
+| `slurp-image` | `cargo install slurp-image` | Your templates use `<Image>`. Plain `<img>` needs nothing. |
+| `@bytesell/slurp-runtime` | `pnpm add @bytesell/slurp-runtime` | You want client navigation or Alpine on the page. |
+| `@bytesell/slurp-mcp` | `pnpm add -D @bytesell/slurp-mcp` | A coding agent writes Slurp for you. |
+| `prettier-plugin-slurp` | `pnpm add -D prettier-plugin-slurp` | You format with Prettier. |
+| VS Code extension | [see below](#vs-code) | You edit `.slurp` files in VS Code. |
+| `slurp-compiler` as a library | a Cargo dependency | You render templates from a Rust server. |
+| `@bytesell/slurp-compiler-wasm` | `pnpm add @bytesell/slurp-compiler-wasm` | You render templates from JavaScript. |
+
+## The dev server
+
+```bash
+cargo install slurp-dev-server
+```
+
+The crate is `slurp-dev-server` and the binary is `slurp-dev`. It watches a
+theme, rebuilds on change and pushes a reload over a WebSocket.
+
+`slurp dev` is a **launcher**, not a second implementation: it looks for a
+`slurp-dev` binary next to the `slurp` binary, falls back to your `PATH`, and
+forwards only `--port` and `--fixtures`. Without `slurp-dev-server` installed,
+`slurp dev` has nothing to launch. Invoke `slurp-dev` directly when you need the
+flags the launcher does not forward, such as `--theme-dir`, `--globals` or
+`--backend-url`.
+
+<Warning>
+  The dev server binds `127.0.0.1` unconditionally and is not hardened for
+  network exposure. It is a local tool.
+</Warning>
+
+See [Dev server](/tooling/dev-server) for what it does and deliberately does not
+do.
+
+## The image service
+
+```bash
+cargo install slurp-image
+slurp-image --port 3001
+```
+
+An HTTP service that resizes and transcodes images on demand. You need it only
+if a template uses the `<Image>` component, which emits URLs pointing at it. An
+ordinary `<img>` tag is ordinary HTML and involves no service at all.
+
+It binds loopback and sends no CORS headers by default, because it fetches
+URLs an attacker may influence. See [Images](/guides/images) for running it and
+for what it refuses.
+
+## The browser runtime
+
+```bash
+pnpm add @bytesell/slurp-runtime
+```
+
+Optional in the strong sense. `slurp build` produces plain HTML and injects no
+script tag, so a page that does not need client navigation or `{fetch}`
+refetching ships no JavaScript from Slurp. A theme that wants the runtime loads
+it by hand:
+
+```html
+<script type="module" src="/slurp.core.js"></script>
+```
+
+ESM only, and no CommonJS build.
+
+<Warning>
+  Read `runtime/README.md` before depending on any of it. Several runtime
+  features are implemented and unit-tested but bind to markup the 0.1.0 compiler
+  does not emit, so against the shipped compiler they attach to nothing and
+  silently do no work. Those entry points are published under an
+  `experimental/` prefix to say so.
+</Warning>
+
+## The MCP server
+
+```bash
+pnpm add -D @bytesell/slurp-mcp
+```
+
+An MCP server that gives a coding agent tools to validate, render, lint and
+inspect templates, plus the language reference. Slurp is small and unusual
+enough that a model will otherwise invent syntax that compiles and renders
+wrong.
+
+It runs the real compiler in-process through `@bytesell/slurp-compiler-wasm`,
+so it needs no `slurp` binary on your `PATH`. Requires **Node 20 or newer**.
+
+Most clients can fetch it on demand rather than installing it:
+
+<CodeGroup>
+```bash Claude Code
+claude mcp add slurp -- npx -y @bytesell/slurp-mcp
+```
+
+```json .mcp.json
+{
+  "mcpServers": {
+    "slurp": {
+      "command": "npx",
+      "args": ["-y", "@bytesell/slurp-mcp"]
+    }
+  }
+}
+```
+</CodeGroup>
+
+See [Working with agents](/tooling/agents).
+
+## Editor tooling
+
+### Prettier
+
+```bash
+pnpm add -D prettier-plugin-slurp
+```
+
+Formats `.slurp` files. Prettier 3 is a peer dependency.
+
+```json .prettierrc
+{
+  "plugins": ["prettier-plugin-slurp"]
+}
+```
+
+### VS Code
+
+The extension gives syntax highlighting, completions, hover docs, go to
+definition and formatting. Build and install the `.vsix` from a clone:
+
+```bash
+cd vscode-extension
+pnpm install && pnpm run build && pnpm run package
+code --install-extension slurp-vscode-0.1.0.vsix
+```
+
+Requires VS Code 1.85 or newer, and Node 20 or newer to build.
+
+<Warning>
+  **Diagnostics do not work in 0.1.0, and they fail silently.**
+  `slurp.validateOnType` and `slurp.validateOnSave` default to `true`, so the
+  feature looks live, but a file full of parse errors shows no squiggles and
+  logs nothing. Highlighting, completions, hover and go to definition are fine.
+  Until it is fixed, validate from the command line with
+  `slurp validate --dir . --warnings`.
+</Warning>
+
+See [Editor setup](/tooling/editor-setup).
+
+## Embedding the compiler
+
+To render templates from your own program rather than from the CLI:
+
+<CodeGroup>
+```toml Cargo.toml
+[dependencies]
+slurp-compiler = "0.1"
+```
+
+```json package.json
+{
+  "dependencies": {
+    "@bytesell/slurp-compiler-wasm": "0.1"
+  }
+}
+```
+</CodeGroup>
+
+The Rust library does not minify; only the CLI does. See
+[Embedding with Rust](/reference/rust-api) and the
+[JavaScript API](/reference/javascript-api).
+
+## Building from a clone
+
+```bash
+git clone https://github.com/bytesell/slurp
+cd slurp
+cargo build --workspace --release
+```
+
+The three binaries land in `target/release/` as `slurp`, `slurp-dev` and
+`slurp-image`. `slurp dev` prefers a `slurp-dev` sitting beside it, so a
+workspace build gives you a working `slurp dev` with nothing installed.
+
+The JavaScript packages are a separate build, and they need Node 22 or newer,
+pnpm 9 or newer, and `wasm-pack`:
+
+```bash
+pnpm install
+pnpm build
+```
+
+`pnpm build` is what produces `@bytesell/slurp-compiler-wasm`, which the MCP
+server and the compiler integration tests both import, so run it before
+`pnpm test` on a fresh clone. `CONTRIBUTING.md` has the full gate list.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build and render a real page in about five minutes.
+  </Card>
+  <Card title="Project structure" icon="folder-tree" href="/project-structure">
+    Which directories are special, and which are just yours.
+  </Card>
+  <Card title="CLI" icon="terminal" href="/tooling/cli">
+    Every subcommand and flag.
+  </Card>
+  <Card title="Images" icon="image" href="/guides/images">
+    When you need the image service, and when you do not.
+  </Card>
+</CardGroup>

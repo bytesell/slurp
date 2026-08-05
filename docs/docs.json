@@ -1,0 +1,105 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Slurp",
+  "description": "Lightweight, agent-first templating engine.",
+  "colors": {
+    "primary": "#0F766E",
+    "light": "#2DD4BF",
+    "dark": "#0D5C56"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "index",
+              "installation",
+              "quickstart",
+              "project-structure"
+            ]
+          },
+          {
+            "group": "Build",
+            "pages": [
+              "guides/pages",
+              "guides/components",
+              "guides/layouts",
+              "guides/displaying-data",
+              "guides/control-flow",
+              "guides/filters",
+              "guides/scripts-and-attributes",
+              "guides/sections-and-blocks",
+              "guides/images",
+              "guides/middleware"
+            ]
+          },
+          {
+            "group": "Security",
+            "pages": [
+              "guides/escaping",
+              "security-model"
+            ]
+          },
+          {
+            "group": "Tooling",
+            "pages": [
+              "tooling/cli",
+              "tooling/dev-server",
+              "tooling/editor-setup",
+              "tooling/agents"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "troubleshooting/common-mistakes",
+              "troubleshooting/limits"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Language",
+            "pages": [
+              "reference/tags",
+              "reference/expressions",
+              "reference/filters",
+              "reference/frontmatter",
+              "reference/schema",
+              "reference/errors"
+            ]
+          },
+          {
+            "group": "Embedding",
+            "pages": [
+              "reference/rust-api",
+              "reference/javascript-api",
+              "reference/image-service"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/bytesell/slurp"
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/bytesell/slurp"
+    }
+  }
+}

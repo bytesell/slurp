@@ -1,0 +1,546 @@
+---
+title: "Common mistakes"
+description: "The silent failures, organised by what you are looking at. Slurp rarely raises, so a broken template usually looks like missing data."
+---
+
+Most Slurp mistakes do not produce an error. A typo in a property name renders
+the empty string, a budget truncates the page, an unresolvable component leaves a
+placeholder, and the build exits 0 in all three cases. So the usual debugging
+loop, read the error and fix it, is not available to you.
+
+This page is organised by **symptom**, because the symptom is all you have.
+
+## First, make the failures visible
+
+Three tools, in the order to reach for them.
+
+<Steps>
+  <Step title="Build with --verbose">
+    ```bash
+    slurp build --globals data.json --verbose
+    ```
+
+    Errors always print. **Warnings print only with `-v`**, and warnings are
+    where the truncations live. A 1,500-item list quietly rendering 1,000 items
+    looks like this and nothing else:
+
+    ```
+      warning[IterationLimitExceeded]: Iteration limit: collection has 1500 items, capped at 1000 (0:0)
+    ```
+
+    Without `-v` the same build prints `Build complete. 1 page(s) emitted.` and
+    exits 0.
+  </Step>
+
+  <Step title="Validate with warnings on">
+    ```bash
+    slurp validate --dir . --warnings
+    ```
+
+    This parses every `.slurp` file, including components and layouts, and runs
+    the same compile-time security walk a build runs. It catches the hard
+    failures (an unfiltered interpolation in a `<script>` body, a malformed
+    `{match}` arm) and the one advisory that matters most,
+    `JsTemplateLiteralInAttribute`.
+
+    If your project has middleware, pass `--middleware <dir>` or every legal
+    `request.*` access reports a spurious `MiddlewareScopeViolation`.
+  </Step>
+
+  <Step title="Run slurp_lint from the MCP server">
+    The compiler will never tell you about a quoted component prop, a filter
+    argument that is not a literal, or `items.length`. Those all compile clean
+    and then render wrong.
+
+    `slurp_lint` exists for exactly that set. Every rule in it describes
+    something both `slurp validate` and `slurp build` accept with zero output.
+    See [Working with agents](/tooling/agents) for wiring the server up. It is
+    worth running even when no agent is involved.
+  </Step>
+</Steps>
+
+<Tip>
+  When a value is blank and you cannot see why, put `{debug expr}` next to it and
+  serve the page with `slurp dev`. In development mode it emits a visible
+  `<pre data-slurp-debug>` holding the resolved value. In a production build it
+  emits nothing, silently, so it is safe to leave in and useless to rely on.
+</Tip>
+
+---
+
+## A value renders as nothing
+
+By far the largest category. Slurp resolves an unknown path to null and renders
+null as the empty string, so most mistakes end up here.
+
+### You called a function
+
+There are no callable functions in Slurp. A call parses, evaluates to null, and
+renders empty. No diagnostic.
+
+```slurp
+{* wrong: all three render nothing *}
+<p>${ Math.max(a, b) }</p>
+<p>${ String(count) }</p>
+<p>${ items.length } items</p>
+```
+
+```slurp
+{* right *}
+<p>${ a > b ? a : b }</p>
+<p>${ count }</p>
+{each item in items}
+  <p>${ loop.count } items</p>
+{/each}
+```
+
+There are no array properties either, so `items.length` is null for the same
+reason: an identifier segment applied to an array is always null. Inside an
+`{each}` you can read `loop.count` for the collection size. Outside one, pass the
+count through the render context. The only call-shaped construct in the whole
+language is a filter, and filters are a fixed set.
+
+Detected by `slurp_lint`, rules `call-always-null` and `array-length-property`.
+
+### The value lives in a loop and you are inside a component
+
+A component renders in its own root scope: the page globals, overlaid by the
+props you passed explicitly. It can read a page global it was never given, which
+is often convenient. What it cannot see is the caller's **local** bindings, and
+an `{each}` variable is a local binding.
+
+```slurp
+{* wrong: Card renders with an empty product *}
+{each p in products}
+  <Card />
+{/each}
+```
+
+```slurp
+{* right *}
+{each p in products}
+  <Card product={p} />
+{/each}
+```
+
+`loop.index`, `loop.first` and the rest are invisible inside a component too.
+Pass them as props if the component needs them.
+
+Nothing detects this. It renders as empty values inside the component.
+
+### You wrote a JavaScript template literal in an attribute
+
+Slurp interpolates `${ }` in attribute values itself. A backtick string you wrote
+for the browser has its slots consumed by the template engine and evaluated
+against the **server** render context, so a client-side variable renders empty.
+
+```slurp
+{* wrong: emits :href="`/p/`" *}
+<template x-for="p in products">
+  <a :href="`/p/${p.slug}`">View</a>
+</template>
+```
+
+```slurp
+{* right *}
+<template x-for="p in products">
+  <a :href="'/p/' + p.slug">View</a>
+</template>
+```
+
+The result is dead links and unstyled elements on a page that otherwise looks
+completely fine. `slurp validate` reports it as a `JsTemplateLiteralInAttribute`
+warning. It is a warning and not an error, so the build still succeeds.
+
+### You read back a `{$let}` binding
+
+`{$let}` seeds **client** state. Server-side it emits a
+`<script type="application/json">` payload and creates no template binding, so
+reading the name back in the same template renders empty.
+
+```slurp
+{* wrong: emits the script tag, then nothing *}
+{$let count = 0}
+<p>${ count }</p>
+```
+
+Pass the value through the render context and read it directly instead.
+
+Detected by `slurp_lint`, rule `let-binding-not-readable`.
+
+### The path is just wrong
+
+Worth saying, because it is the boring answer and it is often the right one.
+`${ produts.name }` renders empty exactly like every case above. Path access is
+null-safe at every depth, so `${ a.b.c.d }` on a null `a` is empty rather than an
+error. Check the JSON you are feeding in before hunting for a language subtlety.
+
+---
+
+## A component renders nothing, or a stray `<div>` appears in the HTML
+
+### The import did not resolve
+
+A component whose import cannot be resolved does **not** fail the build. It
+renders a placeholder:
+
+```html
+<div data-slurp-component="Card" data-slurp-props="{&quot;title&quot;:&quot;Ann&quot;}"></div>
+```
+
+So a typo in an import path looks like a clean build with a missing card. Grep
+your output for `data-slurp-component` whenever a component vanishes.
+
+A layout that does not resolve has its own signature, a comment wrapper around an
+unfilled `<slot>`:
+
+```html
+<!-- layout:@layouts/base --><slot></slot><p>your page content</p><!-- /layout:@layouts/base -->
+```
+
+If you are embedding the compiler, the usual cause is the file registry key. The
+key must be exactly the path written in the `using` directive or the
+`<layout src>` attribute, so `@components/Card`, not `components/Card.slurp`. See
+[Embedding with Rust](/reference/rust-api).
+
+### The prop was a quoted string
+
+This is the single most common mistake in the language. Element attributes
+interpolate; component props do not. The same quoted text means two different
+things depending on whether the tag starts with an uppercase letter.
+
+```slurp
+{* wrong: title arrives as the literal characters "Hi ${name}" *}
+<Card title="Hi ${name}" />
+
+{* wrong: product is the seven-character string "product" *}
+<Product product="product" />
+```
+
+```slurp
+{* right *}
+<Card title={`Hi ${name}`} />
+<Product product={product} />
+```
+
+The compiler says nothing. The prop arrives with the interpolation syntax intact
+as literal characters, so the first line above renders the text `Hi ${name}` on
+the page.
+
+Detected by `slurp_lint`, rule `component-prop-literal-interpolation`.
+
+---
+
+## My `<script>` tag will not compile
+
+Unlike most things here, this one is a hard build failure. That is deliberate.
+
+### `UnsafeScriptInterpolation` in a script body
+
+A `<script>` body is a raw-text element: the HTML parser hands it to the
+JavaScript engine without decoding character references, so the entity escaping
+that protects ordinary text is completely inert there. Every interpolation in a
+script body must therefore declare what it is.
+
+```slurp
+{* wrong: UnsafeScriptInterpolation, at build time *}
+<script>var n = ${ user.name };</script>
+```
+
+```slurp
+{* right: | json for a bare value that needs its own delimiters *}
+<script>var n = ${ user.name | json };</script>
+
+{* right: | js for a value inside a string literal you wrote *}
+<script>var m = "${ user.name | js }";</script>
+```
+
+`| unsafe_js` is deliberately not accepted in a script body.
+
+A JavaScript template literal cannot be written in a script body at all, for the
+same reason it cannot be written in an attribute: Slurp reads `${` as its own
+interpolation. Build the string by concatenation.
+
+### `UnsafeScriptInterpolation` on a `| js` in an attribute
+
+`| js` is a **claim** that the slot sits inside a quoted JavaScript string
+literal, and a slot that declares it is emitted verbatim. Outside a string that
+turns the auto-escaper off and puts nothing in its place, and escaping quote
+characters cannot contain a value that lands next to a `;` or a `(`.
+
+```slurp
+{* wrong: UnsafeScriptInterpolation *}
+<button @click="add(${ id | js })">Add</button>
+```
+
+```slurp
+{* right: a bare JSON value *}
+<button @click="add(${ id | json })">Add</button>
+
+{* also right: quote the slot, so the claim is true *}
+<button @click="add('${ id | js }')">Add</button>
+```
+
+An **undeclared** slot in the same position is fine and is not an error. The
+renderer auto-encodes it as a self-delimiting JSON literal, which is a complete
+answer there. Only the false declaration is refused.
+
+---
+
+## My attribute is mangled and stray attributes appeared
+
+A nested double quote inside `${ }` ends the attribute. The lexer closes an
+attribute value at its first matching quote, before interpolation is even
+considered.
+
+```slurp
+{* wrong *}
+<div title="${ a["k"] }">t</div>
+```
+
+That renders:
+
+```html
+<div title=" a[" k>t</div>
+```
+
+The attribute is truncated and the remainder became stray attributes. Two fixes,
+both fine:
+
+```slurp
+{* the brace form is not quote-delimited *}
+<div title={ a["k"] }>t</div>
+
+{* or use single quotes inside the expression *}
+<div title="${ a['k'] }">t</div>
+```
+
+Detected by `slurp_lint`, rule `unterminated-attribute-interpolation`. The
+compiler validates it clean.
+
+---
+
+## My JavaScript throws at runtime
+
+A server decimal serialises to JSON as a **string**, such as `"49.990000"`, not
+as a number. In a template that is usually invisible, because filters coerce. It
+matters in the JavaScript you emit, where a string has no `.toFixed`.
+
+```slurp
+{* wrong: renders Number-less code that throws in the browser *}
+<script>var t = ${ record.amount | json }.toFixed(2);</script>
+```
+
+```slurp
+{* right *}
+<script>var t = Number(${ record.amount | json }).toFixed(2);</script>
+```
+
+Better still, format the value server-side with the `currency` filter and pass
+the finished string.
+
+Nothing detects this. The compiler does not read the JavaScript you emit.
+
+---
+
+## My loop stops early, or the page is cut off
+
+Every resource budget **truncates** rather than failing. A page that loses the
+tail of a list still builds and still exits 0.
+
+- A collection is capped at **1,000 items per loop**.
+- A whole render is capped at **1,000,000 iterations** across every loop.
+- Output is capped at **16 MiB**.
+
+The per-loop cap on `{each}` records a warning in both build modes, so `-v` shows
+it. Note that `{repeat n}` clamps `n` to 1,000 with **no** diagnostic at all,
+which is worth knowing before concluding that a quiet build means nothing was
+truncated.
+
+See [Limits](/troubleshooting/limits) for every budget, its real number, and what
+crossing it does.
+
+---
+
+## My date renders as a long number
+
+The `date` filter parses ISO strings, not epoch milliseconds. It takes the text
+before the first `T` or space and splits it on `-`; with fewer than three parts
+**the input is returned unchanged**. Epoch milliseconds contain no `-`, so they
+render verbatim.
+
+```slurp
+{* wrong: renders 1700000000000 *}
+${ 1700000000000 | date("MMM DD, YYYY") }
+```
+
+```slurp
+{* right: renders Aug 03, 2026 *}
+${ "2026-08-03T10:00:00Z" | date("MMM DD, YYYY") }
+```
+
+There are also no time tokens. The only tokens that exist are `YYYY`, `YY`,
+`MMMM`, `MMM`, `MM`, `M`, `DD` and `D`.
+
+Nothing detects this. Return RFC 3339 dates from your server and it cannot arise.
+
+---
+
+## My currency lost its symbol, or a filter did nothing
+
+Filter arguments are read as **literals**, never evaluated. A variable argument
+is seen as the empty string, so the filter falls back to its default or emits
+nothing.
+
+```slurp
+{* wrong: with cur = "EUR", renders " 49.99" - a leading space, no symbol *}
+${ price | currency(cur) }
+```
+
+```slurp
+{* right: renders €49,99 *}
+${ price | currency("EUR") }
+```
+
+Note what the wrong version actually produces: a space where the symbol should
+be, then the number. It reads as a spacing bug rather than a broken argument, and
+if the surrounding markup lets the minifier collapse that space it reads as
+nothing at all.
+
+`default` is the sole exception. The renderer evaluates its argument in scope, so
+`${ x | default(fallbackValue) }` works as written.
+
+Detected by `slurp_lint`, rule `filter-arg-not-literal`. The compiler catches it
+only for `limit()` and `filter()`, where the argument is required.
+
+<Note>
+  If the value is genuinely dynamic, a `{match}` over the currencies you support
+  is the honest workaround, or format server-side and pass a finished string.
+</Note>
+
+---
+
+## My condition takes the wrong branch
+
+Arithmetic coerces freely. Comparisons do not. That asymmetry is the trap.
+
+- **Arithmetic**: a non-numeric string, null, an array and an object all become
+  `0`, and `+` concatenates whenever either side is a string, so `"10" + 5` is
+  `"105"`. Division by zero yields `0`, not an error and not `Infinity`.
+- **Comparisons**: only number-to-number and string-to-string actually compare.
+  Every other pairing compares Equal, so `>` is false and `>=` is true.
+
+```slurp
+{* wrong: stock_string is "10", so this is FALSE *}
+{if product.stock_string > 0}In stock{/if}
+```
+
+```slurp
+{* right *}
+{if (product.stock_string | int) > 0}In stock{/if}
+```
+
+Nothing detects this. Coerce explicitly with `| int` or `| float` whenever a
+value may have arrived as a string, and remember that money always does.
+
+---
+
+## My block tag is a syntax error
+
+Two shapes people write from muscle memory, and neither exists.
+
+`{with}` is recognised by the lexer as a block keyword but no parser supports it,
+so every `{with}` is a hard error: `Unknown block: {with}`, followed by a cascade
+of `UnexpectedToken` diagnostics from the rest of the tag. There is no
+replacement. Restructure the expression, or pass a narrower value through the
+context.
+
+`{match}` has no `{case}` keyword. An arm is a bare pattern, then `->`, then a
+body:
+
+```slurp
+{* wrong *}
+{match status}
+  {case "paid"}Paid{/case}
+{/match}
+```
+
+```slurp
+{* right *}
+{match status}
+  "paid" -> Paid
+  _      -> Other
+{/match}
+```
+
+While you are here: `{each}` puts the **item** name first and the index second,
+`{each product, i in products}`.
+
+---
+
+## My frontmatter directive did nothing
+
+A misspelled or non-existent frontmatter directive produces no diagnostic at all.
+The line is skipped.
+
+The one people reach for most is a `layout` directive, which does not exist. Use
+the `<layout src="...">` element in the body.
+
+```slurp
+{* wrong: silently ignored, the page renders with no layout *}
+---
+layout "@layouts/base"
+---
+<h1>Hi</h1>
+```
+
+```slurp
+{* right *}
+<layout src="@layouts/base">
+  <h1>Hi</h1>
+</layout>
+```
+
+`props` entries must also be one per line.
+
+Nothing detects this. Use the MCP `slurp_schema` tool, or `extract_schema` from
+the [Rust](/reference/rust-api) or [JavaScript](/reference/javascript-api) API,
+to see what the compiler actually read out of your frontmatter.
+
+---
+
+## A section's blocks vanished, but the data is still saved
+
+This one applies only when you are embedding Slurp and using theme blocks.
+
+Without a block catalog, a `@theme`-targeted block is an unknown type and is
+**dropped at merge time** while surviving intact in storage. The page renders as
+though nothing was added, and nothing is lost, so it presents as an editor that
+saves but does not display.
+
+The fix is on the host side: build a `BlockCatalog` from the theme's
+`blocks/<name>.slurp` files and thread it through, calling
+`merged_section_value_with` or `render_section_with_registry_and_blocks` rather
+than the catalog-free variants. See
+[Embedding with Rust](/reference/rust-api#sections-and-theme-blocks).
+
+Nothing detects this from a template. It is a host integration concern.
+
+---
+
+## Still stuck
+
+<CardGroup cols={2}>
+  <Card title="Limits" icon="gauge" href="/troubleshooting/limits">
+    Every budget with its real number, and what crossing it does.
+  </Card>
+  <Card title="Error codes" icon="circle-exclamation" href="/reference/errors">
+    What each diagnostic means, including the ones the compiler never emits.
+  </Card>
+  <Card title="Escaping" icon="lock" href="/guides/escaping">
+    Why the script and attribute rules are what they are.
+  </Card>
+  <Card title="Filters" icon="filter" href="/guides/filters">
+    The full list, and the literal-argument rule in context.
+  </Card>
+</CardGroup>

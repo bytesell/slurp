@@ -55,11 +55,17 @@ slurp build --input examples/basic-theme --output dist \
   --globals examples/basic-theme/mock-context.json
 
 # Dev server with hot reload, on http://localhost:3000.
-# `slurp dev` serves the CURRENT directory and takes only --port, --bind and --fixtures.
-cd examples/basic-theme && slurp dev
+# It serves BUILT HTML, not .slurp sources: a route resolves to pages/<name>.html under
+# the directory being served, so pointing it at this source tree 404s on every page.
+# Serve the build above instead. `slurp dev` takes only --port, --bind and --fixtures,
+# and --bind is accepted and ignored (it always binds 127.0.0.1).
+cd dist && slurp dev
 
-# The standalone binary is the one that accepts a directory and a context:
-slurp-dev --theme-dir examples/basic-theme --globals examples/basic-theme/mock-context.json
+# The standalone binary is the one that accepts a directory and a context. --source-dir
+# is what gives you the rebuild loop, by rendering a dynamic route from the sources:
+slurp-dev --theme-dir dist \
+  --source-dir examples/basic-theme \
+  --globals examples/basic-theme/mock-context.json
 ```
 
 There is no `slurp watch`. The subcommands are `build`, `validate`, `dev` and `gitignore`.

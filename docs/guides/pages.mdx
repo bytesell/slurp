@@ -1,0 +1,245 @@
+---
+title: "Pages and routing"
+description: "How a .slurp file becomes an HTML file, which files are pages, and where page data comes from."
+---
+
+A page is a `.slurp` file that Slurp writes an HTML file for. There is no route
+table and no config: the input tree is the route tree, and the output tree
+mirrors it.
+
+## One file in, one file out
+
+```bash
+slurp build --input site --output dist --globals site/data.json
+```
+
+Each page keeps its path and swaps its extension.
+
+```
+site/                       dist/
+  index.slurp                 index.html
+  about.slurp                 about.html
+  blog/2026/hello.slurp       blog/2026/hello.html
+```
+
+Nested directories are created as needed. Nothing is renamed, flattened or
+given a trailing slash, so what you see in the source tree is what you get on
+disk.
+
+## Which files are pages
+
+Everything, except two directories:
+
+| Path | What happens |
+|---|---|
+| `components/` at the input root | Compiled and checked, never emitted |
+| `layouts/` at the input root | Compiled and checked, never emitted |
+| Anything else | Emitted as a page |
+
+This is a blocklist, not an allowlist of `pages/`. A lone `index.slurp` in an
+otherwise empty directory is a valid one-page site, which is what the
+[Quickstart](/quickstart) builds.
+
+<Warning>
+  The match is on the FIRST path segment and on the exact name. So
+  `components-archive/Old.slurp` becomes `dist/components-archive/Old.html`,
+  and `src/components/Card.slurp` becomes `dist/src/components/Card.html`.
+  Neither is excluded, and you get HTML files for fragments that are not
+  documents. Keep both directories at the input root and spell them exactly.
+</Warning>
+
+Components and layouts are still compiled. That is deliberate: a syntax error,
+an unknown filter or a security violation in a component that no page happens to
+import yet is caught now rather than later. `--verbose` shows the distinction:
+
+```bash
+slurp build --input site --output dist --globals site/data.json --verbose
+```
+
+```
+Building 5 file(s)...
+  site\about.slurp -> dist\about.html
+  site\blog\2026\hello.slurp -> dist\blog\2026\hello.html
+  site\components\Card.slurp (component, checked only)
+  site\index.slurp -> dist\index.html
+  site\layouts\base.slurp (layout, checked only)
+Build complete. 3 page(s) emitted, 2 component/layout file(s) checked.
+```
+
+## Everything else is copied through
+
+Any non-`.slurp` file in the input tree is copied to the output verbatim.
+Stylesheets, images, fonts and `robots.txt` need no configuration.
+
+```
+site/                       dist/
+  index.slurp                 index.html
+  css/theme.css               css/theme.css
+  robots.txt                  robots.txt
+  data.json                   (not copied)
+```
+
+The file you pass to `--globals` is the one exception. It is build input rather
+than a site asset, and publishing it would put whatever you keep in it at a
+guessable URL, so it is skipped. The output directory is skipped too, so
+rebuilding into a directory inside the input tree does not copy the last build
+into the next one.
+
+## The `pages/` convention
+
+Slurp does not require a `pages/` directory, but hosts that serve a Slurp theme
+generally resolve a request for `/about` to `pages/about.html`, and the bundled
+[dev server](/tooling/dev-server) does the same. If you are writing a theme for
+a host rather than a standalone static site, put your pages under `pages/` and
+they will be reachable.
+
+The layout the example theme uses:
+
+```
+basic-theme/
+  pages/
+    index.slurp          served at /
+    product.slurp        served at /product
+    404.slurp
+  components/            checked only
+  layouts/               checked only
+```
+
+A build that emits nothing says so, because an empty `dist/` is almost always a
+misplaced tree rather than an empty project:
+
+```
+Build complete. 0 page(s) emitted, 2 component/layout file(s) checked.
+
+warning: no pages were emitted. Pages live in a `pages/` directory at the root of
+the input tree; 2 .slurp file(s) were found and checked, but none is under `pages/`.
+```
+
+## Dynamic routes
+
+A filename in brackets is an ordinary page as far as the compiler is concerned:
+`pages/[slug].slurp` compiles to `pages/[slug].html`, brackets and all. The
+brackets mean something to whatever serves the file, not to `slurp build`.
+
+```slurp pages/[slug].slurp
+<h1>${ slug }</h1>
+```
+
+The dev server matches an extensionless URL segment against a bracket file in
+that directory and binds the segment as a top-level value under the bracket's
+name, so `/premium-wallet` renders the file above with `slug` set to
+`premium-wallet`.
+
+<Note>
+  The value lands at the top level, not under `params`. `params` has no special
+  meaning to the compiler at all: it is an ordinary context key that hosts
+  conventionally populate, and `${ params.slug }` reads it only if your host put
+  it there.
+</Note>
+
+## The 404 page
+
+There is no special handling for `404.slurp`. It is a page like any other and
+compiles to `404.html`; serving it on a miss is your host's job. The dev server
+does not, and returns a plain-text 404 instead.
+
+Write it anyway. It ships with the theme, and a host that wants a themed error
+page has one to point at.
+
+## Page data
+
+A page renders against a JSON context. Every top-level key in that context is a
+global the page can read.
+
+```json data.json
+{
+  "site": { "title": "My Shop" },
+  "products": [
+    { "title": "Notebook", "price": 12.5 }
+  ]
+}
+```
+
+```slurp index.slurp
+<h1>${ site.title }</h1>
+{each product in products}
+  <p>${ product.title }</p>
+{/each}
+```
+
+<Warning>
+  `--globals` is ONE context for the whole build. Every page in the run sees the
+  same keys, so there is no per-page data file. Pages differ by reading
+  different keys out of a shared context.
+</Warning>
+
+That is a real limit of the static path, and it is the reason `--globals` is
+described as build-time data rather than page data. When Slurp is embedded in a
+server the context arrives per request from the host, and each page gets its
+own. See [Embedding with Rust](/reference/rust-api).
+
+### Declaring data a page needs
+
+`{fetch}` is how a page states what it wants without the compiler going and
+getting it. At build time no request is made. The renderer looks up the fetch
+name in the context and picks a branch:
+
+```slurp
+{fetch products from "/api/products"}
+  <ul>{each p in products}<li>${ p.title }</li>{/each}</ul>
+{loading}
+  <p>Loading products</p>
+{/fetch}
+```
+
+With `products` present in the context, that renders the body. With the key
+absent or null, it renders `{loading}`. The `from` URL is recorded for a host or
+the dev server to act on, never fetched by `slurp build`.
+
+## When a build fails
+
+Errors are reported per file and the build keeps going. A page with a syntax
+error is skipped and no HTML is written for it; every other page is still
+written. Only at the end does the process exit non-zero.
+
+```
+  error[UnexpectedToken]: Unknown block: {with} (1:1)
+  error[UnexpectedToken]: Unexpected token ExprClose in template (1:8)
+  error[UnexpectedToken]: Unexpected token BlockClose("with") in template (1:13)
+
+Build failed with 3 error(s).
+```
+
+So a failed build leaves a partial site on disk, with the broken page missing
+rather than stale. Check the exit code, do not check whether `dist/` looks
+populated.
+
+```bash
+slurp validate --dir site        # exit 1 if anything is broken, writes nothing
+```
+
+`validate` compiles the same files and emits nothing, which is what you want in
+CI.
+
+<Tip>
+  Add `--verbose` to `build` and `--warnings` to `validate` while you work.
+  Slurp fails quietly by design, and those flags are what turn silent
+  truncations and unresolved values into printed lines.
+</Tip>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Components" icon="puzzle-piece" href="/guides/components">
+    Extracting markup you use twice, and the prop trap that catches everyone.
+  </Card>
+  <Card title="Layouts and slots" icon="layer-group" href="/guides/layouts">
+    Shared chrome, the `<slot />`, and getting tags into `<head>`.
+  </Card>
+  <Card title="Project structure" icon="folder-tree" href="/project-structure">
+    Which directories are special, and which are just yours.
+  </Card>
+  <Card title="CLI" icon="terminal" href="/tooling/cli">
+    Every flag on `build`, `validate` and `dev`.
+  </Card>
+</CardGroup>

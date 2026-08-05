@@ -1,0 +1,425 @@
+---
+title: "Error codes"
+description: "Every error code, when it fires, a minimal example, and the fix. Plus the conditions that produce no error at all."
+---
+
+Every diagnostic carries a code, a message, a file, a line, a column and a
+severity, so they are machine-consumable rather than prose to be pattern-matched:
+
+```
+error[UnknownFilter]: Unknown filter: wat (path/page.slurp:1:11)
+```
+
+The compiler declares **21 codes and emits 13 of them**. The other 8 exist for host
+integrations that layer their own checks on top; the compiler will never produce
+them, so do not go hunting for the condition.
+
+## When each code can fire
+
+`slurp validate` parses and runs the compile-time security checks. `slurp build`
+does that AND renders. Four codes are render-time only, which is why a file can
+validate clean and then fail to build:
+
+| Phase | Codes |
+|---|---|
+| Lex and parse | `UnexpectedToken`, `UnclosedBlock`, `InvalidFrontmatter`, `JsTemplateLiteralInAttribute` |
+| Compile-time checks | `SecretEnvInTemplate`, `MiddlewareScopeViolation`, `RedirectOutsideMiddleware`, `UnsafeScriptInterpolation`, `CircularImport` |
+| Render | `UnknownFilter`, `InvalidFilterArgs`, `MissingImageSrc`, `IterationLimitExceeded` |
+
+## Codes the compiler emits
+
+### `UnexpectedToken`
+
+The default parse and lex failure. Also what a construct that LOOKS like a block tag
+gets when no parser supports it.
+
+```slurp
+{with user}${ name }{/with}
+```
+
+```
+error[UnexpectedToken]: Unknown block: {with}
+```
+
+**Fix.** Check the tag exists. The usable block tags are `if`, `each`, `match`,
+`fetch`, `repeat`, `try`, `slot`, `layout`, `head`, `sections` and `blocks`.
+`{error}` and `{loading}` are branch markers, legal only inside `{fetch}` or
+`{try}`. `{with}` does not exist in any form; write the full path instead.
+
+The same code covers `{case}` inside `{match}`, every operator the language does not
+have (`===`, `??`, `?.`, `in`, `**`, `typeof`, the bitwise set), and a stray `{` in
+ordinary text, which the lexer reads as the start of an interpolation.
+
+### `UnclosedBlock`
+
+A block tag was opened and never closed, or an expression was left open.
+
+```slurp
+{each p in products}<li>${ p.name }</li>{empty}<li>none</li>{/empty}{/each}
+```
+
+```
+error[UnexpectedToken]: Unexpected token BlockClose("empty") in template
+error[UnclosedBlock]: Unclosed {each} block
+```
+
+**Fix.** Remove the `{/empty}`. Which tags need a close and which do not:
+
+| Needs a closing tag | Takes NO closing tag |
+|---|---|
+| `{if}` `{each}` `{match}` `{fetch}` `{repeat}` `{try}` `{layout}` `{head}` | `{else}` `{else if}` `{empty}` `{loading}` `{error}` `{sections}` `{blocks}` |
+
+### `InvalidFrontmatter`
+
+A malformed frontmatter directive or schema declaration. This is by far the largest
+family: a bad setting kind, a `select` default outside its own options, a duplicate
+setting key or block type, a `section` with no name, a `max` below 1, an empty
+`@theme()`, or any `@target` other than `@theme`.
+
+```slurp
+---
+section {
+  settings { align: select(left, center) = right }
+}
+---
+```
+
+```
+error[InvalidFrontmatter]: Default 'right' for setting 'align' is not one of the select options
+error[InvalidFrontmatter]: section block requires a name
+```
+
+**Fix.** Read the message; it names the exact key or token. Two rules catch most of
+it: every setting kind must be one of `text`, `richtext`, `color`, `image`, `icon`,
+`link`, `select`, `number` or `toggle`, and a `select` default must appear in its
+own option list.
+
+<Note>
+  Unknown frontmatter STATEMENTS are silently skipped, not reported. This code fires
+  only on a malformed KNOWN one. A misspelled directive produces no diagnostic at
+  all.
+</Note>
+
+### `SecretEnvInTemplate`
+
+A template read `env.SLURP_SECRET_something`, in dotted or subscript form. Also
+fires for `env[key]` with a key that is not a compile-time constant, because such a
+key could resolve to a secret name.
+
+```slurp
+<script>const k = ${ env.SLURP_SECRET_API_KEY | js };</script>
+```
+
+```
+error[SecretEnvInTemplate]: env.SLURP_SECRET_API_KEY must not be accessed in
+templates; use server-side data binding instead
+```
+
+**Fix.** A secret must never reach a template, because the template output is sent
+to the browser. Read it on the server and pass only the derived, non-secret value
+through the render context:
+
+```slurp
+<div data-configured={ integration.enabled }></div>
+```
+
+### `MiddlewareScopeViolation`
+
+Either `request.*` was used in a file that is not compiled as middleware, or a file
+that IS middleware read a path root other than `request`, `env` or `loop`.
+
+```slurp
+{if request.cookies.session}<p>Welcome</p>{/if}
+```
+
+```
+error[MiddlewareScopeViolation]: request.* is only accessible in middleware files
+```
+
+**Fix.** `request.*` is middleware-only. In an ordinary page, take what you need
+from the request on the server and pass it through the render context:
+
+```slurp
+{if user.signed_in}<p>Welcome</p>{/if}
+```
+
+Middleware is a compile OPTION, not a filename convention, so the CLI treats every
+file as non-middleware unless told otherwise with `--middleware <DIR>`. A correct
+middleware file reports this error until you pass that flag.
+
+### `RedirectOutsideMiddleware`
+
+A `{redirect}` or `{next}` appeared in a file that is not compiled as middleware.
+
+```slurp
+{if !user}{redirect "/login"}{/if}
+```
+
+```
+error[RedirectOutsideMiddleware]: {redirect} is only allowed inside middleware files
+```
+
+**Fix.** Both are middleware-only signals. Move the check into a middleware file, or
+perform the redirect on the server before rendering, and let the page assume it is
+reachable.
+
+### `UnsafeScriptInterpolation`
+
+Two distinct rules share this code, plus two development-mode advisories.
+
+**Rule 1: an expression in a `<script>` body with neither `| js` nor `| json`.**
+
+```slurp
+<script>var name = ${ user.name };</script>
+```
+
+```
+error[UnsafeScriptInterpolation]: an expression in a <script> body must carry the
+`| js` filter (data inside a JS string literal) or `| json` (a bare JSON value)
+```
+
+**Fix.** End the expression with `| json` for a bare value, or `| js` when it sits
+inside a string literal you wrote:
+
+```slurp
+<script>var name = ${ user.name | json };</script>
+<script>var name = '${ user.name | js }';</script>
+```
+
+`| unsafe_js` deliberately does NOT satisfy the rule. The raw hatch in a script body
+is `{html expr}`.
+
+**Rule 2: a `| js` slot in a JavaScript-evaluated attribute that lands in statement
+or expression position** rather than inside a quoted string.
+
+```slurp
+<button @click="add(${ id | js })">Add</button>
+```
+
+```
+error[UnsafeScriptInterpolation]: `| js` declares that this slot sits inside a
+JavaScript string literal, but in the JavaScript-evaluated attribute `@click` it
+does not
+```
+
+**Fix.** Quote the slot, or switch to `| json`:
+
+```slurp
+<button @click="add('${ id | js }')">Add</button>
+<button @click="add(${ id | json })">Add</button>
+```
+
+An UNDECLARED slot in the same position is not an error: it is auto-encoded as a
+JSON literal, which is a complete answer, and development mode records an advisory
+suggesting you declare it.
+
+<Note>
+  HTML entity escaping does not protect a script context. A raw-text element reaches
+  the JavaScript engine without character references being decoded, so the ordinary
+  text escaping is inert there. That is the whole reason the compiler refuses to
+  guess.
+
+  Note also that a JavaScript template literal cannot be written in a `<script>`
+  body at all, because Slurp claims the `${` sequence itself. Build the string by
+  concatenation.
+</Note>
+
+The two development-mode advisories under this code are the CSS-structural
+characters stripped from a `style` value slot, and an undeclared slot in a
+JavaScript-evaluated attribute. Both are silent in a production render, which is
+what `slurp build` always uses.
+
+### `JsTemplateLiteralInAttribute`
+
+Severity: **warning**. A quoted HTML attribute value contains a JavaScript template
+literal whose `${ }` slot Slurp will interpolate itself, against the SERVER render
+context rather than the browser one.
+
+```slurp
+<a :href="`/product/${item.slug}`">View</a>
+```
+
+```
+warning[JsTemplateLiteralInAttribute]: a JavaScript template literal (backticks) in
+the attribute `:href` contains a `${ }` slot, and slurp interpolates `${ }` in
+attribute values itself
+```
+
+**Fix.** If the value is client-side, build the string by concatenation. If it is
+server-side data, drop the backticks and let Slurp interpolate.
+
+```slurp
+<a :href="'/product/' + item.slug">View</a>
+<a href="/product/${ item.slug }">View</a>
+```
+
+<Warning>
+  This one earned a dedicated code because of HOW it fails. For a client-side
+  variable the slot renders EMPTY, with no runtime error and no other sign, so the
+  result is a page that looks built and has dead links and unstyled elements
+  scattered through it.
+
+  For SERVER-side data it fails differently: the slot interpolates correctly, but
+  the backticks themselves are emitted into the HTML, so the attribute value keeps a
+  stray backtick at each end. The warning fires on ANY attribute, not only a
+  JS-evaluated one.
+</Warning>
+
+### `UnknownFilter`
+
+A filter name that is in neither table. The value table and the loop table are
+disjoint, so using one where the other belongs also lands here.
+
+```slurp
+{each p in products | upper}<li>${ p.name }</li>{/each}
+```
+
+```
+error[UnknownFilter]: Unknown loop filter: upper
+```
+
+**Fix.** Value filters, usable in `${ }`: `upper`, `lower`, `currency`, `truncate`,
+`fixed`, `date`, `default`, `plural`, `int`, `float`, `js`, `json`, `unsafe_js`.
+Loop filters, usable ONLY in an `{each}` header: `limit`, `sort`, `reverse`,
+`filter`. See [Filters](/reference/filters).
+
+This is a RENDER-time error, so `slurp validate` will not report it. The renderer
+passes the value through unfiltered alongside the diagnostic, so the render itself
+completes, but the CLI treats the diagnostic as an error and emits no file.
+
+### `InvalidFilterArgs`
+
+A required filter argument was missing, or could not be read as a literal. In
+practice this is `limit()` and `filter()`.
+
+```slurp
+{each p in products | limit(pageSize)}<li>${ p.name }</li>{/each}
+```
+
+```
+error[InvalidFilterArgs]: Filter 'limit' argument 0 must be a number
+```
+
+A missing argument reports `Filter 'limit' requires at least 1 argument(s)` instead.
+
+**Fix.** Supply the argument as a literal:
+
+```slurp
+{each p in products | limit(12)}<li>${ p.name }</li>{/each}
+```
+
+Filter arguments are read as literals throughout, so a variable is seen as the empty
+string. `default` is the only exception.
+
+### `MissingImageSrc`
+
+An `<Image>` was written with no `src` prop.
+
+```slurp
+<Image alt="Product" width={400} height={300} />
+```
+
+```
+error[MissingImageSrc]: <Image> is missing the src prop
+```
+
+**Fix.** Give it a `src`:
+
+```slurp
+<Image src={product.image} alt="Product" width={400} height={300} />
+```
+
+There is no missing-dimension case. `width` defaults to 800 and `height` to 600, and
+both accept a literal such as `width={400}` as well as a context value. `height` is
+only used for the `<img>` attribute and is never sent to the image service.
+
+### `IterationLimitExceeded`
+
+A budget was exhausted. Severity is **mixed**: two of the budgets are errors and the
+rest are warnings.
+
+| Budget | Value | Severity | Effect |
+|---|---|---|---|
+| Iterations per `{each}` or `{repeat}` | 1000 | warning | The loop keeps its first 1000 items |
+| Total iterations per render | 1000000 | warning | Remaining loops stop iterating |
+| Render depth | 96 | warning | The subtree renders empty |
+| Output size | 16 MiB | warning | Output truncated |
+| A single filter value | 8 MiB | **error** | The render stops; the build fails |
+| Cumulative filter work | 64 MiB | **error** | The render stops; the build fails |
+
+```
+warning[IterationLimitExceeded]: Iteration limit: collection has 1500 items,
+capped at 1000
+```
+
+**Fix.** Page or pre-slice the data on the server.
+
+<Warning>
+  A budget TRUNCATES; it never aborts the render. A 1500-item loop emits 1000 items,
+  warns, and **exits 0**. On the CLI the diagnostic exists either way but is only
+  printed with `-v`, so a build that quietly drops a list tail reports itself clean.
+
+  A script that only checks the exit status will not catch this. Look for the
+  warning, or count what you expected to render.
+</Warning>
+
+### `CircularImport`
+
+Two templates import each other, directly or through a chain, or the chain exceeds
+128 links.
+
+**Fix.** Break the cycle by extracting the shared part into a third file that
+neither of the two imports back.
+
+<Note>
+  Only reachable through the virtual-files compile path used by an embedding host.
+  Neither `slurp build` nor `slurp validate` detects it, because neither builds a
+  cross-file import graph.
+</Note>
+
+## Codes declared but never emitted
+
+These 8 are in the `ErrorCode` enum for host integrations to reuse. The compiler
+never produces them, and the note for each says what happens instead, because in
+several cases the condition IS detected and handled another way.
+
+| Code | What actually happens |
+|---|---|
+| `MissingFile` | Never emitted. The dev server has its own separate code of the same name. |
+| `MissingRequiredProp` | Never emitted. Prop requiredness is recorded in frontmatter and NOT enforced at render time, so a missing required prop is silently `null`. |
+| `UnknownProp` | Never emitted. Passing a prop a component never declared is not an error. |
+| `TypeMismatch` | Never emitted. Type annotations are stored as raw strings and never checked. |
+| `LayoutDepthExceeded` | Never emitted UNDER THIS NAME. Layout nesting is bounded by the render depth limit, which reports `IterationLimitExceeded`. |
+| `UnknownComponent` | Never emitted. An unresolvable component renders a `<div data-slurp-component="Name" data-slurp-props="...">` placeholder instead of failing, which is why a broken import looks like a working build. |
+| `UnknownSlot` | Never emitted. Only the slot names `default` and `head` are ever filled; any other name renders as a literal `<slot name="x">` element. |
+| `InfiniteLoop` | Never emitted. A component or block that renders itself is caught by a cycle guard that SKIPS silently, so a recursive include produces missing output rather than an error. |
+
+## Conditions that produce no error at all
+
+Slurp is total and tolerant by design. These are the failures with no diagnostic
+anywhere, which makes them the ones worth memorising.
+
+| What you wrote | What happens |
+|---|---|
+| `<Card title="Hi ${name}" />` | The prop is the LITERAL text `Hi ${name}`. A quoted component prop is never interpolated. |
+| `${ Math.max(a, b) }` | Renders empty. A call always evaluates to `null`. |
+| `${ items.length }` | Renders empty. There are no array properties. |
+| `${ price \| currency(someVar) }` | A leading space and no currency marker. Filter arguments must be literals. |
+| `${ 1700000000000 \| date(...) }` | Renders the number verbatim. `date` returns unparseable input unchanged. |
+| A misspelled frontmatter directive | Silently skipped. |
+| `<div title="${ a["k"] }">` | The attribute ends at the inner quote, and the remainder becomes stray attributes. |
+| `{$let n = 5}` then `${ n }` | Renders empty. `{$let}` creates no template binding. |
+| An unresolvable `using` path | A `data-slurp-component` placeholder, not an error. |
+| A `@theme` block with no catalog | Dropped from the render, intact in storage. |
+| `{if stock_string > 0}` | Always false. Comparisons do not coerce. |
+| A loop over 1500 items | 1000 items, a warning only `-v` prints, exit 0. |
+
+Several of these are caught by the linter in the MCP server even though the compiler
+says nothing. Build with `--verbose` while developing, and read
+[Common mistakes](/troubleshooting/common-mistakes), which collects the silent
+failures with the fix for each.
+
+## Diagnostic limits
+
+At most **1000** diagnostics are collected per compile. Beyond that, further ones
+are dropped silently, so a file with thousands of errors reports the first thousand.

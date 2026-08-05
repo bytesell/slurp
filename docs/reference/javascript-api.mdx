@@ -1,0 +1,410 @@
+---
+title: "JavaScript API"
+description: "The WASM build of the Slurp compiler for Node and browser hosts: seven exports, what each returns, and which of them enforce the security walk."
+---
+
+`@bytesell/slurp-compiler-wasm` is the Slurp compiler built to WebAssembly. It
+exists for hosts that are not Rust: an editor, a preview pane, a language server,
+a build script, a browser.
+
+<Warning>
+  Slurp is **0.1.0, pre-1.0**. This surface will change without a deprecation
+  cycle until 1.0. Pin an exact version.
+</Warning>
+
+## Install
+
+```bash
+npm install @bytesell/slurp-compiler-wasm
+```
+
+The published package is built for the **Node** target: CommonJS, loading the
+`.wasm` with `fs.readFileSync`. It works from ESM through Node's CJS interop, and
+the entry point assigns each export individually rather than spreading, so
+`import { parse } from '@bytesell/slurp-compiler-wasm'` resolves rather than
+coming back `undefined`.
+
+For a browser host with a bundler, build it yourself from the repository:
+
+```bash
+pnpm install
+node compiler-wasm/build.mjs --target web
+```
+
+`build.mjs` accepts any wasm-pack target (`nodejs`, `web`, `bundler`,
+`no-modules`, `deno`). It needs
+[`wasm-pack`](https://rustwasm.github.io/wasm-pack/installer/) on `PATH`; the
+`wasm32-unknown-unknown` rustup target is installed for you if it is missing.
+Output lands in `compiler-wasm/pkg/`, which is a build artifact and is not
+committed.
+
+<Note>
+  A `--target web` build is loaded the way every wasm-pack web build is, with a
+  default-exported `init()` that you must await before calling anything. The
+  seven named exports below are identical either way.
+</Note>
+
+## Everything returns a JSON string
+
+This is the one trap worth stating before anything else. Every export serialises
+through `JsValue::from_str`, so **every function returns a `string` you must
+`JSON.parse`**. None of them returns an object.
+
+```ts
+import { parse, parseJson } from '@bytesell/slurp-compiler-wasm'
+
+const result = parseJson(parse('<h1>${ title }</h1>'))
+//    ^ ParseResult
+if (!result.ok) console.error(result.errors)
+```
+
+The TypeScript declarations encode it. An export returns `JsonString<T>`, a
+branded `string` that will not typecheck as a `T`, and `parseJson` is the one way
+to cross that boundary. `parseJson` is a plain `JSON.parse` wrapper; its whole
+job is to keep the fact visible at the call site.
+
+The parsed shapes (`ParseResult`, `RenderResult`, `SchemaResult`, `SlurpError`)
+are exported as types too.
+
+## The exports
+
+| Export | Parses to | Security walk |
+|---|---|---|
+| `parse(source)` | `ParseResult` | No |
+| `render(astJson, contextJson)` | `RenderResult` | No |
+| `render_dev(astJson, contextJson)` | `RenderResult` | No |
+| `validate(source)` | `SlurpError[]` | No |
+| `validate_full(source, isMiddleware)` | `SlurpError[]` | **Yes** |
+| `extract_schema(source)` | `SchemaResult` | No |
+| `render_section(astJson, stateJson, contextJson)` | `RenderResult` | No |
+
+Plus `parseJson<T>(json)`, which is not a WASM export but is what you call on
+every result above.
+
+There is no `compile_wasm`, no `parse_wasm` and no `get_errors_wasm`, whatever an
+older integration may call.
+
+---
+
+## `parse`
+
+```ts
+function parse(source: string): JsonString<ParseResult>
+```
+
+```ts
+interface ParseResult {
+  ok: boolean
+  ast: SerializedAST | null
+  errors: SlurpError[]
+  warnings: SlurpError[]
+}
+```
+
+Lexes and parses. `ast` is `null` **only** when lexing failed outright; a parse
+that recovers returns an AST alongside whatever diagnostics it collected, so
+check `ok` rather than checking `ast` for null.
+
+The AST comes back as JSON because that is what `render` takes. Parse once,
+render many times with different contexts.
+
+## `render` and `render_dev`
+
+```ts
+function render(astJson: string, contextJson: string): JsonString<RenderResult>
+function render_dev(astJson: string, contextJson: string): JsonString<RenderResult>
+```
+
+```ts
+interface RenderResult {
+  ok: boolean
+  html: string
+  errors: SlurpError[]
+  warnings: SlurpError[]
+}
+```
+
+Both take the AST **as a JSON string**, which is what `parse` gave you, so it is
+`JSON.stringify(parseResult.ast)` on the way back in.
+
+Malformed input comes back as an `InvalidAst` or `InvalidContext` error rather
+than a thrown exception. Nothing in this package throws.
+
+```ts
+import { parse, render, parseJson } from '@bytesell/slurp-compiler-wasm'
+
+const p = parseJson(parse('<h1>${ title }</h1>'))
+const r = parseJson(render(JSON.stringify(p.ast), JSON.stringify({ title: '<b>' })))
+
+r.html // '<h1>&lt;b&gt;</h1>'
+```
+
+### Which one to call
+
+`render` is production mode. `render_dev` is development mode, and it differs in
+three ways:
+
+1. `{debug expr}` nodes render as a visible `<pre data-slurp-debug>` element.
+2. **CSS-structural characters stripped from a `style` value** are reported.
+3. **An un-annotated interpolation in a JavaScript-evaluated attribute** is
+   reported.
+
+Points 2 and 3 are advisories recorded in development mode only. In production
+both things still happen, silently. Given
+`style="color: ${ c }"` with `c = "red; background: url(x)"`, both modes emit
+`style="color: red background: urlx"`; only `render_dev` tells you the value lost
+characters.
+
+**An editor or preview pane wants `render_dev`.** A production SSR path wants
+`render`, where the two advisories are the wrong trade on a hot path.
+
+The **budget** diagnostics are not among the development-only pair. Loop
+truncation at 1,000 items, the output-byte budget and the render-depth budget are
+reported in **both** modes, because each one silently removes content from the
+page. See [Limits](/troubleshooting/limits).
+
+## `validate` and `validate_full`
+
+```ts
+function validate(source: string): JsonString<SlurpError[]>
+function validate_full(source: string, isMiddleware: boolean): JsonString<SlurpError[]>
+```
+
+Both return a flat array of errors **and** warnings, not the split shape the
+other exports use. An empty array means clean.
+
+<Warning>
+  **These two do not report the same thing, and the difference is
+  security-relevant.**
+
+  `validate` parses. `validate_full` parses **and** runs the compiler's
+  compile-time security walk, which is what `slurp build` and `slurp validate`
+  enforce.
+</Warning>
+
+Rules that live in the walk and not in the parser:
+
+- an unfiltered `${ }` in a `<script>` body,
+- a `| js` slot in JavaScript statement position, where escaping the quote
+  characters cannot contain the value,
+- `env.SLURP_SECRET_*`, in any file,
+- `request.*` outside middleware,
+- `{redirect}` and `{next}` outside middleware.
+
+None of those are parse errors, so a tool calling only `validate` tells an author
+their file is clean and then `slurp build` rejects it:
+
+```ts
+const src = '<script>var n = ${ user.name };</script>'
+
+parseJson(validate(src))             // []
+parseJson(validate_full(src, false)) // [{ code: 'UnsafeScriptInterpolation', line: 1, column: 20, ... }]
+```
+
+**Prefer `validate_full` for an authoring tool, a publish gate or a CI check.**
+The two are kept separate rather than merged so that pure editor-preview hosts
+are unaffected.
+
+Two things at the call site:
+
+- **`isMiddleware` must match the value the eventual compile will use.** The
+  rules are inverted, not merely looser: `request.*` and `{redirect}` are legal
+  only in middleware, and most other path roots are illegal there. A caller with
+  no way to know passes `false`, which is what the CLI and both Rust `compile`
+  entry points do.
+
+  ```ts
+  const mw = '<p>${ request.path }</p>'
+  parseJson(validate_full(mw, false)) // [{ code: 'MiddlewareScopeViolation', ... }]
+  parseJson(validate_full(mw, true))  // []
+  ```
+
+- **The security walk returns on its first violation.** It is a `Result` in Rust,
+  not an accumulator, so at most **one** security diagnostic is appended per
+  call, while parse diagnostics accumulate normally. Fix the reported one and
+  re-run to see the next.
+
+## `extract_schema`
+
+```ts
+function extract_schema(source: string): JsonString<SchemaResult>
+```
+
+```ts
+interface SchemaResult {
+  ok: boolean
+  schema: SerializedSectionSchema | null
+  errors: SlurpError[]
+  warnings: SlurpError[]
+}
+```
+
+Reads the `section { }` block out of a template's frontmatter as editor-facing
+JSON. `schema` is `null` when the template declares none, which is not an error.
+
+```ts
+const src = [
+  '---',
+  'section {',
+  '  name: "Hero"',
+  '  settings { heading: text = "Hi" }',
+  '}',
+  '---',
+  '<h1>${ section.settings.heading }</h1>',
+].join('\n')
+
+parseJson(extract_schema(src)).schema
+// { name: 'Hero', settings: [{ key: 'heading', type: 'text', default: 'Hi' }], blocks: [] }
+```
+
+This is also the fastest way to debug frontmatter, because **unknown frontmatter
+directives are skipped silently**. If a directive did nothing, this shows you
+what the compiler actually read.
+
+## `render_section`
+
+```ts
+function render_section(
+  astJson: string,
+  sectionStateJson: string,
+  contextJson: string,
+): JsonString<RenderResult>
+```
+
+Renders a section template with saved editor state merged over its schema
+defaults. This is what gives an editor an instant preview of a fetch-free
+section, with no server round trip.
+
+```ts
+const src = [
+  '---',
+  'section { settings { heading: text = "Default" } }',
+  '---',
+  '<h2>${ section.settings.heading }</h2>',
+].join('\n')
+
+const ast = JSON.stringify(parseJson(parse(src)).ast)
+const state = JSON.stringify({ settings: { heading: 'Saved', bogus: 1 } })
+
+parseJson(render_section(ast, state, '{}')).html // '\n<h2>Saved</h2>'
+```
+
+The merge is deliberately tolerant: unknown keys such as `bogus` above are
+dropped and out-of-range numbers are clamped to the schema's `min` and `max`,
+rather than rejected. That tolerance is what lets saved state survive a theme
+update.
+
+It renders in **production** mode and it does **not** take a block catalog, so
+`@theme`-targeted blocks are dropped from the output while surviving in storage.
+That is a host-side concern; see
+[Embedding with Rust](/reference/rust-api#sections-and-theme-blocks).
+
+---
+
+## Security
+
+<Warning>
+  **`parse`, `render`, `render_dev`, `validate`, `extract_schema` and
+  `render_section` do not run the security walk. `validate_full` is the only one
+  that does.**
+</Warning>
+
+That is deliberate, not an oversight: `SLURP_SECRET_*` access, middleware scope
+and the redirect restrictions are server-side concerns enforced by the host, and
+a preview is not a deploy. A template that violates all of them parses and
+renders cleanly through the other six.
+
+The consequence to hold onto: **do not use a WASM render as a production render
+path.** Use the [Rust API](/reference/rust-api) server-side, where `compile` and
+its relatives run the walk on every call.
+
+What a WASM render **does** still apply is the renderer's own script-context
+backstops, because those live in the renderer rather than the walk. An unfiltered
+`${ }` in a `<script>` body and a false `| js` claim both come back as
+`UnsafeScriptInterpolation` errors with the offending slot emitted empty:
+
+```ts
+const bad = '<script>var n = ${ user.name };</script>'
+const r = parseJson(render(JSON.stringify(parseJson(parse(bad)).ast), '{"user":{"name":"A"}}'))
+
+r.ok   // false
+r.html // '<script>var n = ;</script>'
+```
+
+So the escaping guarantees hold in WASM. The **policy** rules do not.
+
+---
+
+## Diagnostics
+
+Every export reports through the same shape:
+
+```ts
+interface SlurpError {
+  file: string
+  line: number
+  column: number
+  message: string
+  severity: 'error' | 'warning' | 'info'
+  code: SlurpErrorCode
+}
+```
+
+`file` is always the literal `"wasm-input"`, since these functions take a source
+string and know no path. Substitute your own when you surface a diagnostic to a
+user.
+
+`code` is machine-consumable, so match on it rather than pattern-matching the
+message. See [Error codes](/reference/errors).
+
+---
+
+## The browser runtime is a different package
+
+Not to be confused with this one. **`@bytesell/slurp-runtime`** is the optional
+client runtime that ships to a visitor's browser; this package is the compiler. A
+page using none of `{fetch}`, `{$let}`, `{try}` or client navigation does not
+need the runtime at all.
+
+It is small, because it is not a framework: the core bundle measures 2,570 bytes
+gzipped, and Alpine is an external import rather than something bundled into it.
+
+Be careful there, because the runtime's capability and the compiler's output do
+not currently meet in the middle:
+
+- It registers **zero** Alpine magics and **zero** Alpine directives. It touches
+  Alpine in exactly three places: `Alpine.start()`, `Alpine.initTree()` after a
+  client navigation, and `Alpine.data('slurpFetch', ...)`.
+- **`{$let}` has no hydrator.** Nothing reads `data-slurp-let`.
+- Several markers the runtime looks for have **no producer in the compiler**:
+  `[data-slurp-page]`, `<meta name="slurp-route">`, `x-data="slurpFetch(...)"`
+  and `[data-slurp-sentinel]`.
+
+In practice that means the fetch and infinite-scroll bundles are not reachable
+from compiled output today, which is why they are published behind an
+`experimental/` prefix (`@bytesell/slurp-runtime/experimental/fetch` and
+`.../experimental/infinite`) rather than from the package root. Client navigation
+needs a theme that supplies `[data-slurp-page]` and a `navigate` attribute on
+`<body>` itself.
+
+A host can supply any of the above. This section exists so you find that out here
+rather than by debugging.
+
+---
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Rust API" icon="rust" href="/reference/rust-api">
+    The server-side path, where the security walk runs on every compile.
+  </Card>
+  <Card title="Error codes" icon="circle-exclamation" href="/reference/errors">
+    What each `code` means.
+  </Card>
+  <Card title="Limits" icon="gauge" href="/troubleshooting/limits">
+    The budgets a render reports in both modes.
+  </Card>
+  <Card title="Editor setup" icon="pen-to-square" href="/tooling/editor-setup">
+    The VS Code extension, which is a consumer of this package.
+  </Card>
+</CardGroup>

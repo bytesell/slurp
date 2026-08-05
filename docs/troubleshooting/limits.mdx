@@ -1,0 +1,314 @@
+---
+title: "Limits"
+description: "Every resource budget and hard ceiling, with its real number, what crossing it does, and how you find out."
+---
+
+Slurp is built to render templates it did not write and cannot trust. That means
+every recursive walk, every loop and every allocation needs a ceiling, because a
+crafted template must not be able to pin a render thread or exhaust a shared
+process.
+
+The design rule that follows is worth internalising before the table:
+
+<Warning>
+  **Exceeding a budget truncates the output. It does not abort the render.** A
+  page over budget still ships, quietly shortened. Most budgets record a
+  **warning**, and `slurp build` prints warnings only with `-v`, so the default
+  console is silent about a page that lost a third of its content.
+</Warning>
+
+## The table
+
+| Limit | Value | On exceeding | Severity |
+|---|---|---|---|
+| Iterations per loop | 1,000 | Collection truncated to 1,000 | Warning |
+| Total iterations per render | 1,000,000 | Loops stop iterating | Warning |
+| Output size | 16 MiB | Rendering stops emitting | Warning |
+| Render depth | 96 | Subtree renders as empty | Warning |
+| Single filter value | 8 MiB | Filter chain ends | **Error** |
+| Cumulative filter work | 64 MiB | Render stops producing | **Error** |
+| Parser nesting depth | 64 | Parse stops at that point | **Error** |
+| Lexer token count | 2,000,000 | Lexing refuses the file | **Error** |
+| Lexer mode-stack depth | 512 | Lexing refuses the file | **Error** |
+| Import chain depth | 128 | `CircularImport` | **Error** |
+| Security walk depth | 512 | Walk refuses the document | **Error** |
+| `{fetch}` URL walk depth | 512 | Walk stops descending | Silent |
+| Block merge depth | 64 | Nested blocks dropped | Silent |
+| Blocks per type with no declared `max` | 200 | Extra blocks dropped | Silent |
+| `fixed(n)` precision | 100 | `n` clamped to 100 | Silent |
+| Accumulated diagnostics | 1,000 | Further diagnostics dropped | Silent |
+| Native render stack per frame group | 2 MiB, 128 KiB red zone | New stack grown | Silent |
+
+The three memory caps (single filter value, cumulative filter work, output size)
+are **tunable per host**. Everything else is compiled in. See
+[Tuning the memory budget](#tuning-the-memory-budget).
+
+---
+
+## Iteration budgets
+
+### 1,000 items per loop
+
+An `{each}` over a longer collection renders the first 1,000 items and records a
+warning naming both numbers:
+
+```
+warning[IterationLimitExceeded]: Iteration limit: collection has 1500 items, capped at 1000 (0:0)
+```
+
+`{repeat n}` is capped at the same 1,000, but by clamping `n` rather than by
+truncating a collection, and **it records nothing at all**. So a quiet build is
+not evidence that no repeat was clamped.
+
+The warning is emitted in both build modes, deliberately: the dropped rows leave
+no trace in the page, so a build that quietly loses a third of a product list
+would otherwise report itself clean.
+
+### 1,000,000 iterations per render
+
+The per-loop cap alone does not stop multiplicative blowup. Three nested
+`{repeat 1000}` blocks are 1,000,000,000 bodies while never crossing the
+per-construct limit, so there is a second, global counter across every `{each}`
+and `{repeat}` in one render.
+
+Once it is spent, loops stop iterating and emit nothing further. One warning is
+recorded, latched so it appears exactly once:
+
+```
+warning[IterationLimitExceeded]: Render iteration budget (1000000) exceeded; remaining loops truncated (0:0)
+```
+
+Components and layouts charge this budget too, so a page instantiating a very
+large number of components can spend it without a visible loop.
+
+---
+
+## Memory budgets
+
+### 16 MiB of output
+
+The iteration budget bounds loop **count**, not loop **body** size. A large
+static body repeated within the iteration budget, or duplicated through slots,
+could still build a multi-gigabyte string. Once 16 MiB has been emitted,
+rendering stops emitting and records:
+
+```
+warning[IterationLimitExceeded]: Render output budget (16777216 bytes) exceeded; output truncated (0:0)
+```
+
+The page is written out. It just ends early, mid-markup.
+
+### 8 MiB per filter value, 64 MiB of filter work
+
+These two are the only budgets that are **errors**, and they fail the build.
+
+Several filters expand their input. `json` roughly doubles a string, because it
+re-quotes and re-escapes something already quoted and escaped, and HTML escaping
+can grow one 6x. An unbounded chain is therefore exponential: about fifty links
+turn a six-byte value into tens of gigabytes.
+
+Nothing else catches that shape. The output budget bounds what is **emitted** and
+the iteration budget bounds how often a loop **runs**, but a filter chain emits
+nothing until it finishes, so neither ever sees an intermediate value.
+
+- **8 MiB per value** is what makes the doubling unreachable. It is per-value
+  rather than cumulative on purpose: growth is multiplicative, so the first
+  intermediate to cross the cap ends the chain before the next doubling.
+
+  ```
+  error[IterationLimitExceeded]: Filter 'json' produced 8388616 bytes, over the
+  per-value limit of 8388608; expanding filters must not be chained without bound (1:158)
+  ```
+
+- **64 MiB cumulatively** closes the other shape, many chains each producing
+  values just under the per-value cap.
+
+For scale: a full multi-page theme build (102 files, every page) peaks at 12 MiB
+of live memory, a single-page theme at 10 MiB, and the worst seed in the
+adversarial fuzz corpus at 20 MiB. Real work is tens of megabytes, so the
+defaults sit well above it.
+
+### Tuning the memory budget
+
+Those three are the fields of `MemoryBudget`, which a host can set per render.
+
+```rust
+use slurp_compiler::{BuildMode, CompileOptions, MemoryBudget, RenderOptions};
+
+// Quarter of the defaults, for a shared multi-tenant renderer on a small box.
+let budget = MemoryBudget::scaled(0.25);
+
+// Or set one field and keep the rest.
+let budget = MemoryBudget { output_bytes: 4 * 1024 * 1024, ..MemoryBudget::DEFAULT };
+
+let options = RenderOptions::new(BuildMode::Production).with_budget(budget);
+```
+
+**Tune it to the host, not to the template.** A shared renderer wants these lower
+than the defaults, because the cost of a refused render is one error page while
+the cost of an unbounded one is the whole process. A CLI building a large site on
+a workstation can raise them.
+
+`MemoryBudget::scaled` clamps every cap to at least one byte, so a budget is
+never zero. A zero cap would refuse the first byte of every render, which reads
+as "the compiler is broken" rather than "the budget is too small".
+
+---
+
+## Depth ceilings
+
+### Render depth 96
+
+The renderer recurses through nested elements, component includes and layout
+includes. A single file's nesting is already bounded by the parser at 64, but
+nothing else bounds a chain of includes (A includes B includes C, and so on), and
+the renderer's stack frames are large.
+
+Past 96, the subtree renders as empty and one warning is recorded:
+
+```
+warning[IterationLimitExceeded]: Maximum render depth (96) exceeded; subtree omitted (0:0)
+```
+
+A deep component chain therefore builds successfully and is simply missing
+everything below the ninety-sixth level.
+
+### Parser nesting depth 64
+
+The parser refuses to descend past 64 levels of nested constructs in one file.
+That is an error, and because the parser then stops mid-construct it usually
+arrives with a cascade of follow-on diagnostics:
+
+```
+error[UnexpectedToken]: Maximum nesting depth (64) exceeded (1:365)
+error[UnexpectedToken]: Unexpected token ExprClose in template (1:366)
+```
+
+Fix the first one. The rest are noise from the abandoned parse.
+
+### Lexer ceilings: 2,000,000 tokens and 512 modes
+
+Both refuse the file outright, before the parser sees anything.
+
+The token cap bounds the memory a single source file can turn into. The mode
+stack bounds nesting of the lexer's own contexts, where `${`, a backtick, a tag
+and each block tag all push a mode. It exists so that a 600 KB file of `${\``
+costs a bounded amount of work, rather than producing a multi-million-token
+stream the parser then walks only to reject.
+
+```
+Template is too complex: more than 2000000 tokens
+Template nesting is too deep (limit 512)
+```
+
+### Import chain depth 128
+
+A chain of N imported files recurses N frames, each running a full parse, and a
+stack overflow is a process abort rather than a catchable error. This was
+measured: on a 2 MiB stack, 500 files were fine and 5,000 overflowed. The cap
+turns the abort into a clean `CircularImport` diagnostic:
+
+```
+Import chain too deep (limit 128) at 'components/deep-42.slurp'
+```
+
+It is far above any real project, where imports nest a handful deep.
+
+### Security walk depth 512, `{fetch}` walk depth 512
+
+Both are defence in depth. The AST a walk receives is already depth-bounded by
+the parser, but `ast::Document` is a public type and both walks are reachable
+from public functions, so a hand-constructed or deserialised document arrives
+without ever having passed the parser.
+
+The security walk returns an error past its ceiling. The `{fetch}` URL walk stops
+descending and returns what it has, silently, because it feeds a pre-fetch
+optimisation rather than a correctness decision.
+
+### Stack: 2 MiB segments with a 128 KiB red zone
+
+On **native** targets the parser and renderer grow the stack on demand, in 2 MiB
+segments, whenever fewer than 128 KiB remain. That is what makes the depth
+ceilings above the real bound rather than whatever stack a caller happened to
+provide. A tokio SSR worker's default stack is not enough for 96 frames of
+element rendering.
+
+On **wasm** there is no way to grow the stack, so this is a no-op and the depth
+caps alone keep it safe. Nothing changes about the numbers; they are simply doing
+more of the work there.
+
+---
+
+## Section and block ceilings
+
+These apply when a host is rendering editor-driven sections, and they are
+enforced at merge time on **saved state**, which is untrusted JSON.
+
+- **Block merge depth 64.** Nested blocks past that depth are dropped, silently.
+- **200 blocks per type**, when the schema declares no `max`. A schema `max` is
+  an explicit per-type cap and wins where present; absent it, the editor allows
+  any number, so this is a hard ceiling against a pathological saved state rather
+  than a product decision.
+
+Both drop silently, and the data survives in storage. That is worth knowing,
+because it presents identically to the catalog problem described in
+[Common mistakes](/troubleshooting/common-mistakes#a-sections-blocks-vanished-but-the-data-is-still-saved):
+the editor saves and the page does not display.
+
+---
+
+## Smaller ceilings
+
+- **`fixed(n)` precision 100.** `n` is a template literal, not a rendered value,
+  so this is a footgun guard rather than a trust boundary. Without it a typo of
+  `fixed(1000000)` allocates a megabyte per call for nothing. Larger values are
+  clamped, silently.
+- **`{html ... sanitize}` keyword lookahead, 4,096 characters.** The lexer scans
+  forward from `{html` for the `sanitize` keyword, stopping at the first `}`.
+  Bounding it keeps the scan O(1); scanning to the next `}` would make a file of
+  many unterminated `{html` starts quadratic. An opening tag is short, so the
+  window is far larger than any real one.
+- **1,000 accumulated diagnostics.** Past that, pushing a diagnostic is a no-op.
+  A pathological input can raise one per token, so without a ceiling the
+  accumulator is itself an unbounded allocation. If you see exactly 1,000
+  diagnostics, assume there are more.
+
+---
+
+## Things that are not limits
+
+Worth naming, because people go looking for them.
+
+- **There is no per-layout depth ceiling.** `LayoutDepthExceeded` is a declared
+  error code that the compiler never emits; layout chains are bounded by the
+  render depth of 96 like everything else.
+- **There is no infinite-loop detector.** `InfiniteLoop` is likewise declared and
+  never emitted. Loops are bounded by the two iteration budgets instead.
+- **A recursive component does not error.** The renderer keeps a rendering stack
+  and refuses to re-enter a file already being rendered, which falls back to the
+  unresolved-component placeholder. No diagnostic.
+
+See [Error codes](/reference/errors) for the full list of which codes the
+compiler actually produces.
+
+---
+
+## How to tell a budget was hit
+
+In rough order of how much you will use them:
+
+1. **`slurp build -v`.** Every budget above that records anything records it
+   here. Without `-v`, only the errors print.
+2. **`slurp validate --warnings`** for the parse-time and lex-time ceilings.
+   Render budgets do not appear, because validate does not render.
+3. **The `ErrorAccumulator`, if you are embedding.** `compile` and
+   `compile_with_registry` return `(String, ErrorAccumulator)`; every budget
+   diagnostic carries `ErrorCode::IterationLimitExceeded`, whatever budget it
+   came from, with a message naming the specific one. Filter for that code and
+   read the message. See [Embedding with Rust](/reference/rust-api).
+4. **The WASM `render` result.** Budget diagnostics are reported in **both**
+   modes, unlike the two development-only advisories, so `render` and
+   `render_dev` both surface them. See the
+   [JavaScript API](/reference/javascript-api).
+5. **Output length.** A page that ends mid-tag at almost exactly 16 MiB hit the
+   output budget, whatever else you were suspecting.

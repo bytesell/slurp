@@ -1,0 +1,241 @@
+---
+title: "Quickstart"
+description: "Build a page, extract a component, and put it in a layout."
+---
+
+This walks through a small project from an empty directory to a rendered page.
+It takes about five minutes and assumes nothing beyond a terminal.
+
+<Steps>
+  <Step title="Install the compiler">
+    ```bash
+    cargo install slurp-compiler
+    ```
+
+    That gives you a binary named `slurp`. Check it:
+
+    ```bash
+    slurp --version
+    ```
+
+    If you would rather not install Rust, see [Installation](/installation) for
+    the other options.
+  </Step>
+
+  <Step title="Create a project">
+    ```bash
+    mkdir hello && cd hello
+    ```
+
+    Slurp has no scaffolding command and no config file to start with. A project
+    is a directory of `.slurp` files, and everything else is convention.
+  </Step>
+
+  <Step title="Write a page">
+    Create `pages/index.slurp`:
+
+    ```slurp pages/index.slurp
+    <!doctype html>
+    <html>
+      <body>
+        <h1>${ site.title }</h1>
+        {each product in products | sort("price")}
+          <p>${ product.name } - ${ product.price | currency("USD") }</p>
+        {empty}
+          <p>Nothing for sale yet.</p>
+        {/each}
+      </body>
+    </html>
+    ```
+
+    Three things are happening. `${ }` interpolates a value and escapes it for
+    wherever it lands. `{each}` loops, with `{empty}` as the branch taken when
+    there is nothing to loop over. `| sort` and `| currency` are filters, which
+    transform a value on its way out.
+
+    <Note>
+      A `pages/` directory is a convention rather than a requirement. Slurp
+      emits an HTML file for every `.slurp` file except those under
+      `components/` and `layouts/`, so a file at the root would work too. Use
+      `pages/` anyway: the dev server in step 8 only serves routes from there.
+    </Note>
+  </Step>
+
+  <Step title="Give it some data">
+    A template renders against a JSON context. At build time that comes from a
+    file:
+
+    ```json data.json
+    {
+      "site": { "title": "My Shop" },
+      "products": [
+        { "name": "Notebook", "price": 12.5 },
+        { "name": "Pen", "price": 3 }
+      ]
+    }
+    ```
+
+    Every top-level key becomes a global the template can read, which is why
+    `site` and `products` resolve above.
+  </Step>
+
+  <Step title="Build it">
+    ```bash
+    slurp build --globals data.json
+    ```
+
+    ```html dist/pages/index.html
+    <!doctype html><body><h1>My Shop</h1><p>Pen - $3.00<p>Notebook - $12.50
+    ```
+
+    The output is minified, and the products came out cheapest first because of
+    the `sort` filter. Note that `${ }` escaped everything on the way out, so a
+    product named `<script>` would render as text rather than as a tag.
+
+    <Tip>
+      Add `--verbose` while you are developing. Slurp fails quietly by design,
+      and `--verbose` is what turns silent truncations and unresolved values
+      into printed warnings.
+    </Tip>
+  </Step>
+
+  <Step title="Extract a component">
+    Once the same markup appears twice, move it into `components/`.
+
+    ```slurp components/Product.slurp
+    ---
+    props {
+      product: any
+    }
+    ---
+    <p>${ product.name } - ${ product.price | currency("USD") }</p>
+    ```
+
+    Then use it from the page:
+
+    ```slurp pages/index.slurp
+    ---
+    using "@components/Product"
+    ---
+    <!doctype html>
+    <html>
+      <body>
+        <h1>${ site.title }</h1>
+        {each product in products | sort("price")}
+          <Product product={product} />
+        {empty}
+          <p>Nothing for sale yet.</p>
+        {/each}
+      </body>
+    </html>
+    ```
+
+    <Warning>
+      Write `product={product}`, with braces. A quoted prop is a literal
+      string, so `product="product"` passes the seven-character word rather than
+      the object. This is the single most common Slurp mistake and it fails
+      silently.
+    </Warning>
+
+    Files under `components/` are not pages. Slurp checks them and does not emit
+    an HTML file for them.
+  </Step>
+
+  <Step title="Add a layout">
+    A layout holds the chrome that every page shares.
+
+    ```slurp layouts/base.slurp
+    <!doctype html>
+    <html>
+      <body>
+        <slot />
+      </body>
+    </html>
+    ```
+
+    `<slot />` is where the page gets placed. The page now carries only its own
+    content:
+
+    ```slurp pages/index.slurp
+    ---
+    using "@components/Product"
+    ---
+    <layout src="@layouts/base">
+      <h1>${ site.title }</h1>
+      {each product in products | sort("price")}
+        <Product product={product} />
+      {empty}
+        <p>Nothing for sale yet.</p>
+      {/each}
+    </layout>
+    ```
+
+    Rebuild and the HTML is the same as before.
+
+    <Warning>
+      A layout does not receive props. Passing one has no effect, and a `props`
+      default declared inside a layout is never applied either. Read shared
+      values from page globals instead, or use a component when you need to
+      pass something in. Components do both correctly.
+    </Warning>
+  </Step>
+
+  <Step title="Iterate with the dev server">
+    The dev server serves **built output**, not `.slurp` sources, so build
+    first and point it at `dist`:
+
+    ```bash
+    slurp build --globals data.json
+    slurp dev
+    ```
+
+    That serves `http://localhost:3000` and reloads the page when the output
+    changes. It resolves a route by looking under `pages/` in the directory it
+    is serving, which is why step 3 put the page there.
+
+    <Note>
+      `slurp dev` is a thin wrapper with only `--port`, `--bind` and
+      `--fixtures`, and `--bind` is currently accepted and ignored. The full dev
+      server is a separate binary, `slurp-dev`, which adds `--theme-dir`,
+      `--source-dir`, `--globals`, `--backend-url` and a CSS watch command. See
+      [Dev server](/tooling/dev-server).
+    </Note>
+  </Step>
+</Steps>
+
+## What you built
+
+```
+hello/
+  pages/
+    index.slurp          a page, so it becomes dist/pages/index.html
+  components/
+    Product.slurp        checked, never emitted
+  layouts/
+    base.slurp           checked, never emitted
+  data.json              the render context, not copied to the output
+```
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Project structure" icon="folder-tree" href="/project-structure">
+    Which directories are special, and which are just yours.
+  </Card>
+  <Card title="Displaying data" icon="code" href="/guides/displaying-data">
+    What `${ }` can contain, and what it deliberately cannot.
+  </Card>
+  <Card title="Common mistakes" icon="triangle-exclamation" href="/troubleshooting/common-mistakes">
+    The silent failures, collected in one place. Worth reading early.
+  </Card>
+  <Card title="Filters" icon="filter" href="/guides/filters">
+    Formatting values, and why arguments must be literals.
+  </Card>
+</CardGroup>
+
+## A note on data in production
+
+`--globals` is build-time data, which suits a static site. When Slurp is
+embedded in a server, the context arrives per request from the host instead and
+`--globals` covers only values that must be resolved at compile time. See
+[Embedding with Rust](/reference/rust-api) for that path.

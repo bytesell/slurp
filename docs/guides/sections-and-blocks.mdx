@@ -1,0 +1,419 @@
+---
+title: "Sections and blocks"
+description: "Declaring a typed editing schema in a template, so a non-technical person can change a page through a form."
+---
+
+A section is a template that declares its own editable surface. The declaration
+sits in frontmatter, and a host application turns it into a settings form. So
+somebody who has never seen a `.slurp` file can change a heading, pick an
+alignment, swap an image or reorder a list of questions, and the template they
+are editing is never touched.
+
+That division is the whole feature:
+
+- The **template** owns the markup and says which values are editable.
+- The **host** stores what the editor saved and merges it over the schema.
+- The **editor user** only ever sees a form.
+
+Most engines leave the first part to the surrounding application, which means
+the form and the markup are two separate files that drift apart. Putting the
+schema in the template is what stops that.
+
+## Declare a section
+
+```slurp sections/Faq.slurp
+---
+section {
+  name: "FAQ"
+  settings {
+    heading: text = "Questions"
+    align:   select(left, center) = left
+  }
+  blocks {
+    faq_item { max: 2 settings { question: text = "?"  answer: richtext } }
+  }
+}
+---
+<section class="align-${ section.settings.align }">
+  <h2>${ section.settings.heading }</h2>
+  {each item in section.blocks}
+    <details>
+      <summary>${ item.settings.question }</summary>
+      {html item.settings.answer}
+    </details>
+  {/each}
+</section>
+```
+
+Three things are being declared. `name` is the human label an editor shows in
+its "add a section" list. `settings` are the fields on the form. `blocks` are
+the repeatable child items, each with its own settings, which is how a list a
+merchant can add to and reorder is expressed.
+
+A section **must** have a `name`. Leaving it out is
+`error[InvalidFrontmatter]: section block requires a name`.
+
+## The nine setting kinds
+
+Each entry is `key: kind`, optionally `= default`, optionally followed by a
+`{ meta }` object. Only `label`, `min` and `max` have meaning in `meta`;
+anything else is carried through for the editor to use.
+
+```slurp
+settings {
+  heading:    text = "Welcome" { label: "Heading" }
+  blurb:      richtext
+  background: color = "#0a0a0a"
+  logo:       image
+  marker:     icon
+  cta:        link
+  align:      select(left, center, right) = center
+  max_items:  number = 8 { min: 1, max: 24 }
+  show_badge: toggle = true
+}
+```
+
+| Kind | Value when unset | What the host accepts when merging saved state |
+|---|---|---|
+| `text` | `""` | Any string |
+| `richtext` | `""` | A string, run through the allowlist sanitizer |
+| `color` | `""` | `#hex` of 3, 4, 6 or 8 digits, or a named CSS colour |
+| `image` | `""` | A string, URL-scheme filtered |
+| `icon` | `""` | `[a-z0-9-]` only |
+| `link` | `""` | Relative, anchor and query URLs; an absolute one must be http, https, mailto or tel |
+| `select(a, b, c)` | The first option | Exactly one of the options |
+| `number` | `0` | A number, clamped to `meta.min` and `meta.max` |
+| `toggle` | `false` | A boolean |
+
+A value that fails one of those checks never raises. Depending on the kind it
+either falls back to the declared default (`text`, `color`, `select`, `toggle`,
+and a `number` that is not a number) or is neutralised in place (`link` and
+`image` collapse to empty, `richtext` is sanitized, `number` is clamped). See
+[merging](#the-merge-is-tolerant-on-purpose) below.
+
+<Note>
+  `select` options may be bare identifiers or quoted strings, and the two are
+  interchangeable: `select(left, center)` and `select("left", "center")` both
+  work. A default must be one of the options, or the build fails with
+  `Default 'middle' for setting 'align' is not one of the select options`.
+</Note>
+
+## How the values reach the template
+
+The host injects one object named `section` into the render scope:
+
+```slurp
+${ section.settings.heading }   {* a setting *}
+${ section.id }                 {* the instance id the editor minted *}
+${ section.type }               {* the section type *}
+{each item in section.blocks}   {* the child blocks, in editor order *}
+```
+
+Blocks are an array, so `{each}` walks them and every one carries
+`item.settings`, its own `id` and `type`, and its own `blocks` array. Settings
+are a plain object, so a missing key is null and renders as the empty string,
+like any other path.
+
+Rendering the section above with a saved heading, one filled block and one empty
+one produces:
+
+```html
+<section class="align-center">
+  <h2>Common questions</h2>
+    <details>
+      <summary>Do you ship worldwide?</summary>
+      <p>Yes, <em>everywhere</em>.</p>
+    </details>
+    <details>
+      <summary>?</summary>
+    </details>
+</section>
+```
+
+The second block shows `?`, the schema default for `question`, because the
+editor never filled it in. That is the merge doing its job.
+
+## Blocks
+
+A block is a repeatable child. The simplest form declares it inline, as in the
+FAQ above, and `max` caps how many of that type one section may hold.
+
+Once more than one section wants the same block, move it into its own file under
+`blocks/`:
+
+```slurp blocks/heading.slurp
+---
+block {
+  name: "Heading"
+  settings {
+    text:  text = "Heading"
+    level: select(h2, h3) = h2
+  }
+}
+---
+<h2 class="lvl-${ block.settings.level }">${ block.settings.text }</h2>
+```
+
+`block { }` is the same grammar as `section { }` minus `max_per_page`, and it
+does not require a `name`. Inside a block file the root object is called
+`block`, not `section`.
+
+<Warning>
+  **A block's type is its file name, not the `name` it declares.**
+  `blocks/social_row.slurp` is the type `social_row` whatever its `name:` says.
+  The name is only a label for the editor. A file name outside `[A-Za-z0-9_-]`,
+  including anything nested a directory deeper, is not a block at all and is
+  ignored.
+</Warning>
+
+### Rendering block files with `{blocks}`
+
+`{each}` over `section.blocks` works, but it puts every block's markup inside
+the section that hosts it. `{blocks}` renders each child from its own file
+instead:
+
+```slurp sections/Blank.slurp
+---
+section {
+  name: "Blank"
+  blocks { @theme }
+}
+---
+<section>{blocks}</section>
+```
+
+```html
+<section><div data-bs-block="b1" style="display:contents">
+<h2 class="lvl-h3">Our story</h2>
+</div><div data-bs-block="b2" style="display:contents">
+<a class="btn" href="/about">Read more</a>
+</div></section>
+```
+
+Each child is wrapped in a `display: contents` element carrying its id, so an
+editor's click-to-select can resolve it without the wrapper affecting layout.
+
+`{blocks}` renders the children of the nearest enclosing section **or block**,
+preferring the block. That is what makes nesting work: a `group` block whose
+file contains `{blocks}` renders its own children. A block whose file hosts its
+own type is skipped by a cycle guard rather than recursing.
+
+### Which blocks a section accepts
+
+A `blocks { }` group takes three kinds of entry, and they can be mixed:
+
+```slurp
+blocks { @theme }                          {* every block file in the theme *}
+blocks { @theme(heading, button) }         {* only these two *}
+blocks { faq_item { settings { question: text } } }  {* inline, this section only *}
+```
+
+Two rules that are easy to get backwards:
+
+- **A bare `@theme` always wins over a whitelist**, whatever order they appear
+  in. Widening is never silently narrowed.
+- **An inline definition always beats the shared catalog.** A section that
+  declares its own `heading` keeps it, so adding a `heading` to the theme
+  palette can never change how an existing section renders.
+
+`@theme()` with no names is an error, and the message tells you to write a bare
+`@theme` if you meant "everything".
+
+<Warning>
+  **A `@theme` block with no catalog is dropped from the render.** The catalog is
+  built by the host from the theme's `blocks/` files and passed into the merge.
+  Without it, a targeted block is an unknown type, so the merge drops it while
+  the saved state survives untouched in storage. The page renders as though
+  nothing had been added, and nothing is reported. This is the most surprising
+  behaviour in the schema system, and it is a host integration bug rather than a
+  template one.
+</Warning>
+
+## The merge is tolerant on purpose
+
+Saved editor state is merged over the schema, never trusted as-is. The rule is
+that a theme upgrade must not be able to break a stored page, and a stored page
+must not be able to break a render. So every mismatch resolves to something
+valid rather than to an error.
+
+Here is a real merge. The schema is the nine-kind example above, plus a
+`faq_item { max: 2 settings { question: text  answer: richtext } }` block. The
+saved state is deliberately wrong in every way at once:
+
+```json saved state
+{
+  "id": "s1",
+  "type": "hero",
+  "settings": {
+    "heading": 42,
+    "align": "diagonal",
+    "max_items": 999,
+    "blurb": "<p>ok</p><script>alert(1)</script>",
+    "cta": "javascript:alert(1)",
+    "background": "red;background:url(x)",
+    "marker": "arrow right",
+    "ghost": "nobody asked for this"
+  },
+  "blocks": [
+    { "id": "b1", "type": "faq_item", "settings": { "question": "Q1" } },
+    { "id": "b2", "type": "alien",    "settings": {} },
+    { "id": "b3", "type": "faq_item", "settings": { "question": "Q2" } },
+    { "id": "b4", "type": "faq_item", "settings": { "question": "Q3" } }
+  ]
+}
+```
+
+```json what the template sees
+{
+  "id": "s1",
+  "type": "hero",
+  "settings": {
+    "align": "center",
+    "background": "#0a0a0a",
+    "blurb": "<p>ok</p>",
+    "cta": "",
+    "heading": "Welcome",
+    "logo": "",
+    "marker": "",
+    "max_items": 24,
+    "show_badge": true
+  },
+  "blocks": [
+    { "id": "b1", "type": "faq_item", "settings": { "answer": "", "question": "Q1" }, "blocks": [] },
+    { "id": "b3", "type": "faq_item", "settings": { "answer": "", "question": "Q2" }, "blocks": [] }
+  ]
+}
+```
+
+Reading that output line by line is the fastest way to learn the rules:
+
+- `heading` was a number, so the **default** was kept.
+- `align` was not one of the options, so the default was kept.
+- `max_items` was 999, so it was **clamped** to `meta.max`.
+- `blurb` is `richtext`, so it was **sanitized** and the script is gone. That
+  happens at the merge, which is why even a bare `{html}` of a richtext setting
+  is safe.
+- `cta` is a `link`, and `javascript:` is not an allowed scheme, so it collapsed
+  to empty.
+- `background` is a `color`, and that is neither a hex value nor a named colour,
+  so the default was kept. This is what stops a colour carrying `;` or `url(...)`
+  into a style attribute.
+- `marker` is an `icon`, and a space is not in `[a-z0-9-]`, so the default was
+  kept. It declared none, and the fallback for an `icon` is the empty string.
+- `ghost` is not in the schema, so it was **dropped**.
+- Every setting the state did not mention is present anyway, at its default.
+- The `alien` block was **dropped**, because its type is not one the schema
+  declares.
+- The third `faq_item` was dropped, because the schema said `max: 2`.
+
+`id` and `type` are validated too. They come from the editor and get rendered
+into attributes, CSS selectors and JavaScript strings by templates the engine
+does not control, so a value carrying a quote, an angle bracket, a backslash, a
+backtick or whitespace is dropped rather than rewritten.
+
+### Limits
+
+| Limit | Value |
+|---|---|
+| Blocks of one type, when the schema declares `max` | That `max`, which must be at least 1 |
+| Blocks of one type, with no declared `max` | 200 |
+| Block nesting depth when merging | 64 |
+
+`max_per_page` on a section is editor metadata: it is parsed and published in
+the schema, and nothing in the compiler enforces it. It is legal on `section`
+only, not on `block`.
+
+## The schema a host reads
+
+A host extracts the declaration as JSON and builds its form from it. A section
+named `Hero` with `max_per_page: 3`, the `align` and `max_items` settings from
+above and one `faq_item` block comes out like this:
+
+```json
+{
+  "blocks": [
+    {
+      "max": 2,
+      "settings": [
+        { "key": "question", "type": "text" },
+        { "key": "answer", "type": "richtext" }
+      ],
+      "type": "faq_item"
+    }
+  ],
+  "max_per_page": 3,
+  "name": "Hero",
+  "settings": [
+    {
+      "default": "center",
+      "key": "align",
+      "options": ["left", "center", "right"],
+      "type": "select"
+    },
+    {
+      "default": 8,
+      "key": "max_items",
+      "meta": { "max": 24, "min": 1 },
+      "type": "number"
+    }
+  ]
+}
+```
+
+Everything a form needs is there: the control to render comes from `type`, the
+initial value from `default`, the label from `meta.label`, and the constraints
+from `options` or from `meta.min` and `meta.max`. Absent keys are omitted rather
+than emitted as null, so a setting with no default simply has no `default` key.
+
+In Rust that is `slurp_compiler::extract_schema` for a section and
+`extract_block_schema` for a block file. The matching render entry point is
+`render_section`, which performs the merge and injects the result before
+rendering. Use `render_section_with_registry_and_blocks` when the theme has
+`blocks/` files: that is the variant that takes the block catalog, without which
+`@theme` blocks are dropped. See [Embedding with Rust](/reference/rust-api).
+
+## Trying it without a host
+
+`slurp build` has no concept of a section, but `section` is an ordinary context
+key, so `--globals` can supply one and you can see a section template render:
+
+```json data.json
+{
+  "section": {
+    "id": "faq-1",
+    "type": "faq",
+    "settings": { "heading": "Common questions", "align": "center" },
+    "blocks": [
+      { "id": "b1", "type": "faq_item",
+        "settings": { "question": "Do you ship worldwide?", "answer": "<p>Yes.</p>" } }
+    ]
+  }
+}
+```
+
+```bash
+slurp build --globals data.json
+```
+
+<Warning>
+  This path does **not** merge. What you write in `--globals` is exactly what the
+  template sees, so defaults are not filled in, numbers are not clamped, unknown
+  block types are not dropped and `richtext` is not sanitized. It is a good way
+  to see markup, and a bad way to reason about the schema. The merge only runs
+  when a host calls `render_section`.
+</Warning>
+
+Note also that `slurp build` writes an HTML file for every `.slurp` file outside
+`components/` and `layouts/`, so a `blocks/heading.slurp` will produce a
+`dist/blocks/heading.html` you can ignore.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Schema reference" icon="table-list" href="/reference/schema">
+    The grammar, every key, and the serialized shape.
+  </Card>
+  <Card title="Embedding with Rust" icon="rust" href="/reference/rust-api">
+    `extract_schema`, `render_section`, and building the block catalog.
+  </Card>
+</CardGroup>

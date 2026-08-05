@@ -1,0 +1,236 @@
+---
+title: "Editor setup"
+description: "The VS Code extension and the Prettier plugin: what they do, what they do not, and which one to believe."
+---
+
+Two pieces of editor tooling exist: a VS Code extension for highlighting and
+navigation, and a Prettier plugin for formatting `.slurp` files. Both are useful
+and both are narrow, so it is worth knowing exactly where each one stops.
+
+<Warning>
+  **The editor tooling is a second description of the language, written by hand,
+  and it has drifted from the compiler.** Where the two disagree, the compiler is
+  right. See [When they disagree](#when-they-disagree) for a worked example.
+</Warning>
+
+## VS Code extension
+
+<Note>
+  The extension is **not on the Marketplace**. Its manifest carries a
+  placeholder publisher ID that has never been registered, so there is nothing
+  to search for and no `code --install-extension <id>` to run. Build a VSIX from
+  the repository as below.
+</Note>
+
+### Install from a VSIX
+
+```bash
+git clone https://github.com/bytesell/slurp
+cd slurp/vscode-extension
+pnpm install
+pnpm run build
+pnpm exec vsce package --no-dependencies
+code --install-extension slurp-vscode-0.1.0.vsix
+```
+
+`--no-dependencies` is load-bearing in this repository. Without it `vsce` shells
+out to `npm ls` to verify the dependency tree, which fails against a pnpm
+workspace layout and takes the packaging step down with it.
+
+To hack on the extension instead of installing it, open `vscode-extension/` in
+VS Code and press `F5` for an Extension Development Host.
+
+### What it gives you
+
+- **Syntax highlighting.** A TextMate grammar covering frontmatter, control
+  blocks, inline expressions, filters, component tags and HTML attributes
+  carrying Slurp directives.
+- **Completions** for block keywords, the filter set, loop variables
+  (`loop.index`, `loop.first`, ...), the well-known globals (`seo.title`,
+  `params`, `env.dev`, `request.*`) and a few snippets.
+- **Hover documentation** on a keyword or filter.
+- **Go to definition.** `F12` on a PascalCase component name opens its `.slurp`
+  file, searching `slurp.componentsPath`.
+- **Formatting.** Indentation only, on save by default. It shares one
+  implementation with the Prettier plugin, so the two cannot disagree with each
+  other.
+
+### Diagnostics do not work in 0.1.0
+
+`slurp.validateOnType` and `slurp.validateOnSave` both default to `true`, and
+`Slurp: Validate File` sits in the Command Palette, so the feature looks live.
+It is not, and it fails silently: a file full of parse errors shows no squiggles
+and logs nothing.
+
+The extension reaches the compiler by requiring `@bytesell/slurp-compiler-wasm`,
+which is not one of its declared dependencies. The require throws, the `catch`
+returns a no-op that yields an empty diagnostic list, and that no-op is the only
+fallback. Nothing else takes over.
+
+Until it is fixed, validate from a terminal:
+
+```bash
+slurp validate --dir . --warnings
+```
+
+Add `--middleware <DIR>` if the project has middleware, or every correct
+`request.*` in it reports a scope violation. Full detail in
+[CLI](/tooling/cli).
+
+<Tip>
+  If you work with a coding agent, the MCP server does have working diagnostics,
+  because it runs the real compiler in-process. See
+  [Working with agents](/tooling/agents).
+</Tip>
+
+### Settings
+
+| Setting | Default | What it does |
+|---|---|---|
+| `slurp.formatOnSave` | `true` | Format `.slurp` files on save. |
+| `slurp.validateOnType` | `true` | Diagnostics as you type, debounced 300 ms. Currently inert, see above. |
+| `slurp.validateOnSave` | `true` | Diagnostics on save. Currently inert. |
+| `slurp.componentsPath` | `"./components"` | Where go to definition looks, relative to the workspace root. |
+
+`slurp.componentsPath` is rejected rather than re-based when it escapes the
+workspace, so an absolute path, a drive letter, a UNC share or anything
+containing `..` is ignored instead of quietly walking a directory outside the
+project. It is also listed as a restricted configuration, so in an untrusted
+workspace go to definition is disabled rather than trusting a setting the
+repository supplied.
+
+## Prettier plugin
+
+```bash
+pnpm add -D prettier prettier-plugin-slurp
+```
+
+```json .prettierrc
+{
+  "plugins": ["prettier-plugin-slurp"]
+}
+```
+
+```bash
+npx prettier --write "**/*.slurp"
+```
+
+The plugin registers the `slurp` language and the `.slurp` extension, so
+Prettier picks those files up on its own once it is listed. Prettier 3 is a peer
+dependency.
+
+### What it formats
+
+Leading indentation, and nothing else. Given this:
+
+```slurp
+{if user}
+<p>hi</p>
+{each x in xs}
+<span>${ x }</span>
+{/each}
+{/if}
+```
+
+it produces this:
+
+```slurp
+{if user}
+  <p>hi</p>
+  {each x in xs}
+    <span>${ x }</span>
+  {/each}
+{/if}
+```
+
+`tabWidth` and `useTabs` are honoured. Whitespace-significant elements are left
+alone, because the compiler turns template whitespace into a literal text node
+and trimming those lines would change what the page renders.
+
+<Note>
+  It deliberately does not touch the inside of `${ ... }`. Normalising that
+  spacing means editing template content on a default-on save hook, and the
+  obvious regex gets it wrong: the lexer accepts a `}` inside a string literal,
+  so `${ label | default("}") }` would come back with the author's fallback text
+  silently changed, in a way that still compiles and is stable under
+  `prettier --check`.
+</Note>
+
+### It does not validate
+
+A file this plugin formats without complaint can still fail to compile.
+Formatting and correctness are different questions, and only one of them is
+answered here:
+
+```bash
+slurp validate --dir .
+```
+
+## When they disagree
+
+The compiler is the specification. The editor tooling maintains its own tables
+of keywords, filters and globals, and they are not generated from the compiler,
+so they can and do fall out of step.
+
+A concrete case you can reproduce today. The shared formatter treats `with` as a
+block opener and indents it:
+
+```slurp
+{with user}
+  <p>${ name }</p>
+{/with}
+```
+
+The compiler rejects it outright:
+
+```
+error[UnexpectedToken]: Unknown block: {with} (with.slurp:1:1)
+```
+
+There is no `{with}` tag. Well-formatted code is not evidence of correct code,
+and a completion offering something is not a promise the compiler accepts it.
+[Tags](/reference/tags) and [Filters](/reference/filters) in the reference are
+derived from the compiler and are the list to trust.
+
+## What good looks like
+
+<Steps>
+  <Step title="Install the extension for highlighting and navigation">
+    Highlighting, completions, hover and go to definition all work. They come
+    from a package the extension really does depend on.
+  </Step>
+  <Step title="Let the formatter handle indentation">
+    Either the extension's format on save or `prettier --write`. They run the
+    same code, so mixing them is fine.
+  </Step>
+  <Step title="Get correctness from somewhere else">
+    `slurp validate --dir . --warnings` in a terminal or a pre-commit hook, or
+    the MCP server if you are working with an agent. Do not rely on the
+    extension's diagnostics in 0.1.0.
+  </Step>
+</Steps>
+
+## Other editors
+
+There is no LSP server yet, so anything other than VS Code has no completions,
+hover or go to definition. Two pieces are portable in the meantime: the
+TextMate grammar at `language/syntaxes/slurp.tmLanguage.json`, which most
+editors can load for highlighting, and the Prettier plugin, which works anywhere
+Prettier does.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="CLI" icon="terminal" href="/tooling/cli">
+    The validation the editor cannot do yet.
+  </Card>
+  <Card title="Working with agents" icon="robot" href="/tooling/agents">
+    Diagnostics that do work, through the MCP server.
+  </Card>
+  <Card title="Tags" icon="code" href="/reference/tags">
+    The real tag list, derived from the compiler.
+  </Card>
+  <Card title="Common mistakes" icon="triangle-exclamation" href="/troubleshooting/common-mistakes">
+    What no formatter or highlighter will catch.
+  </Card>
+</CardGroup>

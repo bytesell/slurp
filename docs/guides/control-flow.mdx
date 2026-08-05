@@ -1,0 +1,354 @@
+---
+title: "Control flow"
+description: "Conditionals, loops, matching, and the iteration budget that truncates a page rather than failing it."
+---
+
+Control flow is written with brace-delimited block tags. They nest freely and
+all of them are evaluated once, on the server, during the single render pass.
+
+## Conditionals
+
+```slurp
+{if product.stock > 10}
+  <p>In stock</p>
+{else if product.stock > 0}
+  <p>Only ${ product.stock } left</p>
+{else}
+  <p>Sold out</p>
+{/if}
+```
+
+```html
+<p>Only 3 left
+```
+
+Any number of `{else if}` branches and at most one `{else}`. Neither takes a
+closing tag; `{/if}` is required.
+
+`null`, `false`, `0`, the empty string, the empty array and the empty object
+are falsy. An empty array being falsy is the useful difference from JavaScript,
+because it makes `{if cart.items}` a valid emptiness check. See
+[Truthiness](/guides/displaying-data#truthiness) for the rest, including why
+the string `"false"` is truthy.
+
+Comparisons do not coerce types, so a numeric value that arrived as a string
+needs `| int` before you compare it. That trap is
+[covered in full here](/guides/displaying-data#arithmetic-coerces-comparison-does-not)
+and it is the most common reason an `{if}` takes the wrong branch.
+
+## Loops
+
+```slurp
+{each product in products}
+  <li>${ product.name }</li>
+{empty}
+  <li>Nothing for sale yet.</li>
+{/each}
+```
+
+```html
+<li>Notebook<li>Pen<li>Desk
+```
+
+`{empty}` is the branch taken when there is nothing to iterate. It takes no
+closing tag, and it is optional: without it an empty collection renders
+nothing at all.
+
+To get the index, name it second:
+
+```slurp
+{each product, i in products}
+  <li>${ i }. ${ product.name }</li>
+{/each}
+```
+
+```html
+<li>0. Notebook<li>1. Pen<li>2. Desk
+```
+
+<Warning>
+  The item comes first and the index second. If you write
+  `{each i, product in products}` it parses cleanly and binds the names the
+  wrong way round, so `product` holds `0` and `i` holds the object. Nothing is
+  reported.
+</Warning>
+
+### The loop variable
+
+Inside an `{each}` body, `loop` is bound automatically. It has exactly four
+fields:
+
+| Field | Meaning |
+|---|---|
+| `loop.index` | 0-based position |
+| `loop.count` | the total number of items, not `index + 1` |
+| `loop.first` | true on the first iteration |
+| `loop.last` | true on the last |
+
+```slurp
+{each product in products}
+  <li class={"first": loop.first, "last": loop.last}>${ loop.index } of ${ loop.count }</li>
+{/each}
+```
+
+```html
+<li class=first>0 of 3<li>1 of 3<li class=last>2 of 3
+```
+
+Nothing else exists on `loop`. `loop.even`, `loop.odd`, `loop.length`,
+`loop.index0`, `loop.revindex` and `loop.parent` all resolve to null and render
+the empty string, so a habit from Jinja or Twig fails silently here. For
+alternating rows, compare `loop.index % 2` yourself.
+
+In nested loops the inner `loop` shadows the outer one, and there is no way to
+reach the outer `loop` from inside. Name the outer index instead, because a
+named binding is not shadowed:
+
+```slurp
+{each row, ri in rows}
+  {each cell, ci in row.cells}
+    <li>${ ri }.${ ci } ${ cell }</li>
+  {/each}
+{/each}
+```
+
+```html
+<li>0.0 a<li>0.1 b<li>1.0 c
+```
+
+### Collections that are not arrays
+
+A null or missing collection is empty and takes the `{empty}` branch:
+
+```slurp
+{each item in cart.items}
+  <li>${ item.name }</li>
+{empty}
+  <p>Your cart is empty.</p>
+{/each}
+```
+
+```html
+<p>Your cart is empty.
+```
+
+That holds whether `cart.items` is `[]`, `null`, or absent from the context
+entirely. A misspelled collection name therefore renders your empty state, not
+an error, which is worth remembering when an empty state appears for no reason.
+
+A value that is neither an array nor null is wrapped and iterated exactly once,
+with `loop.count` of 1. So pointing `{each}` at a single object gives you one
+pass rather than nothing.
+
+### Filtering and ordering
+
+The `{each}` header accepts loop filters, which run before iteration:
+
+```slurp
+{each product in products | filter("featured", true) | sort("price", "desc") | limit(1)}
+  <li>${ product.name }</li>
+{/each}
+```
+
+```html
+<li>Desk
+```
+
+These are a separate set from the value filters, and mixing them up is a build
+error rather than a silent one. See [Filters](/guides/filters).
+
+## Matching one value against several
+
+```slurp
+{match post.status}
+  "published" -> <span class="ok">Published</span>
+  "archived"  -> <span class="warn">Archived</span>
+  _           -> <span>${ post.status }</span>
+{/match}
+```
+
+```html
+<span class=warn>Archived</span>
+```
+
+An arm is a bare pattern, then `->`, then a body. `_` is the wildcard.
+
+<Warning>
+  There is no `{case}` keyword. Writing `{case "a"}...{/case}` inside a
+  `{match}` is a parse error, not a variation in style. The arm syntax above is
+  the only one.
+</Warning>
+
+Patterns are string, number or boolean literals only. Matching is type-strict,
+so a `"1"` pattern never matches a numeric `1`, exactly as `==` behaves.
+
+With no matching arm and no `_`, the block renders nothing at all. Against a
+status of `archived`, this produces an empty file:
+
+```slurp
+{match post.status}
+  "published" -> <span>Published</span>
+{/match}
+```
+
+That is a real risk when the set of values can grow server-side. Add a `_` arm
+unless you positively want the silence.
+
+## Repeating markup
+
+```slurp
+{repeat 3}<div class="skeleton"></div>{/repeat}
+```
+
+```html
+<div class=skeleton></div><div class=skeleton></div><div class=skeleton></div>
+```
+
+The count is any expression, and a float truncates toward zero.
+
+<Warning>
+  `{repeat}` does not coerce a string. `{repeat "3"}` renders nothing, even
+  though `"3" - 0` is 3 elsewhere in the language. A count that came from
+  server data needs `| int`, because counts are exactly the values that arrive
+  as strings.
+</Warning>
+
+```slurp
+[{repeat order.total}<i>x</i>{/repeat}][{repeat order.total | int}<i>y</i>{/repeat}]
+```
+
+With `order.total` of `"3"`:
+
+```html
+[][<i>y</i><i>y</i><i>y</i>]
+```
+
+## Fetch
+
+`{fetch}` declares a data dependency with branches for each state.
+
+```slurp
+{fetch reviews: Review[] from "/api/reviews" cache(300) retry(2)}
+  {each r in reviews}<li>${ r.body }</li>{/each}
+{loading}
+  {repeat 3}<div class="skeleton"></div>{/repeat}
+{error}
+  <p>Could not load reviews.</p>
+{empty}
+  <p>No reviews yet.</p>
+{/fetch}
+```
+
+<Note>
+  The compiler performs no network request, ever. Rendering makes no I/O at
+  all, which is a large part of why an untrusted template is safe to render.
+  `{fetch}` reads the name out of the render context and picks a branch.
+</Note>
+
+Server-side branch selection:
+
+| Context value for the name | Branch |
+|---|---|
+| absent or null | `{loading}` |
+| an object with an `__error` key | `{error}` |
+| an empty array | `{empty}` |
+| anything else | the body, with the name rebound |
+
+So on a static build a `{fetch}` whose name is not in your globals renders its
+`{loading}` branch, which is usually what you want from a skeleton and is
+occasionally a confusing way to discover a typo.
+
+The branch order is fixed: body, then `{loading}`, then `{error}`, then
+`{empty}`. Out of order is not recovered and reports as an unclosed block. All
+four branches beyond the body are optional.
+
+Options are `cache(n)`, `retry(n)`, `timeout(n)`, `poll(n)`, `paginate(n)`,
+`infinite(n)` and the flag `abort-on-navigate`. They are recorded for the
+browser runtime and have no effect on the server render. An unrecognised option
+is silently dropped, so check the spelling.
+
+## `{with}` does not exist
+
+Readers coming from Twig, Nunjucks or Blade reach for a scoping block. Slurp
+has none.
+
+```slurp
+{with user}<p>${ name }</p>{/with}
+```
+
+```
+error[UnexpectedToken]: Unknown block: {with} (1:1)
+error[UnexpectedToken]: Unexpected token ExprClose in template (1:11)
+...
+Build failed with 5 error(s).
+```
+
+The lexer knows the word but no parser supports it, so every `{with}` is a hard
+build failure, and the four errors after the first are the parser recovering
+from it.
+
+Usually the answer is just to write the full path. If the repetition is
+genuinely painful, `{each}` over a non-array value iterates it exactly once,
+which gives you the shorter name:
+
+```slurp
+{each u in user}
+  <p>${ u.name } lives in ${ u.address.city }</p>
+{/each}
+```
+
+```html
+<p>Bo lives in Lisbon
+```
+
+This one at least fails loudly. Most Slurp mistakes do not.
+
+## The iteration budget
+
+Every loop is capped at 1000 iterations, and a whole render is capped at
+1,000,000 across all loops.
+
+Exceeding a cap truncates. It never aborts the render, so a page over budget
+still builds, still exits 0, and simply loses the tail of the list.
+
+```bash
+slurp build --globals data.json --verbose
+```
+
+```
+Building 1 file(s)...
+  warning[IterationLimitExceeded]: Iteration limit: collection has 1500 items, capped at 1000 (0:0)
+Build complete. 1 page(s) emitted.
+```
+
+<Warning>
+  Without `--verbose` that warning is not printed and the build looks entirely
+  clean. `slurp validate` will not report it either, because validate is a
+  static check and never renders. A truncated loop is only visible by counting
+  the output or by building with `-v`.
+</Warning>
+
+`{repeat}` is worse: it clamps to 1000 with no diagnostic at all, in either
+mode. If you are generating a large number of elements from a count, check the
+count.
+
+Paginate server-side rather than relying on either cap. The budgets exist to
+bound a hostile or broken template, not to be a paging strategy. The full list
+is in [Limits](/troubleshooting/limits).
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Filters" icon="filter" href="/guides/filters">
+    The loop filters used in `{each}` headers, and the value filters.
+  </Card>
+  <Card title="Displaying data" icon="code" href="/guides/displaying-data">
+    Truthiness and the comparison rules an `{if}` depends on.
+  </Card>
+  <Card title="Block tags" icon="book" href="/reference/tags">
+    Every tag, with branch order and closing rules.
+  </Card>
+  <Card title="Common mistakes" icon="triangle-exclamation" href="/troubleshooting/common-mistakes">
+    The silent failures, collected in one place.
+  </Card>
+</CardGroup>

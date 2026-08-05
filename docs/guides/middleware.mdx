@@ -1,0 +1,180 @@
+---
+title: "Middleware"
+description: "A request-time gate that runs before a page renders, and why it is a compile flag rather than a directory name."
+---
+
+Middleware is a template that decides whether a request should reach a page at
+all. It renders nothing. Its whole output is a signal: redirect somewhere else,
+or carry on.
+
+```slurp middleware/auth.slurp
+---
+middleware "auth"
+---
+{if !request.cookies.session}
+  {redirect "/login"}
+{/if}
+```
+
+That is the entire feature. It exists so a page never has to ask whether it is
+allowed to be rendered, which means a page never has to read the request.
+
+## It is a compile option, not a path convention
+
+Nothing about the filename or the directory makes a file middleware. You say so
+when you compile:
+
+```bash
+slurp validate --dir . --middleware middleware
+slurp build --input . --output dist --middleware middleware
+```
+
+The flag takes a directory relative to the scanned tree, and is repeatable:
+
+```bash
+slurp validate --dir . --middleware middleware --middleware auth/guards
+```
+
+The reason it works this way is that a host embedding Slurp may keep its
+middleware anywhere, and the compiler has to be told which of two **inverted**
+rule sets to check a file under. It cannot guess from a path.
+
+<Warning>
+  **Without the flag, a correct middleware file fails to validate.**
+
+  ```
+  error[MiddlewareScopeViolation]: request.* is only accessible in middleware files (.\middleware\auth.slurp:4:6)
+  Validation fail: 4 file(s), 1 error(s), 0 warning(s).
+  ```
+
+  The same run with `--middleware middleware` is clean:
+
+  ```
+  Validation ok: 4 file(s), 0 error(s), 0 warning(s).
+  ```
+
+  The failure direction is the safe one. The dangerous direction is a **typo**:
+  `--middleware midleware` names a directory that does not exist, selects
+  nothing, and reports the same scope violations with no hint that the flag
+  missed. If middleware you expected to be checked is reporting `request.*`
+  errors, check the spelling of the flag before the template.
+</Warning>
+
+### What the flag selects
+
+| | Selected by `--middleware middleware` |
+|---|---|
+| `middleware/auth.slurp` | yes |
+| `middleware/nested/deep.slurp` | yes, it is recursive |
+| `middleware-helpers/util.slurp` | no, the match is on the directory, not a prefix |
+| `guards/d.slurp` | no, name it with a second flag |
+
+<Note>
+  The `middleware "auth"` line in frontmatter only RECORDS a name for tooling. It
+  does not make the file middleware, and a file with no such line is middleware
+  if the flag selects it. Like every other frontmatter directive, a misspelling
+  of it is skipped silently.
+</Note>
+
+## It is checked, then skipped
+
+Middleware produces no output file. `slurp build` compiles it, runs the security
+walk over it, and moves on:
+
+```bash
+slurp build --input . --output dist --middleware middleware --verbose
+```
+
+```
+  .\components\Product.slurp (component, checked only)
+  .\layouts\base.slurp (layout, checked only)
+  .\middleware\auth.slurp (middleware, not emitted)
+  .\pages\index.slurp → dist\pages\index.html
+Build complete. 1 page(s) emitted, 2 component/layout file(s) checked, 1 middleware file(s) checked.
+```
+
+Emitting it would be meaningless. It runs per request in the host, and writing
+a `.html` for it would put a file in `dist/` that no route ever serves.
+
+Checking it is the point. Its scope rules are inverted, so the ordinary page
+walk reports every correct middleware file as a violation and lets a broken one
+through.
+
+## The scope rules are inverted
+
+Inside middleware, exactly three path roots are readable: `request`, `env` and
+`loop`. There is no store, no cart, no product, no page data.
+
+```slurp
+{if !request.cookies.session}{redirect "/login"}{/if}   ok
+{if env.dev}{redirect "/dev"}{/if}                       ok
+{if !user.signed_in}{redirect "/login"}{/if}             error
+```
+
+```
+error[MiddlewareScopeViolation]: 'user' is not accessible in middleware; only request.* is allowed
+```
+
+Outside middleware, the mirror image applies. `request.*` is unreadable, and
+both signals are compile errors:
+
+```
+error[MiddlewareScopeViolation]: request.* is only accessible in middleware files (.\pages\a.slurp:1:5)
+error[RedirectOutsideMiddleware]: {redirect} is only allowed inside middleware files (.\pages\a.slurp:1:21)
+error[RedirectOutsideMiddleware]: {next} is only allowed inside middleware files (.\pages\bad.slurp:0:0)
+```
+
+A page that wants to know something about the request gets it the same way it
+gets everything else: the server puts it in the render context. That split is
+deliberate. A page reading cookies directly is a page whose output depends on
+data the host did not choose to give it.
+
+## What middleware can and cannot do
+
+It has the whole template language available, minus the data. In practice that
+means `{if}`, `{match}` and comparisons over `request.*`, and then a
+`{redirect "/somewhere"}` or a `{next}`.
+
+What it does not have is everything the language does not have anywhere, and two
+of those bite here specifically:
+
+<Warning>
+  **There is no clock, and there are no callable functions.** `Date.now()` parses
+  and evaluates to null, and a comparison against null compares Equal, so a
+  session-expiry check written that way never fires while looking like it works.
+  Expire the cookie where it is minted and let a missing cookie be the check.
+</Warning>
+
+**Markup in a middleware file goes nowhere.** Writing `<p>Hello</p>` there is
+legal and validates clean, but the file is never emitted and `{redirect}` and
+`{next}` themselves render to the empty string. Middleware is a decision, not a
+page.
+
+## Acting on the signal
+
+`slurp build` produces a static site, and a static site has no request to gate,
+so middleware there is checked and nothing more. The signal matters when Slurp
+is embedded in a server.
+
+In 0.1.0 the compiler validates the signal but does not hand it back: rendering a
+`{redirect}` yields the empty string, and there is no API that returns the target.
+A host that wants to act on it parses the file with `parse()` and walks the
+document for a `Node::Redirect`, deciding for itself in the context of a real
+request. Expect this seam to move before 1.0.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Writing pages" icon="file-code" href="/guides/pages">
+    Where page data comes from, now that it is not the request.
+  </Card>
+  <Card title="Project structure" icon="folder-tree" href="/project-structure">
+    Which directories the compiler treats specially, and which it does not.
+  </Card>
+  <Card title="Errors" icon="triangle-exclamation" href="/reference/errors">
+    Every diagnostic code, including the two on this page.
+  </Card>
+  <Card title="CLI" icon="terminal" href="/tooling/cli">
+    Every subcommand and flag.
+  </Card>
+</CardGroup>

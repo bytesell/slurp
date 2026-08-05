@@ -1,0 +1,348 @@
+---
+title: "Working with agents"
+description: "The MCP server, the llms.txt files, and why a model needs them to write Slurp correctly."
+---
+
+Slurp is small, unusual, and quiet when it is wrong. Those three together are
+what make it hard for a language model to write unaided, and they are what the
+tooling on this page exists to fix.
+
+## Why a model needs help here
+
+A model writing a template it has never seen has to guess, and Slurp is close
+enough to several familiar languages to make the guesses plausible:
+
+- **It is small enough not to be in the training data.** There are 13 value
+  filters, 4 loop filters, 9 setting kinds and one page of tags. A model that
+  has read a million Jinja templates and no Slurp ones will reach for
+  `{% for %}`, `{{ }}`, `??`, `?.`, `Math.max`, `items.length` and arrow
+  functions. None of those exist.
+- **It looks like JavaScript and is not.** `${ }` is Slurp's own interpolation,
+  evaluated server-side against a JSON context. There are no callable functions
+  at all, so `Math.max(a, b)` parses fine and evaluates to null.
+- **Mistakes are silent.** This is the part that actually breaks the loop. A
+  missing property renders the empty string, a loop past 1000 items is truncated,
+  unknown frontmatter is skipped, and an unresolvable component renders a
+  placeholder. The build exits 0. A model checking its work by "did it compile"
+  gets a green light on a broken page and moves on.
+
+The worst example, and the most common mistake in the language, is that quoting
+means opposite things on the two things that look identical:
+
+```slurp
+<span data-x="Hi ${name}">        {* interpolates: this is an element *}
+<Card title="Hi ${name}" />       {* literal string: this is a component *}
+<Card title={`Hi ${name}`} />     {* what you meant *}
+```
+
+Nothing reports the middle line. The page renders, and it says `Hi ${name}`.
+
+An agent needs two things to work here: a way to look the language up, and a way
+to check what it just wrote. The MCP server is both.
+
+## The MCP server
+
+`@bytesell/slurp-mcp` runs the real compiler in-process through
+`@bytesell/slurp-compiler-wasm`. No subprocess, no `slurp` binary on `PATH`, and
+no second implementation of any rule in TypeScript. A diagnostic it reports is a
+diagnostic the compiler produced, with the same code, message, line and column.
+
+### Register it
+
+<CodeGroup>
+```bash Claude Code
+claude mcp add slurp -- npx -y @bytesell/slurp-mcp
+```
+
+```json .mcp.json
+{
+  "mcpServers": {
+    "slurp": {
+      "command": "npx",
+      "args": ["-y", "@bytesell/slurp-mcp"]
+    }
+  }
+}
+```
+
+```json local clone
+{
+  "mcpServers": {
+    "slurp": {
+      "command": "node",
+      "args": ["/abs/path/to/slurp/mcp/dist/bin.js"]
+    }
+  }
+}
+```
+</CodeGroup>
+
+Add `-s user` to the Claude Code command to register it for every project rather
+than the current one. A `.mcp.json` at a repository root is the shared form, so
+everyone working on the theme gets the same tools.
+
+The server speaks JSON-RPC over stdio. It writes exactly one line to stderr on
+startup and nothing at all to stdout except protocol frames, because on stdio
+stdout **is** the protocol:
+
+```
+@bytesell/slurp-mcp 0.1.0 listening on stdio
+```
+
+<Note>
+  Nothing here is published to npm yet, so `npx -y @bytesell/slurp-mcp` will not
+  resolve until the first release. Until then, clone the repository, run
+  `pnpm install && pnpm build` in `mcp/`, and use the third configuration above.
+</Note>
+
+### The five tools
+
+The set is deliberately small. An agent choosing among five well-separated tools
+picks correctly far more often than one choosing among a dozen overlapping ones,
+so they are split by the question they answer rather than by compiler entry
+point.
+
+| Tool | Question |
+|---|---|
+| `slurp_validate` | Is this correct? |
+| `slurp_render` | What does it produce? |
+| `slurp_lint` | Is it silently wrong? |
+| `slurp_schema` | What is editable here? |
+| `slurp_reference` | How do I write this? |
+
+<AccordionGroup>
+  <Accordion title="slurp_validate - is this correct?">
+    Compile-checks a template and returns structured diagnostics. This is the
+    correction loop: it reports exactly what `slurp build` enforces, including
+    the compile-time security walk, so an unfiltered `${ }` in a `<script>`
+    body, a `| js` slot in JavaScript statement position, `env.SLURP_SECRET_*`
+    access and `request.*` outside middleware all surface here rather than at
+    build time.
+
+    ```json input
+    { "source": "<script>var x = ${ name };</script>", "file": "hero.slurp" }
+    ```
+
+    ```json output
+    {
+      "ok": false,
+      "files_checked": 1,
+      "errors": 1,
+      "warnings": 0,
+      "diagnostics": [{
+        "code": "UnsafeScriptInterpolation",
+        "message": "an expression in a <script> body must carry the `| js` filter ...",
+        "file": "hero.slurp",
+        "line": 1,
+        "column": 20,
+        "severity": "error"
+      }]
+    }
+    ```
+
+    Pass `files` instead of `source` to check several templates in one call, and
+    `is_middleware: true` only for a file that really will be compiled as
+    middleware, because the rules genuinely differ.
+
+    Two limits: the security walk stops at its first violation, so at most one
+    security diagnostic appears per call, and nothing here resolves imports
+    across files, so a missing component is not reported.
+  </Accordion>
+
+  <Accordion title="slurp_render - what does it produce?">
+    Renders against a JSON context and returns the HTML plus every diagnostic.
+    Seeing the output is often the only way to catch a mistake that produces
+    valid HTML with the wrong text in it.
+
+    Rendering uses development mode, where two advisories are recorded that
+    production drops: CSS-structural characters stripped from a `style` value
+    slot, and an un-annotated interpolation in a JavaScript-evaluated attribute.
+    `{debug expr}` also renders only here.
+
+    It is deterministic and side-effect free. No network request is made and no
+    file is read; `{fetch}` picks a branch by reading its name out of the
+    context you passed.
+
+    Components cannot be resolved, because there is no cross-file registry, so
+    each renders as a `<div data-slurp-component="Name" ...>` placeholder. The
+    response says so rather than leaving an agent to conclude its import is
+    broken:
+
+    ```json
+    {
+      "ok": true,
+      "html": "\n<div data-slurp-component=\"Product\" data-slurp-props=\"...\"></div>",
+      "note": "1 component placeholder(s) in the output. Components cannot be resolved without a cross-file registry, so this is expected here."
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="slurp_lint - is it silently wrong?">
+    The only tool here that is not a view onto compiler diagnostics, and the one
+    that matters most. Every rule describes a construct that `slurp validate`
+    and `slurp build` both accept with zero output, and that then renders the
+    empty string or the wrong string.
+
+    | Rule | Catches |
+    |---|---|
+    | `component-prop-literal-interpolation` | A quoted component prop carrying interpolation syntax. |
+    | `filter-arg-not-literal` | A filter argument that is not a literal, so the filter falls back to its default. |
+    | `call-always-null` | A function call. There are no callable functions. |
+    | `let-binding-not-readable` | A `{$let}` name read back as a template value. |
+    | `array-length-property` | `.length` on what is probably an array. |
+    | `component-prop-unquoted-number` | `prop=123`, which lexes as an attribute name. |
+    | `unterminated-attribute-interpolation` | A nested `"` inside `${ }` that ends its attribute early. |
+
+    Each finding carries a concrete fix, not just a complaint:
+
+    ```json
+    {
+      "rule": "component-prop-literal-interpolation",
+      "message": "<Card title=\"Hi ${name}\"> passes the text \"Hi ${name}\" through verbatim ...",
+      "fix": "Use a template literal in braces: title={`Hi ${name}`}. If the whole value is a single expression, title={expr} is simpler."
+    }
+    ```
+
+    An agent cannot discover any of these from a failing build, because the
+    build does not fail. Run it alongside `slurp_validate`, not instead of it:
+    the two sets do not overlap.
+  </Accordion>
+
+  <Accordion title="slurp_schema - what is editable here?">
+    Returns what a template declares in frontmatter: its `section { }` or
+    `block { }` schema with every setting, kind, default and nested block, plus
+    its props, its imports and its middleware name.
+
+    This is how an agent discovers what a section exposes before changing it,
+    and what a component expects before calling it.
+
+    ```json
+    {
+      "section": {
+        "name": "Featured",
+        "settings": [{ "key": "heading", "type": "text", "default": "Featured products" }],
+        "blocks": []
+      },
+      "block": null,
+      "props": [],
+      "imports": []
+    }
+    ```
+
+    A `null` schema is not an error. Most templates declare none, and the
+    response says so.
+  </Accordion>
+
+  <Accordion title="slurp_reference - how do I write this?">
+    The language reference, queryable by topic: `overview`, `tags`,
+    `expressions`, `filters`, `components`, `scripts`, `frontmatter`, `schema`,
+    `errors`, `gotchas`, `limits`.
+
+    Call it with no arguments for the index plus the overview. Pass an error
+    code or a filter name as `query` with no topic to jump straight to it, which
+    is what you want while holding a diagnostic:
+
+    ```json
+    { "query": "UnsafeScriptInterpolation" }
+    ```
+
+    That returns when the code fires, the fix, and a wrong/right pair.
+  </Accordion>
+</AccordionGroup>
+
+### Resources
+
+Three, for pulling context in without a tool round-trip per topic:
+
+| URI | Contents |
+|---|---|
+| `slurp://reference/language` | The complete reference, every topic. |
+| `slurp://reference/errors` | Every error code, which ones the compiler emits, and a worked fix for each. |
+| `slurp://reference/gotchas` | The silent failures, with the fix and with whether a tool catches it. |
+
+### The loop it is meant to produce
+
+The server ships instructions that a client shows the model on connect, and they
+say the same three things:
+
+<Steps>
+  <Step title="Read the gotchas before writing anything">
+    `slurp_reference({ topic: "gotchas" })`. Most of them cost nothing to avoid
+    and are invisible afterwards.
+  </Step>
+  <Step title="Validate after every edit">
+    `slurp_validate`. It is the whole correction loop, and it reports what
+    `slurp build` enforces rather than only what parses.
+  </Step>
+  <Step title="Lint as well, always">
+    `slurp_lint`. A clean validate does not mean the template renders correctly.
+    The constructs lint reports are precisely the ones validate cannot see.
+  </Step>
+  <Step title="Render when the output matters">
+    `slurp_render` with a realistic context, and read the HTML. This is what
+    catches a page that compiles and says the wrong thing.
+  </Step>
+</Steps>
+
+## llms.txt and llms-full.txt
+
+For tools that read the `llms.txt` convention rather than speaking MCP, the same
+reference is served as two files at the repository root:
+
+| File | For |
+|---|---|
+| [`llms.txt`](https://github.com/bytesell/slurp/blob/main/llms.txt) | The short version: the complete syntax surface and the 15 gotchas in the order they bite. Small enough to paste into a system prompt. |
+| [`llms-full.txt`](https://github.com/bytesell/slurp/blob/main/llms-full.txt) | The complete reference: tags, expressions, filters, components, script rules, frontmatter, schemas, every error code and every limit. |
+
+**`llms-full.txt` is generated from the same data the MCP server serves**, so
+the two cannot drift. That is enforced rather than intended: CI regenerates the
+file and fails if it differs from what is committed.
+
+```bash
+pnpm --filter @bytesell/slurp-mcp run build:llms   # regenerate
+pnpm --filter @bytesell/slurp-mcp run check:llms   # verify without writing
+```
+
+The reference data underneath is itself checked against the compiler. The test
+suite compiles every "right" example in the error reference and requires it to
+validate clean, compiles every "wrong" example that claims an error and requires
+that error, and re-derives the truthiness table, the operator semantics, the loop
+variables and the filter list from real renders. A compiler change that
+invalidates a documented claim turns the suite red rather than leaving a
+plausible sentence in place.
+
+<Tip>
+  Prefer the MCP server if your client speaks MCP. `llms-full.txt` tells a model
+  what the language is; the server also tells it whether the thing it just wrote
+  is correct, and that second half is where the silent failures get caught.
+</Tip>
+
+## Without either
+
+If you cannot run an MCP server and cannot feed a file into context, the
+practical minimum is to have the agent shell out after every edit:
+
+```bash
+slurp validate --dir . --warnings
+```
+
+That catches the hard errors, including the security walk. It will not catch the
+silent-failure classes `slurp_lint` covers, so pair it with
+[Common mistakes](/troubleshooting/common-mistakes) in the prompt.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Common mistakes" icon="triangle-exclamation" href="/troubleshooting/common-mistakes">
+    The silent failures, collected. Worth putting in front of a model early.
+  </Card>
+  <Card title="Errors" icon="circle-exclamation" href="/reference/errors">
+    Every diagnostic code, and the fix.
+  </Card>
+  <Card title="CLI" icon="terminal" href="/tooling/cli">
+    The same checks from a shell.
+  </Card>
+  <Card title="Editor setup" icon="code" href="/tooling/editor-setup">
+    What the VS Code extension and Prettier plugin do for a human.
+  </Card>
+</CardGroup>

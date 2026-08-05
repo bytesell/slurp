@@ -1,0 +1,302 @@
+---
+title: "Displaying data"
+description: "Reading values out of the render context, what an expression can contain, and what it deliberately cannot."
+---
+
+A template renders against a JSON context. Everything on the page comes from
+reading values out of that context and interpolating them, so this is the part
+of Slurp you use constantly.
+
+## Interpolate a value
+
+```slurp
+<h1>${ site.title }</h1>
+<p>Welcome back, ${ user.name }.</p>
+```
+
+```html
+<h1>My Shop</h1><p>Welcome back, Bo.
+```
+
+The output is minified, which is why the closing `</p>` is missing. HTML makes
+it optional there and Slurp drops it. Expect that in every output sample on
+these pages.
+
+Use the `${ }` form. A bare `{ }` means exactly the same thing and is accepted,
+but it reads ambiguously next to a block tag such as `{if}`, so these guides
+use `${ }` throughout.
+
+Everything interpolated is escaped for the context it lands in. A value
+containing `<script>` renders as text in a paragraph, and as an escaped
+attribute value in an attribute. You do not opt into that and there is nothing
+to remember. See [Escaping](/guides/escaping) for the details and for the one
+tag that bypasses it.
+
+## Read properties
+
+Dots walk into objects, brackets index arrays and string keys.
+
+```slurp
+<p>${ user.address.city }</p>
+<p>${ products[0].name }</p>
+<p>${ settings.labels["cart"] }</p>
+<p>${ products[selected_index].name }</p>
+```
+
+```html
+<p>Lisbon<p>Notebook<p>Basket<p>Desk
+```
+
+A dynamic index works, including with an `{each}` loop index. After a `.` only
+an identifier is accepted, so `items.0` is a parse error and `items[0]` is the
+only spelling.
+
+Navigation is null-safe at every depth, which is why there is no `?.` operator
+in the language. There is nothing to guard against.
+
+## Missing values render nothing
+
+```slurp
+<p>[${ user.address.postcode }]</p>
+<p>[${ order.shipping.tracking.url }]</p>
+```
+
+```html
+<p>[]<p>[]
+```
+
+A property that is not there resolves to null and renders the empty string. So
+does a whole missing chain. Nothing is reported, at any stage.
+
+<Warning>
+  This is the single most important thing to know about Slurp, and it is the
+  root of most time lost to it. A typo in a property name does not raise, it
+  renders a page that looks almost right with one thing quietly blank. If a
+  value is not appearing, suspect the spelling of the path before you suspect
+  anything else.
+</Warning>
+
+The behaviour is deliberate. Slurp is built to render templates the host did
+not write, where aborting a page because one field is absent is the wrong
+trade. Build with `--verbose` while you work, and read
+[Common mistakes](/troubleshooting/common-mistakes) early.
+
+## Operators
+
+```slurp
+<p>${ user.nickname || user.name }</p>
+<p>${ post.status == "published" ? "Live" : "Draft" }</p>
+<p>${ products[0].price * 2 }</p>
+<p>${ `${ user.name } has ${ order.count } items` }</p>
+```
+
+```html
+<p>Bo<p>Draft<p>25<p>Bo has 3 items
+```
+
+Arithmetic is `+ - * / %`, comparison is `== != < > <= >=`, logic is
+`&& || !`, and there is a ternary and a backtick template literal.
+
+`&&` and `||` return the operand value rather than a boolean, so
+`user.nickname || user.name` is the usual way to write a fallback for a value
+that might be blank. For a value that might be missing entirely, prefer
+[`| default(...)`](/guides/filters).
+
+A few behaviours differ from JavaScript and are worth knowing before they cost
+you a page:
+
+| Expression | Result | Why |
+|---|---|---|
+| `"a" + 1` | `a1` | `+` concatenates when either side is a string |
+| `10 / 0` | `0` | Division by zero yields 0, not an error and not Infinity |
+| `1 == "1"` | `false` | Equality is type-strict |
+| `0 == false` | `false` | Same |
+| `0.1 + 0.2 == 0.3` | `true` | Numbers compare with an epsilon |
+| `-"5"` | `0` | Unary minus negates only a number |
+
+Any arithmetic result that would be NaN or infinite becomes 0.
+
+## Arithmetic coerces, comparison does not
+
+This asymmetry is worth its own section because it produces a wrong page rather
+than an error.
+
+```slurp
+<p>[${ "10" > 9 }] [${ "10" >= 9 }] [${ "10" - 1 }]</p>
+```
+
+```html
+<p>[false] [false] [9]
+```
+
+Arithmetic coerces freely. A non-numeric string, null, an array and an object
+all become 0, and `"10" - 1` is 9.
+
+Comparison does not coerce at all. Only number against number and string
+against string actually compare. Every other pairing is treated as equal, so
+`>` and `<` are false, and `>=` and `<=` are false too because the two values
+are not equal either. A string that looks like a number loses every comparison
+it is in.
+
+That matters because server data arrives as strings more often than you expect.
+Postgres and most other databases serialise a decimal to JSON as a string, so
+a price or a stock count is frequently `"10"` rather than `10`. Coerce it:
+
+```slurp
+{if (product.stock | int) > 0}
+  <button>Add to cart</button>
+{/if}
+```
+
+`| int` and `| float` are the two coercions, and both are all-or-nothing:
+`"12abc"` becomes 0, not 12.
+
+## Truthiness
+
+`null`, `false`, `0`, the empty string, the empty array and the empty object
+are falsy. Everything else is truthy.
+
+Two of those differ from JavaScript and both come up in real templates:
+
+- An empty array is falsy, so `{if cart.items}` is a valid emptiness check.
+- The strings `"0"` and `"false"` are truthy, because they are non-empty
+  strings. A boolean that arrived from a form or a query string as text needs
+  comparing explicitly.
+
+## What expressions cannot do
+
+Slurp expressions are not a small programming language. There is no way for a
+template to run code at render time, which is what makes it safe to render a
+template you did not write. The practical consequence is that several habits
+carried over from other engines silently produce nothing.
+
+**There are no callable functions.** A call parses and always evaluates to
+null, with no diagnostic:
+
+```slurp
+<p>[${ Math.max(a, b) }]</p>
+<p>[${ products.length }]</p>
+```
+
+```html
+<p>[]<p>[]
+```
+
+`items.length` is the same story: there are no array properties or methods at
+all. The only call-shaped construct in the language is a filter.
+
+| Reaching for | Write instead |
+|---|---|
+| `Math.max(a, b)` | `a > b ? a : b` |
+| `items.length` | `loop.count` inside the loop, or pass a count through the context |
+| `items.map(...)` / `items.filter(...)` | `{each}` with the [loop filters](/guides/filters) |
+| `value.toFixed(2)` | `${ value \| fixed(2) }` |
+| `String(x)` | `${ "" + x }` |
+
+**These operators do not exist:** `===`, `!==`, `??`, `?.`, `in`, `**`,
+`typeof`, `instanceof`, every bitwise operator, every assignment operator, and
+arrow functions. Unlike a bad property name, writing one of these is a real
+parse error, so you find out immediately.
+
+**There are no array or object literals.** Both `[1, 2]` and `{a: 1}` are parse
+errors. Pass collections in through the render context.
+
+## Interpolating into attributes
+
+A quoted element attribute interpolates, and an expression attribute in braces
+does too:
+
+```slurp
+<a href="/products/${ product.slug }">Read</a>
+<img src={ product.image } alt={ product.name } />
+```
+
+An expression attribute that evaluates to empty is omitted entirely, rather
+than emitted blank:
+
+```slurp
+<input value={ user.nickname }>
+<input value={ user.name }>
+```
+
+```html
+<input><input value=Bo>
+```
+
+<Warning>
+  A quoted **component** prop does not interpolate. `<Card title="Hi ${name}" />`
+  passes those characters as literal text. That asymmetry is the most common
+  mistake in the language and it is covered in
+  [Components](/guides/components).
+</Warning>
+
+### A nested double quote ends the attribute
+
+```slurp
+<div title="${ settings.labels["cart"] }">
+```
+
+```html
+<div title=" settings.labels[" cart></div>
+```
+
+The lexer closes an attribute value at its first matching quote, before
+interpolation is considered at all. So a double-quoted string key inside a
+double-quoted attribute truncates the attribute and turns the remainder into
+stray attributes. Nothing is reported by the compiler.
+
+Two spellings work. Use whichever reads better:
+
+```slurp
+<div title={ settings.labels["cart"] }>
+<div title="${ settings.labels['cart'] }">
+```
+
+```html
+<div title=Basket><div title=Basket>
+```
+
+## How data reaches a template
+
+At build time it comes from a JSON file, and every top-level key becomes a
+global:
+
+```json data.json
+{
+  "site": { "title": "My Shop" },
+  "products": [{ "name": "Notebook", "price": 12.5 }]
+}
+```
+
+```bash
+slurp build --globals data.json
+```
+
+Without `--globals` the context is empty, and because missing values render
+nothing, the build still succeeds and every page comes out with the data
+missing. If a whole page renders blank, check that flag first.
+
+When Slurp is embedded in a server the picture changes: the host supplies the
+context per request, and `--globals` covers only the values a theme must
+resolve at compile time. See [Embedding with Rust](/reference/rust-api).
+
+Inside the template there is no difference between the two. A page cannot tell
+where its context came from, which is what lets you develop a theme against a
+fixture file and ship it against live data.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Control flow" icon="code-branch" href="/guides/control-flow">
+    Conditionals, loops and the iteration budget.
+  </Card>
+  <Card title="Filters" icon="filter" href="/guides/filters">
+    Formatting values on the way out.
+  </Card>
+  <Card title="Escaping" icon="lock" href="/guides/escaping">
+    What is escaped where, and the one way to bypass it.
+  </Card>
+  <Card title="Expressions" icon="book" href="/reference/expressions">
+    The full grammar, precedence table and operator semantics.
+  </Card>
+</CardGroup>

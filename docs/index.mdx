@@ -1,0 +1,118 @@
+---
+title: "Introduction"
+description: "Slurp compiles templates to plain HTML on the server, in one pass, with everything escaped by default."
+---
+
+Slurp is a templating engine. You write pages, components and layouts as `.slurp`
+files, and it compiles them to plain HTML on the server. There is no build step
+that ships a framework to the browser: what a visitor downloads is the HTML you
+generated, and the client runtime is optional.
+
+The closest mental model is a small Astro.
+
+```slurp
+---
+using "@components/ProductCard"
+props {
+  products: any
+}
+---
+{each product, i in products | limit(8) | sort("price")}
+  <ProductCard product={product} featured={loop.first} />
+{empty}
+  <p>No products found.</p>
+{/each}
+```
+
+## What it is for
+
+Slurp exists for a specific problem: rendering templates you did not write and
+cannot fully trust.
+
+If you control every template in your project, most engines are fine and you
+should pick the one your team already knows. Slurp becomes worth its learning
+curve when templates arrive from somewhere else, such as a theme marketplace, a
+customer, or a model. In that setting the engine itself has to be the thing
+holding the line, because review does not scale and a mistake is not yours.
+
+Two design choices follow from that, and they shape everything else:
+
+<CardGroup cols={2}>
+  <Card title="No code runs at render time" icon="shield-check">
+    One pass over a JSON context. No reactivity, no callable functions, no
+    template-defined logic that could reach the host. A template is data
+    transformed into markup, not a program.
+  </Card>
+  <Card title="Escaped by default, per context" icon="lock">
+    An interpolation is escaped for the exact place it lands: HTML text, an
+    attribute, a `style` attribute, a `srcdoc`, or a JavaScript string. Getting
+    it right is the default rather than a thing you remember.
+  </Card>
+</CardGroup>
+
+## Editable without editing templates
+
+Sections and blocks let a template declare a typed schema in its frontmatter.
+The values become editable fields, so a non-technical person can change a
+heading, swap an image or reorder a list through a form, and the template they
+are editing stays untouched.
+
+```slurp
+---
+section {
+  name: "Featured"
+  settings {
+    heading: text = "Featured products"
+    limit:   number = 8 { min: 1, max: 24 }
+  }
+}
+---
+<h2>${ section.settings.heading }</h2>
+```
+
+That is the feature most engines leave to the surrounding application. Slurp
+puts it in the language so the schema and the markup cannot drift apart.
+
+## What to expect
+
+Slurp is deliberately **total and tolerant**. Missing data renders as the empty
+string, resource budgets truncate rather than abort, and unknown editor settings
+are dropped rather than rejected. That is what makes it safe to render an
+untrusted template in a shared service.
+
+It is also the thing that surprises people most, so it is worth stating plainly:
+
+<Warning>
+  Most Slurp mistakes are silent. A typo in a property name renders nothing
+  rather than raising, so a broken template usually produces a plausible page
+  instead of an error. Build with `--verbose` while developing, and read
+  [Common mistakes](/troubleshooting/common-mistakes) before you write much.
+</Warning>
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build and render a real page in about five minutes.
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    The CLI, the optional runtime, and the editor tooling.
+  </Card>
+  <Card title="Writing pages" icon="file-code" href="/guides/pages">
+    Routing, data, and how a page becomes a file.
+  </Card>
+  <Card title="Working with agents" icon="robot" href="/tooling/agents">
+    The MCP server, and why a model needs it to write Slurp correctly.
+  </Card>
+</CardGroup>
+
+## Status
+
+Slurp is **0.1.0, pre-1.0**. The template language and the Rust API will both
+change without a deprecation cycle until 1.0.
+
+It was extracted from a production system where it renders multi-tenant sites,
+so parsing, rendering, escaping and the resource budgets are exercised daily.
+The edges are less settled: parts of the browser runtime are not yet wired to
+compiler codegen and ship under `experimental/`, and the editor tooling and the
+compiler disagree on a few points of syntax, where the compiler is right.

@@ -1,0 +1,236 @@
+---
+title: "Frontmatter"
+description: "Every frontmatter directive, its exact syntax, and what happens to the ones that do not exist."
+---
+
+Frontmatter is the block between two `---` lines at the top of a `.slurp` file. The
+delimiters must be at column 1. Every directive is optional, and so is the block.
+
+```slurp
+---
+using "@components/ProductCard"
+using type { Product } from "@types/shop"
+
+type Address {
+  street: string
+  city: string
+}
+
+props {
+  product: Product
+  featured: bool = false
+}
+
+middleware "auth/require-login"
+
+section {
+  name: "Featured"
+  settings { heading: text = "Featured products" }
+}
+---
+```
+
+## The complete list
+
+| Directive | Syntax | Effect |
+|---|---|---|
+| `using` | `using "@components/Card"` or `using "./Card" as Renamed` | Makes a component resolvable |
+| `using type` | `using type { Post, Author } from "@types/content"` | Tooling only, no render effect |
+| `type` | `type Post { id: string  views?: number }` | Recorded as raw strings, NEVER enforced |
+| `props` | `props { title: string  count?: number  featured: bool = false }` | Declares the prop contract and any defaults |
+| `middleware` | `middleware "auth"` or `middleware auth` | Records a name, nothing more |
+| `section { }` | see [Schemas](/reference/schema) | Declares the editor surface for a section |
+| `block { }` | see [Schemas](/reference/schema) | Same, for a reusable theme block |
+
+Directives may appear in any order, and repeated `using`, `type` and `props`
+statements accumulate. A second `section { }` or a second `block { }` is an
+`InvalidFrontmatter` error; both may appear in the same file.
+
+<Warning>
+  **Unknown statements are silently skipped.** A misspelled directive produces no
+  diagnostic at all, so a typo does nothing and looks like it did something.
+
+  ```slurp
+  ---
+  layout: "@layouts/base"
+  totallyMadeUp foo bar
+  ---
+  ```
+
+  Both lines are accepted and ignored. There is no `layout` directive; use the
+  `{layout "..."}` block tag in the body. `InvalidFrontmatter` fires only on a
+  MALFORMED known directive, never on an unrecognised one.
+</Warning>
+
+## `using`
+
+```slurp
+using "@components/Button"
+using "../../shared/Footer"
+using "@components/Button" as PrimaryButton
+```
+
+The local name is the alias if one is given, otherwise the last path segment. So
+`using "@components/Card"` introduces `Card`, which is what makes `<Card />`
+resolve.
+
+`@`-prefixed paths are registry keys the host resolves. The CLI resolves
+`@components/X` and `@layouts/X` against the project directory.
+
+<Warning>
+  An unresolvable import is not an error. The component renders a placeholder:
+
+  ```html
+  <div data-slurp-component="Card" data-slurp-props="{&quot;title&quot;:&quot;Bo&quot;}"></div>
+  ```
+
+  A typo in an import path therefore looks like a clean build with a missing card.
+  Grep the output for `data-slurp-component` when something is unexpectedly absent.
+</Warning>
+
+### `using type`
+
+```slurp
+using type { Product, Review } from "@types/shop"
+```
+
+Imports type names for editor tooling. It introduces no component and has no effect
+on rendering. The `from` keyword is required; omitting it is `InvalidFrontmatter`.
+
+## `type`
+
+```slurp
+type CartItem {
+  id: string
+  name: string
+  price: number
+  quantity?: number
+}
+```
+
+Declares a shape for use in `props` or a `{fetch}` type hint. A `?` marks a field
+optional.
+
+**Type expressions are stored as raw strings and are never checked**, at parse time
+or at render time. `TypeMismatch` is declared in the error enum and never emitted.
+The names are for humans and for editor tooling.
+
+## `props`
+
+```slurp
+props {
+  title: string
+  count?: number
+  featured: bool = false
+}
+```
+
+<ParamField path="name" required>
+  The prop name. A `?` immediately after it marks the prop optional.
+</ParamField>
+<ParamField path="type" required>
+  A type expression, stored as a raw string. Append `[]` for an array.
+</ParamField>
+<ParamField path="= default">
+  Optional. The expression is evaluated in the **caller's** scope when the prop is
+  not passed.
+</ParamField>
+
+Prop types and requiredness are recorded and NEVER validated at render time, so a
+missing required prop is simply `null`. `MissingRequiredProp` and `UnknownProp` are
+both declared and never emitted; passing a prop the component never declared is not
+an error either.
+
+<Warning>
+  **A type expression runs to the end of the line.** It terminates at a newline, a
+  comma, a `=`, or the closing brace. So several space-separated declarations on one
+  line collapse into a single prop whose type expression swallows the rest:
+
+  ```slurp
+  props { a: string  b: number  c: bool }   {* ONE prop named a *}
+  props { a: string, b: number, c: bool }   {* three props *}
+  props {
+    a: string
+    b: number
+  }                                          {* three props, the clearest form *}
+  ```
+
+  Adding a `= default` also terminates the type expression, so the one-line form
+  happens to work once every prop has a default. Because types are never enforced,
+  the collapse is otherwise invisible at render time. It is still worth writing one
+  per line: the collapsed form is what the editor tooling reads back.
+</Warning>
+
+### Defaults are evaluated in the caller's scope
+
+```slurp components/Card.slurp
+---
+props { n?: number = count5 }
+---
+<div>${ n }</div>
+```
+
+Rendered from a page whose context has `count5 = 5`, `<Card />` produces
+`<div>5</div>`. The default expression is resolved where the component was written
+into the page, not inside the component.
+
+## `middleware`
+
+```slurp
+middleware "auth/session-check"
+middleware auth
+```
+
+Both the quoted and the bare form are accepted, and both only RECORD a name.
+
+<Warning>
+  **Middleware is a compile option, not a filename or frontmatter convention.**
+  What makes a file middleware is `CompileOptions.is_middleware`, supplied by
+  whoever invokes the compiler. On the CLI that is the `--middleware <DIR>` flag.
+
+  Without it, every file is treated as non-middleware, so a correct middleware file
+  reports `MiddlewareScopeViolation` for its `request.*` reads, and a broken one is
+  never checked at all.
+</Warning>
+
+Inside a file compiled as middleware, the scope rules invert: `request.*`,
+`{redirect}` and `{next}` become legal, and the only path roots allowed are
+`request`, `env` and `loop`. Reading any other root there is
+`MiddlewareScopeViolation`.
+
+## `section { }` and `block { }`
+
+These declare a typed editor surface. The grammar is large enough to have its own
+page: see [Schemas](/reference/schema).
+
+`section`, `settings`, `blocks`, `name`, `max` and `max_per_page` are CONTEXTUAL
+keywords. They lex as ordinary identifiers and gain meaning only at that exact
+structural position, so a template using any of them as a prop name or a type name
+is unaffected. A `section` statement is recognised only when a `{` follows it
+immediately.
+
+## `env` and secrets
+
+`env.*` is readable from a template, with one hard restriction enforced at compile
+time:
+
+```slurp
+<script>const k = ${ env.SLURP_SECRET_API_KEY | js };</script>
+```
+
+```
+error[SecretEnvInTemplate]: env.SLURP_SECRET_API_KEY must not be accessed
+in templates; use server-side data binding instead
+```
+
+The gate covers three cases, all under the same code:
+
+| Written | Result |
+|---|---|
+| `env.PUBLIC_URL` | fine |
+| `env.SLURP_SECRET_X` or `env["SLURP_SECRET_X"]` | `env.SLURP_SECRET_X must not be accessed in templates` |
+| `env[someKey]` | `env[...] must be indexed by a literal key so secret access can be checked at compile time` |
+
+A non-constant key is refused because it could resolve to a secret name. Read the
+secret on the server and pass only a derived, non-secret value through the render
+context.

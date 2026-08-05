@@ -1,0 +1,308 @@
+---
+title: "Image service"
+description: "slurp-image is the standalone resize service the Image component points at. Its one endpoint, its configuration, and the guards it needs because it fetches URLs it did not choose."
+---
+
+`slurp-image` is a small standalone HTTP service that resizes and re-encodes
+images on demand. The `<Image>` component in a template emits URLs that point at
+it; the service does not read your templates and has no knowledge of Slurp beyond
+the URL shape.
+
+It does exactly one thing: **a width-only resize that preserves aspect ratio and
+never upscales**, re-encoded to AVIF, WebP or JPEG. There is no cropping, no
+rotation, no quality parameter and no height parameter.
+
+<Warning>
+  Slurp is **0.1.0, pre-1.0**. The CLI surface here is unstable.
+</Warning>
+
+## Running it
+
+```bash
+cargo install slurp-image
+slurp-image --port 3001
+```
+
+It binds **loopback by default** and sends **no CORS headers**, which is correct
+for the usual deployment: reverse-proxied at the same origin as the site, under
+`/_slurp/image`. It has no authentication, so exposing it should be a deliberate
+act.
+
+```bash
+# Deliberately exposed. Put a reverse proxy in front of it.
+slurp-image --bind 0.0.0.0 --cors-allow-origin https://shop.example.com
+```
+
+Binding a non-loopback address logs a warning saying so.
+
+## How a template reaches it
+
+```slurp
+<Image src="https://cdn.example.com/a.jpg" alt="A hat" width={800} height={600} />
+```
+
+renders a `<picture>` with three variants:
+
+```html
+<picture>
+  <source srcset="/_slurp/image?src=https://cdn.example.com/a.jpg&w=800&f=avif" type="image/avif">
+  <source srcset="/_slurp/image?src=https://cdn.example.com/a.jpg&w=800&f=webp" type="image/webp">
+  <img alt="A hat" src="/_slurp/image?src=https://cdn.example.com/a.jpg&w=800&f=jpeg"
+       decoding="async" height="600" loading="lazy" width="800">
+</picture>
+```
+
+Two things to notice. The URLs are **root-relative**, so the service has to be
+reachable at `/_slurp/image` on the site's own origin. And `height` is used for
+the `<img>` attribute only and is **never sent to the service**, because the only
+transform is width-driven. It exists to reserve layout space and avoid a shift.
+
+`width` defaults to 800 and `height` to 600 when not given. Add `priority` to
+drop `loading="lazy"` for an above-the-fold image. A missing `src` is a
+`MissingImageSrc` render error.
+
+## The endpoint
+
+```
+GET /_slurp/image?src=<url>&w=<width>&f=<format>
+```
+
+<ParamField query="src" type="string" required>
+  An absolute `http` or `https` URL. At most 4,096 bytes, no control characters
+  (anything below `0x20`, or `0x7f`), no userinfo component, and it must have a
+  host.
+</ParamField>
+
+<ParamField query="w" type="integer" required>
+  Target width in pixels, 1 to 8,192. Absent or `0` is a 400.
+</ParamField>
+
+<ParamField query="f" type="string" default="webp">
+  One of `avif`, `webp`, `jpeg` or `jpg`. Anything else is a 400.
+</ParamField>
+
+<Note>
+  **There is no `h` and no `q`, and the format parameter is `f`, not `fmt`.**
+  Quality is fixed: AVIF is quality 80 at speed 6, and JPEG and WebP use the
+  `image` crate defaults. Resampling is Lanczos3.
+</Note>
+
+### Formats
+
+| | JPEG | PNG | GIF | WebP | AVIF / HEIC |
+|---|---|---|---|---|---|
+| Accepted as **input** | Yes | Yes | Yes | Yes | Recognised, not decodable |
+| Emitted as **output** | Yes | No | No | Yes | Yes |
+
+PNG and GIF are decoded and are never emitted. AVIF and HEIC are recognised only
+so such a file is reported as an unsupported source format rather than as corrupt
+data; there is no ISO base media decoder linked in, and AVIF is an **output**
+format only.
+
+### Responses
+
+A success is the image bytes with the right `Content-Type` and
+`Cache-Control: public, max-age=<cache-ttl>`.
+
+An error is JSON, `{"error": "..."}`:
+
+| Status | Meaning |
+|---|---|
+| 400 | Bad parameters, or a URL that fails validation |
+| 403 | Blocked (an SSRF refusal, reported vaguely on purpose) |
+| 408 | The whole-request deadline expired |
+| 413 | Source image too large |
+| 422 | Undecodable, unsupported source format, decompression bomb, or the requested output is too large |
+| 429 | Rate limited |
+| 500 | Encode failure |
+| 502 | DNS resolution or fetch failure |
+| 503 | Shutting down |
+
+Only 429 and 503 carry a `Retry-After` (60 and 5 seconds). A 4xx caused by the
+request itself will fail again at any time, and telling a client to retry it is
+an invitation to hammer.
+
+Error messages for security failures are deliberately vague, so that the service
+is not an oracle for what is reachable from inside your network.
+
+---
+
+## Configuration
+
+### Command-line flags
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--port` | `3001` | TCP port |
+| `--bind` | `127.0.0.1` | Address to bind |
+| `--cors-allow-origin` | none | Allowed origin, repeatable, or `*`. Omitted means no CORS headers at all |
+| `--cache-dir` | `/tmp/slurp-image-cache` | On-disk cache location |
+| `--cache-ttl` | `3600` | Cache TTL in seconds, and the `max-age` sent to clients |
+| `--memory-cache-size` | `512` | In-memory cache capacity, in entries |
+| `--max-disk-cache-bytes` | 2 GiB | Total on-disk cache budget |
+| `--disk-sweep-interval-secs` | `300` | How often the disk sweeper runs |
+| `--max-concurrent-transforms` | number of cores | Simultaneous decode/resize/encode |
+| `--request-timeout-secs` | `30` | Whole-request deadline |
+| `--max-output-pixels` | `8000000` | Output width times height ceiling |
+
+### Not exposed as flags
+
+Several limits live on `Config` and can only be set by a Rust caller using
+`slurp-image` as a library. Worth knowing they exist, because a 413 or a 422 you
+did not expect comes from here:
+
+| Field | Default |
+|---|---|
+| `max_source_bytes` | 20 MiB |
+| `max_decoded_bytes` | 50 MiB |
+| `max_width` | 8,192 |
+| `fetch_timeout_secs` | 10 |
+| `rate_limit_requests` | 100 |
+| `rate_limit_window_secs` | 60 |
+| `rate_limit_max_entries` | 65,536 |
+
+---
+
+## Caching
+
+Two levels, both keyed by `sha256(src, width, format)`.
+
+1. **In memory**, a moka LRU holding `--memory-cache-size` entries (512 by
+   default). Counted in entries, not bytes.
+2. **On disk**, in `--cache-dir`. The data file is named for the hash with no
+   extension, alongside a `<hash>.meta` sidecar holding the expiry timestamp.
+
+A background sweeper runs every `--disk-sweep-interval-secs`, deletes expired
+entries, and then evicts the oldest until the directory is under
+`--max-disk-cache-bytes`. The write path also sweeps out of band once a burst has
+written a fraction of the budget, so growth stays bounded between ticks. Without
+that, an attacker requesting many distinct `(src, width, format)` variants could
+fill the disk.
+
+`Cache-Control: public, max-age=<cache-ttl>` goes out with every successful
+response, so a CDN or the browser will normally absorb the repeat traffic before
+this service sees it.
+
+---
+
+## Security
+
+This service fetches URLs it did not choose, which makes it the most
+attacker-exposed component Slurp ships. The guards below run in order, and each
+is there because the one before it is not sufficient on its own. The full
+treatment is in [the security model](/security-model).
+
+<AccordionGroup>
+  <Accordion title="URL validation">
+    Length capped at 4,096 bytes. Control characters rejected. Scheme allow-list
+    of `http` and `https` only. A host is required. **Userinfo is rejected**,
+    because `http://internal-host@evil.example.com/` is a classic SSRF
+    indirection.
+  </Accordion>
+
+  <Accordion title="SSRF: resolve, allow-list, then pin">
+    Every hostname is DNS-resolved **before** connecting, and every address
+    returned must be globally routable unicast.
+
+    It is an **allow-list, not a deny-list**, and that direction is the point: a
+    deny-list silently permits every range nobody thought to enumerate, and
+    `240.0.0.0/4` is easy to overlook while being real internal space in some
+    cloud fabrics. An IPv4-mapped IPv6 address is unwrapped and checked as IPv4,
+    so `::ffff:127.0.0.1` cannot slip through as "not `::1`".
+
+    The resolved addresses are then **pinned into the HTTP client**, so a second
+    lookup cannot rebind to a private address between the check and the connect.
+  </Accordion>
+
+  <Accordion title="Redirects are disabled entirely">
+    The redirect policy is `none()`. Following redirects is a documented SSRF
+    bypass: the first hop passes the address check and the second one does not
+    have to. A 3xx is returned as-is and fails the success check.
+  </Accordion>
+
+  <Accordion title="Magic bytes, and a decoder that must agree">
+    The response body must begin with a JPEG, PNG, GIF or WebP header, identified
+    from the bytes rather than from the extension or the `Content-Type`.
+
+    For an ISO base media file the `ftyp` marker at bytes 4 to 8 is **required**,
+    not just the brand at 8 to 12. Checking the brand alone would leave the first
+    eight bytes fully attacker-controlled, so a TIFF, EXR, DDS, BMP or QOI header
+    carrying `mif1` at offset 8 would pass and then be handed to whichever decoder
+    the content really matched.
+
+    Accepting the header is necessary but not sufficient: the format the decoder
+    infers from the real content must also be one of the four declared ones, so a
+    polyglot cannot be routed to a decoder this service never enabled.
+  </Accordion>
+
+  <Accordion title="Size caps at three separate stages">
+    - **Source bytes**, checked against `Content-Length` and again while
+      streaming, because the header can be absent and can lie. Over the cap is a
+      413.
+    - **Decoded size**, computed as declared width times height times the
+      decoder's real bytes per pixel, checked **before** any pixel buffer is
+      allocated. That is the decompression-bomb guard, and it is a 422.
+    - **Output pixels**, checked after computing the resized dimensions. A width
+      cap alone bounds nothing on a very tall source, and encode cost scales with
+      pixels, so this is the limit that actually bounds per-request CPU.
+  </Accordion>
+
+  <Accordion title="Concurrency and deadlines">
+    Decode, resize and encode are CPU-bound and run on the blocking pool behind a
+    semaphore, defaulting to one permit per core. More permits than cores would
+    only trade throughput for latency and memory, since each in-flight transform
+    peaks in the hundreds of megabytes.
+
+    Saturation makes a request **wait**, bounded by the whole-request deadline,
+    rather than refusing work the service could serve a moment later.
+
+    Two deadlines: `fetch_timeout_secs` (10) on the upstream fetch, and
+    `request_timeout_secs` (30) on the whole request, so a slow upstream plus a
+    slow encode cannot hold a connection and a transform permit indefinitely.
+  </Accordion>
+
+  <Accordion title="Rate limiting, and its honest limitations">
+    An in-memory fixed-window counter, 100 requests per 60 seconds per client by
+    default.
+
+    An IPv6 client is bucketed by its **/64**, not its address, because a routine
+    residential or cloud allocation is a whole /64 and per-address buckets let one
+    attacker mint unlimited distinct keys. An IPv4-mapped address shares the IPv4
+    bucket, so a dual-stack listener cannot be used to get a second allowance.
+
+    The bucket map is sharded, pruned on a background timer rather than on the
+    request path, and hard-capped at 65,536 entries. Past the cap a shard drops
+    expired buckets first and then **refuses** rather than growing: memory is
+    bounded by construction, not by hoping the sweeper keeps up.
+
+    **It resets on restart and is not shared between instances.** It is a last
+    line of defence, not a substitute for limits at your reverse proxy.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Operating notes
+
+- **Put it behind a reverse proxy.** No authentication, in-process rate limiting
+  only, and the `<Image>` URLs are root-relative anyway, so a proxy at
+  `/_slurp/image` is the intended shape rather than a hardening step.
+- **The cache directory defaults to `/tmp`.** On a host that clears `/tmp` you
+  will re-transform everything after a reboot. Point `--cache-dir` somewhere
+  durable if that matters.
+- **Watch for 502s.** They mean DNS or the fetch failed, which usually means the
+  source host is down or the URL is wrong, not that this service is unhealthy.
+- **A 403 is an SSRF refusal.** If a legitimate internal image host is being
+  refused, that is the allow-list working as designed. Serve those images from a
+  publicly routable host, or fetch them by another path.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Images in templates" icon="image" href="/guides/images">
+    The `<Image>` component and when to use it.
+  </Card>
+  <Card title="Security model" icon="shield-check" href="/security-model">
+    The whole threat model, including the order these guards run in.
+  </Card>
+</CardGroup>

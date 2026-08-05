@@ -1,0 +1,218 @@
+---
+title: "Expressions"
+description: "The expression grammar: interpolation forms, precedence, operator semantics, literals, paths and scoping."
+---
+
+An expression is evaluated once, on the server, against a JSON context. It cannot
+call anything, cannot assign anything, and cannot fail: a missing value is `null`
+and renders as the empty string.
+
+## Interpolation forms
+
+| Form | Where it is legal | Escaping |
+|---|---|---|
+| `${ expr }` | Text, quoted element attributes, template literals, `<script>` bodies | Per context |
+| `{ expr }` | Text only | HTML text |
+| `attr={ expr }` | Element attribute or component prop value | Per context |
+| `` `text ${ expr }` `` | Anywhere an expression is | Per context |
+
+`${ expr }` and `{ expr }` are the same node in text position. The brace form is
+shorter; the dollar form is unambiguous, which matters because **a bare `{` in text
+starts an expression**:
+
+```slurp
+<p>css-ish: a { color: red }</p>
+```
+
+```
+error[UnclosedBlock]: Expected } to close expression
+error[UnexpectedToken]: Unexpected token Colon in template
+```
+
+To emit a literal brace, interpolate one: `${ "{" }`.
+
+<Warning>
+  Two raw-text contexts change the rules.
+
+  In a **`<script>` body** a bare `{` is literal text, so ordinary JavaScript
+  objects are safe to write, but `${ }` is still interpolated and must carry
+  `| js` or `| json`. Block tags such as `{if}` still work there.
+
+  In a **`<style>` body** nothing is interpolated at all. `${ name }` inside
+  `<style>` is emitted verbatim, characters and all.
+</Warning>
+
+## Precedence
+
+Loosest first. All binary operators are left-associative, including the
+comparisons, so `a < b < c` parses as `(a < b) < c`.
+
+| # | Construct | Associativity |
+|---|---|---|
+| 1 | `\|` filter application | left, and LOOSEST of all |
+| 2 | `? :` ternary | RIGHT |
+| 3 | `\|\|` | left |
+| 4 | `&&` | left |
+| 5 | `==` `!=` | left |
+| 6 | `<` `>` `<=` `>=` | left |
+| 7 | `+` `-` | left |
+| 8 | `*` `/` `%` | left |
+| 9 | `!x` `-x` prefix | right |
+| 10 | `x[...]` `f(...)` postfix | left |
+| 11 | literals, paths, `(...)`, template literals | tightest |
+
+<Warning>
+  **Filters bind loosest of all.** `${ ok ? "yes" : "no" | upper }` applies `upper`
+  to the whole ternary result, so with `ok = true` it renders `YES`, not `yes`.
+  Parenthesise if you meant otherwise.
+
+  A filter also cannot be followed by a binary operator. `${ a | upper + b }` is a
+  parse error, not a precedence surprise. Parenthesise: `${ (a | upper) + b }`.
+</Warning>
+
+## Operator semantics
+
+| Operator | Behaviour |
+|---|---|
+| `+` | STRING CONCATENATION if either side is a string, otherwise numeric. `"a" + 1` is `a1`, `1 + "a"` is `1a`. |
+| `-` `*` | Numeric. `null`, arrays, objects and non-numeric strings all coerce to 0. |
+| `/` `%` | Numeric, and **division by zero yields 0**, not an error and not `Infinity`. |
+| `==` `!=` | Type-strict deep equality. `1 == "1"` is false, `0 == false` is false. Numbers compare with an epsilon, so `0.1 + 0.2 == 0.3` is true. Arrays and objects compare structurally. |
+| `<` `>` | Only number-to-number and string-to-string actually compare. Every other pairing compares Equal, so both are false. `"10" > 9` is FALSE. |
+| `<=` `>=` | `equal OR strictly-ordered`. Since a cross-type pair is never deeply equal and never orders, `"a" >= 1` is also FALSE. |
+| `&&` `\|\|` | Short-circuit, returning THE OPERAND VALUE JavaScript-style, not a coerced boolean. |
+| `!x` | Always a real boolean. |
+| `-x` | Only a NUMBER is negated. `-"5"` is 0, which disagrees with `0 - "5"` being -5. |
+
+Any arithmetic result that is NaN or infinite silently becomes 0.
+
+### Arithmetic coerces, comparison does not
+
+This asymmetry is the single most common source of wrong-looking output.
+
+```slurp
+${ "10" > 9 }            {* false: no coercion *}
+${ ("10" | int) > 9 }    {* true *}
+${ "10" - 1 }            {* 9: arithmetic coerces *}
+```
+
+Coerce explicitly with `| int` or `| float` whenever a value might arrive as a
+string. Money always does; a server decimal serialises to JSON as `"49.990000"`.
+
+## Truthiness
+
+| Value | Truthy? |
+|---|---|
+| `null` | no |
+| `false` | no |
+| `0` | no |
+| `""` | no |
+| `[]` | **no** (truthy in JavaScript) |
+| `{}` | **no** (truthy in JavaScript) |
+| `"0"`, `"false"` | **yes** |
+| anything else | yes |
+
+## Literals
+
+| Form | Notes |
+|---|---|
+| `"str"` / `'str'` | Escapes: `\n \t \r \\ \' \" \0 \uXXXX`. A `\u` escape must have exactly 4 hex digits or it is a lex error. An unknown escape is preserved as backslash plus the character. |
+| `123`, `1.5`, `1e3` | All `f64`. `.5` is NOT valid, a digit must lead. `1.` is not a number either. No hex (`0xFF` lexes as `0` then `xFF`), no digit separators, no unary plus. |
+| `true` `false` `null` | Word-boundary matched. There is no `undefined` KEYWORD, though the identifier `undefined` parses as an ordinary path and resolves to nothing. |
+| `` `text ${expr}` `` | Template literal. Its escape set is SMALLER than a quoted string's: `\n`, `\t`, `\r`, `\\`, an escaped backtick and `\$`, with no `\uXXXX`. |
+| `[1, 2]` | **Does not exist.** A parse error. |
+| `{a: 1}` | **Does not exist.** A lex error (`Unexpected character in expression: '{'`). |
+
+Pass collections and objects through the render context.
+
+## Operators that do not exist
+
+`===` `!==` `??` `?.` `in` `**` `typeof` `instanceof`, every bitwise operator,
+every assignment operator, and arrow functions. Each is a parse or lex error, not a
+silent no-op, so none of them can ship unnoticed.
+
+There is no `?.` because none is needed: `.` is always null-safe. For a null
+fallback use `| default(...)` rather than `??`.
+
+## Paths
+
+```slurp
+${ user.address.city }      {* null-safe at every depth: missing gives "" *}
+${ items[0].title }         {* literal index *}
+${ config["feature-flag"] } {* literal string key *}
+${ items[i] }               {* dynamic index: WORKS *}
+```
+
+Navigation is null-safe at every depth, so a missing intermediate yields the empty
+string rather than an error.
+
+A dynamic index works, including when the index is an `{each}` loop variable. With
+`items = ["a","b","c"]` and `i = 1`, `${ items[i] }` renders `b`.
+
+After a `.` only an identifier is accepted, so `a.0` is a parse error and `a[0]` is
+the only form.
+
+<Warning>
+  **There are no array properties or methods.** `items.length` resolves to `null`
+  and renders empty, with no diagnostic. Pass a count through the render context,
+  or use `loop.count` inside the loop.
+</Warning>
+
+### Reactive paths
+
+`$name` marks a path as reactive for the optional browser runtime. Server-side it
+resolves exactly like a plain path, so `${ $cart.total }` and `${ cart.total }`
+render identically.
+
+## Function calls
+
+`f(a, b)` PARSES and ALWAYS evaluates to `null`. There are no built-in callable
+functions of any kind, no way to register one, and no diagnostic.
+
+```slurp
+${ Math.max(a, b) }   {* renders "" *}
+${ String(name) }     {* renders "" *}
+${ parseInt(x) }      {* renders "" *}
+```
+
+The only call-shaped construct in the language is a filter. Compute the value on the
+server and pass it through the context, or reach for
+[a filter](/reference/filters).
+
+## Scoping
+
+The page context is the root scope. `{each}` and `{fetch}` create child scopes, and
+a child shadows its parent.
+
+Components and layouts render in their OWN root scope: the page globals, overlaid by
+whatever was passed explicitly, with the explicit values winning on collision. So a
+component CAN read a page global it was never passed.
+
+<Warning>
+  What a component cannot see is the caller's LOCAL bindings. An `{each}` loop
+  variable and `loop.index` are invisible inside a component unless passed as props,
+  and the failure is silent: they render as empty values.
+
+  ```slurp
+  {each p in products}<Card />{/each}            {* Card cannot see p *}
+  {each p in products}<Card product={p} />{/each} {* correct *}
+  ```
+</Warning>
+
+## Escaping by context
+
+An interpolation is escaped for exactly where it lands. You do not choose the
+escaper; the compiler does, from the position.
+
+| Position | Escaper | What it does |
+|---|---|---|
+| HTML text | `escape_html` | `& < > " '` become character references. `/` is deliberately left alone so URLs and date formats survive. |
+| Quoted attribute value | `escape_attr` | The above plus a backtick, as defence in depth against attribute breakout. |
+| `style` attribute slot | `escape_css_value` | REMOVES `; { } ( ) " ' \ @ * < >` and NUL. There is no useful CSS escape for a slot that could sit in any grammatical position, so the structural characters go. `:` and `/` are kept so `background:url(${path})` still works. |
+| JS-evaluated attribute, inside a string literal | `escape_js_string` | Backslash-encodes the backslash, both quotes, the backtick, `$`, newlines, U+2028, U+2029, `<` and `/`. |
+| JS-evaluated attribute, statement position | JSON encoding | An undeclared slot is auto-encoded as a self-delimiting JSON literal. |
+| `<script>` body | none, and an undeclared slot is an error | You must write `\| js` or `\| json`. See [Errors](/reference/errors). |
+| `{html expr}` | none | The explicit opt-out. |
+
+A `style` slot losing characters is reported as a warning in development mode only.
+A production render strips silently.

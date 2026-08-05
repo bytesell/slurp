@@ -1,0 +1,240 @@
+---
+title: "Project structure"
+description: "How the input tree becomes the output tree, which directories are special, and which are only convention."
+---
+
+A Slurp project is a directory of `.slurp` files. There is no config file, no
+scaffolding command, and no manifest the compiler reads. `slurp build` walks the
+tree it is given and writes a mirror of it.
+
+This page uses `examples/basic-theme` from the repository as the worked example.
+
+```
+basic-theme/
+  layouts/
+    base.slurp            checked, never emitted
+  components/
+    Navbar.slurp          checked, never emitted
+    ProductCard.slurp
+    ...
+  pages/
+    index.slurp           becomes dist/pages/index.html
+    product.slurp
+    404.slurp
+  middleware/
+    auth.slurp            checked, then skipped
+  mock-context.json       passed with --globals, not copied
+  .gitignore
+  README.md
+```
+
+## Building it
+
+```bash
+slurp build --input examples/basic-theme --output dist \
+  --middleware middleware \
+  --globals examples/basic-theme/mock-context.json --verbose
+```
+
+```
+Build complete. 6 page(s) emitted, 10 component/layout file(s) checked, 1 middleware file(s) checked.
+```
+
+The output:
+
+```
+dist/
+  .gitignore
+  README.md
+  pages/404.html
+  pages/account.html
+  pages/cart.html
+  pages/collection.html
+  pages/index.html
+  pages/product.html
+```
+
+Three things in that listing are worth naming, because each one surprises
+someone.
+
+## The output tree mirrors the input tree
+
+There is no rewriting. A `.slurp` file keeps its relative path and changes
+extension, so `pages/index.slurp` becomes `dist/pages/index.html`, and
+`pages/` stays in the URL unless whatever serves the site strips it.
+
+| Input | Output |
+|---|---|
+| `index.slurp` | `dist/index.html` |
+| `contact.slurp` | `dist/contact.html` |
+| `about/index.slurp` | `dist/about/index.html` |
+| `pages/product.slurp` | `dist/pages/product.html` |
+| `components/Card.slurp` | nothing |
+| `layouts/base.slurp` | nothing |
+
+## Two directories are special, and only two
+
+`components/` and `layouts/` are compiled and checked but never written out. A
+component or a layout rendered on its own is a fragment rather than a document,
+and a layout in particular comes out carrying literal `<slot>` elements, so
+emitting them would fill the output with files nothing can serve.
+
+They are still compiled, deliberately. A syntax error, a security violation or
+an unknown filter in a component that no page imports yet still fails the build.
+
+<Warning>
+  **Every other directory is emitted.** A `sections/Hero.slurp` builds to
+  `dist/sections/Hero.html`, a real file containing an unfilled fragment. The
+  rule is a blocklist of those two names, not an allowlist of `pages/`, and it
+  matches on the first path component only, so `components-archive/` is not
+  caught by it either.
+</Warning>
+
+## `pages/` is a convention, not a rule
+
+The compiler does not require it. A lone `index.slurp` at the root builds to
+`dist/index.html`, which is what the [Quickstart](/quickstart) does.
+
+What makes `pages/` worth using is the other end: `slurp-dev` and the hosts that
+embed Slurp route an extensionless request path into it, resolving `/` to
+`pages/index.html` and `/product` to `pages/product.html` or
+`pages/product/index.html`. Anything with a file extension is served straight
+from the theme root as an asset.
+
+`slurp build` also prints a warning when it emits no pages at all, and that
+warning names `pages/`:
+
+```
+warning: no pages were emitted. Pages live in a `pages/` directory at the root of
+the input tree; 1 .slurp file(s) were found and checked, but none is under `pages/`.
+```
+
+The message is about the routing convention rather than the compiler's own rule.
+A build of only components and middleware is legal and produces nothing.
+
+## Static assets are copied verbatim
+
+Every non-`.slurp` file in the input tree is copied to the output at the same
+relative path. There is no assets directory and no manifest: put your CSS,
+images, fonts and JavaScript wherever the markup references them, and they land
+in the same place.
+
+```
+assets/css/theme.css   ->   dist/assets/css/theme.css
+assets/img/logo.svg    ->   dist/assets/img/logo.svg
+```
+
+That is why `README.md` and `.gitignore` appear in the listing above. If you do
+not want a file published, keep it out of the input tree.
+
+The copy walk skips the same directories the compile walk does:
+
+- any directory whose name begins with `.`,
+- `node_modules`, `dist` and `target`, by name, wherever they appear,
+- the `--output` directory itself, so a build cannot copy its own output back
+  into a nested copy of itself,
+- symlinks, which are never followed.
+
+<Note>
+  `dist` and `target` are excluded by NAME, not because they happen to be the
+  defaults. A directory you genuinely want published cannot be called either.
+</Note>
+
+## The globals file is input, not an asset
+
+```bash
+slurp build --globals mock-context.json
+```
+
+`--globals` seeds the render context with values a template must resolve at
+compile time. It is read and **not** copied to the output, even though it sits
+inside the input tree in the obvious layout. That is the whole reason it is
+singled out: before, the copy shipped it to production at a guessable path.
+
+<Warning>
+  A `--globals` file that is missing, malformed, or not a JSON object is
+  **fatal**, not a quiet fallback to an empty context:
+
+  ```
+  Globals file bad.json must contain a JSON object
+  ```
+
+  The reason to pass one is that some attribute cannot be written without it, so
+  a build that silently continued would come out clean and break in the browser.
+</Warning>
+
+Commit the globals file. It holds no secrets by design, and without it a fresh
+clone builds with those values empty. A build-time secret belongs in `.env`,
+never here.
+
+## How imports resolve
+
+An `@` path is the file's path from the input root, without the extension.
+
+```slurp
+---
+using "@components/ui/Card"
+using "@layouts/base"
+---
+```
+
+`@components/ui/Card` resolves `components/ui/Card.slurp`, so nesting works and
+there is nothing to configure. The local name is the last path segment, or the
+alias if you write `using "./Card" as Renamed`.
+
+<Warning>
+  An unresolvable import does not fail the build. `<Nope title="x" />` renders as
+  `<div data-slurp-props='{"title":"x"}' data-slurp-component=Nope></div>`, so a
+  typo in an import path looks like a working build with a piece missing.
+</Warning>
+
+## `.gitignore`
+
+```bash
+slurp gitignore
+```
+
+Writes a `.gitignore` suited to a theme into the current directory. It refuses
+rather than clobbering an existing one, and tells you the three ways forward:
+
+```
+.\.gitignore already exists.
+
+  --append   add these rules to the end of it
+  --force    replace it
+  --stdout   print the template and write nothing
+```
+
+The rules it adds are short and unsurprising: `dist/`, `node_modules/`, `.env`,
+editor droppings. The useful half of the file is the part naming what must
+**not** be ignored.
+
+<Warning>
+  **Commit your compiled CSS.** If the theme compiles a stylesheet with Tailwind
+  or anything else, the compiled output is committed alongside the source, and
+  it must compile to a path the theme actually serves rather than into `dist/`.
+
+  A well-meaning `*.css` or `styles/` line in `.gitignore` breaks this
+  invisibly: the theme publishes, every page renders, every static check stays
+  green, and every page is unstyled HTML because the stylesheet 404s.
+</Warning>
+
+The globals file and a `theme.json` manifest, if you have one, are committed for
+the same reason: they are inputs, not build artifacts.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Writing pages" icon="file-code" href="/guides/pages">
+    Routing, data, and how a page becomes a file.
+  </Card>
+  <Card title="Components" icon="cube" href="/guides/components">
+    Props, slots, and the quoted-prop trap.
+  </Card>
+  <Card title="Middleware" icon="shield" href="/guides/middleware">
+    Why `middleware/` is a flag rather than a directory name.
+  </Card>
+  <Card title="CLI" icon="terminal" href="/tooling/cli">
+    Every subcommand and flag.
+  </Card>
+</CardGroup>

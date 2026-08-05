@@ -1,0 +1,409 @@
+---
+title: "Block tags"
+description: "Every block tag, its exact syntax, its branches, and the closing rules."
+---
+
+Block tags are written in braces: `{if}`, `{each}`, `{/each}`. The lexer recognises
+14 names directly after a `{`. Eleven are usable tags, two are branch markers legal
+only inside another tag, and one (`with`) is recognised by the lexer but has no
+parser behind it, so every `{with}` is a hard error.
+
+## The complete table
+
+| Tag | Kind | Closing tag | Branches |
+|---|---|---|---|
+| `{if cond}` | block | `{/if}` | `{else if}`, `{else}` |
+| `{each item in coll}` | block | `{/each}` | `{empty}` |
+| `{match expr}` | block | `{/match}` | arms, not branches |
+| `{fetch name from url}` | block | `{/fetch}` | `{loading}`, `{error}`, `{empty}` |
+| `{repeat n}` | block | `{/repeat}` | none |
+| `{try}` | block | `{/try}` | `{error}` |
+| `{slot}` / `{slot "name"}` | void or block | `{/slot}` when it has fallback | none |
+| `{layout "path"}` | block | `{/layout}` | none |
+| `{head}` | block | `{/head}` | none |
+| `{sections}` / `{sections "group"}` | void | none | none |
+| `{blocks}` | void | none | none |
+| `{loading}` | branch marker | none | only inside `{fetch}` |
+| `{error}` | branch marker | none | only inside `{fetch}` or `{try}` |
+| `{with}` | **does not exist** | | |
+
+Four more constructs are brace-delimited but are not block keywords. They are
+listed here because they are written the same way:
+
+| Construct | Meaning |
+|---|---|
+| `{* comment *}` | Stripped from the output entirely |
+| `{html expr}` / `{html expr sanitize}` | Raw, unescaped output |
+| `{$let name = expr}` | Seeds client state, no template binding |
+| `{debug expr}` | Pretty-prints a value in development mode only |
+| `{redirect "path"}` / `{next}` | Middleware-only signals |
+
+<Warning>
+  A branch marker takes **no closing tag of its own**. `{/empty}`, `{/else}`,
+  `{/loading}` and `{/error}` are all parse errors. A branch runs until the next
+  branch or the enclosing block's close.
+</Warning>
+
+## `{if}`
+
+Renders the first branch whose condition is truthy.
+
+```slurp
+{if notifications.count > 0}
+  <a href="/inbox">Inbox (${ notifications.count })</a>
+{else if user.is_guest}
+  <a href="/login">Sign in</a>
+{else}
+  <span>Nothing new</span>
+{/if}
+```
+
+Any number of `{else if}`, at most one `{else}`. Neither takes a closing tag;
+`{/if}` is required.
+
+Truthiness: `null`, `false`, the number `0`, the empty string, the empty array and
+the empty object are falsy. Everything else is truthy, including the strings `"0"`
+and `"false"`. Note that an empty array is falsy here and truthy in JavaScript.
+
+## `{each}`
+
+```slurp
+{each product, i in products | limit(12) | sort("price")}
+  <li>${ i }: ${ product.name }</li>
+{empty}
+  <li>Nothing here yet.</li>
+{/each}
+```
+
+<ParamField path="item" required>
+  The binding for the current element. **It comes first.**
+</ParamField>
+<ParamField path="index">
+  Optional, after a comma. A 0-based number.
+</ParamField>
+<ParamField path="in" required>
+  The literal keyword `in`. Omitting it is `UnexpectedToken`.
+</ParamField>
+<ParamField path="collection" required>
+  Any expression. Filters after it are **loop** filters, a different table from
+  the value filters.
+</ParamField>
+
+### Loop variables
+
+Four variables are bound automatically inside the body.
+
+| Variable | Type | Value |
+|---|---|---|
+| `loop.index` | number | 0-based position |
+| `loop.count` | number | the TOTAL number of items, not `index + 1` |
+| `loop.first` | bool | `index == 0` |
+| `loop.last` | bool | `index == count - 1` |
+
+These four names are resolved by a flat-key fast path, so exactly `loop.index`,
+`loop.count`, `loop.first` and `loop.last` are shadowed inside a loop. Any other
+property of a real `loop` object in your context still resolves normally.
+
+```slurp
+{* with loop = { index: "REAL", custom: "MINE" } in the context *}
+{each x in arr}[${ loop.index }][${ loop.custom }]{/each}
+{* renders [0][MINE][1][MINE][2][MINE] *}
+```
+
+### Collection semantics
+
+| Collection value | Result |
+|---|---|
+| An array | Iterated |
+| `null` | Empty, so the `{empty}` branch runs |
+| Anything else (string, number, object) | Wrapped and iterated **exactly once** |
+
+Each loop is capped at 1000 items. Over the cap the loop truncates, records an
+`IterationLimitExceeded` warning, and the build still succeeds. A render is
+additionally capped at 1000000 iterations in total, which is what bounds nested
+loops.
+
+<Warning>
+  A loop-filter error EMPTIES the collection, which then renders the `{empty}`
+  branch. A broken `limit()` therefore looks like "there is no data" rather than
+  like an error.
+</Warning>
+
+## `{match}`
+
+```slurp
+{match post.status}
+  "published" -> <span class="ok">Published</span>
+  "archived"  -> <span class="warn">Archived</span>
+  _           -> <span>${ post.status }</span>
+{/match}
+```
+
+**There is no `{case}` keyword.** An arm is a bare pattern, then `->`, then a body.
+Writing `{case "a"}A{/case}` produces a cascade of `UnexpectedToken` errors starting
+with `Expected match pattern, found LBrace`.
+
+Patterns are a string literal, a number literal, a boolean literal, or `_` for the
+wildcard. Arms are self-delimiting: a body ends at the next pattern token, so no
+per-arm closing tag exists.
+
+Matching is type-strict. A `"5"` pattern never matches a numeric `5`.
+
+```slurp
+{match count}
+  "5" -> string five
+  5   -> number five
+  _   -> other
+{/match}
+{* with count = 5 this renders "number five" *}
+```
+
+With no matching arm and no `_`, the block renders nothing.
+
+<Note>
+  Inside `{match}` the lexer tokenises bare quotes, digits, `->` and `_` so it can
+  read arm patterns. A stray quote in an arm body can therefore misparse, even
+  though the same quote is harmless elsewhere in a template.
+</Note>
+
+## `{fetch}`
+
+```slurp
+{fetch products: Product[] from "/api/products" cache(300) retry(2)}
+  {each p in products}<li>${ p.name }</li>{/each}
+{loading}
+  {repeat 6}<div class="skeleton"></div>{/repeat}
+{error}
+  <p>Could not load products.</p>
+{empty}
+  <p>No products yet.</p>
+{/fetch}
+```
+
+**The compiler performs no network request.** It reads `name` out of the render
+context and picks a branch. The host is responsible for putting the data there.
+
+| Context value at `name` | Branch rendered |
+|---|---|
+| absent or `null` | `{loading}`, or nothing if there is none |
+| an object carrying an `__error` key | `{error}`, with `error` bound to that value |
+| an empty array | `{empty}`, or nothing if there is none |
+| anything else | the body, with `name` rebound to it |
+
+<Warning>
+  **The branch order is fixed: body, then `{loading}`, then `{error}`, then
+  `{empty}`.** Out of order is not recovered. Writing `{error}` before `{loading}`
+  reports `Unclosed {fetch} block` plus `Unknown block: {loading}`, which points
+  nowhere near the real mistake.
+</Warning>
+
+### The type hint
+
+The syntax is `name: Type` or `name: Type[]`. The `[]` is only legal **after** a
+colon and a type name. `{fetch products[] from "/api"}` is a parse error
+(`Expected 'from' in {fetch}`).
+
+The hint is recorded in the AST and has no effect on rendering. Nothing is
+validated against it, and it does not change which branch is chosen.
+
+### Options
+
+Options follow the URL expression. Only the parenthesised call form parses. An
+unrecognised option, and any colon form such as `cache:300`, is **silently
+dropped**.
+
+| Option | Example | Meaning |
+|---|---|---|
+| `cache(n)` | `cache(300)` | Cache the response for n seconds |
+| `retry(n)` | `retry(3)` | Retry a failed request up to n times |
+| `timeout(n)` | `timeout(5000)` | Abort after n milliseconds |
+| `poll(n)` | `poll(30)` | Re-fetch every n seconds |
+| `paginate(n)` | `paginate(20)` | Paginate at n items per page |
+| `infinite(n)` | `infinite(20)` | Infinite scroll at n items per page |
+| `abort-on-navigate` | bare flag | Cancel in-flight requests on navigation |
+
+`abortOnNavigate` is accepted as an alternative spelling of the last one. All of
+these are instructions for the optional browser runtime; the server ignores them.
+
+## `{repeat}`
+
+```slurp
+{repeat 8}<div class="skeleton-card"></div>{/repeat}
+```
+
+The count is any expression, but only a **number** counts. A string, `null`, an
+array or an object all yield 0 iterations, so `{repeat "5"}` renders nothing. A
+float is truncated toward zero, a negative is 0, and the count is capped at 1000.
+
+## `{try}`
+
+```slurp
+{try}<LiveFeed items={$feed.items} />{error}<p>Feed unavailable.</p>{/try}
+```
+
+**The server always renders the body and never the `{error}` branch.** This is
+purely a client-side boundary and does nothing without the browser runtime.
+
+## `{html}`
+
+Raw, unescaped output. This is the only way to bypass escaping.
+
+```slurp
+{html product.description}    {* trusted content only *}
+{html review.body sanitize}   {* safe for untrusted input *}
+```
+
+`sanitize` runs an ammonia allowlist. Allowed tags:
+
+```
+p br hr span div section article aside header footer main nav h1 h2 h3 h4 h5 h6
+ul ol li dl dt dd a strong em b i u s strike del ins mark sup sub small abbr
+cite code pre kbd samp var q blockquote img figure figcaption picture source
+table thead tbody tfoot tr th td caption colgroup col time data address details
+summary
+```
+
+Everything else is removed by absence rather than as a special case, which is what
+strips `<script>`, `<iframe>`, `<form>` and `<style>`. Attributes work the same
+way. URL schemes are limited to `http`, `https` and `mailto`.
+
+<Note>
+  **Every sanitized `<a>` gains `rel="noopener noreferrer"`,** not only one that
+  carries a `target`. That is stricter than the requirement, and it is pinned by a
+  test so nobody narrows it later.
+
+  `srcset` is deliberately not on the attribute allowlist, because the scheme
+  check does not parse its comma-separated candidate grammar.
+</Note>
+
+### `{html}` in attribute position
+
+`{html expr}` also works as an attribute spread, including a conditional form:
+
+```slurp
+<input {html attrs} {if is_required}{html "required"}{/if} />
+```
+
+That path is sanitized differently: the spread is re-parsed into whole attributes,
+and any attribute with an unsafe name (`on*`, `x-html`, `x-data`, `x-init`,
+`x-effect`) or a script-scheme value is dropped.
+
+## `{$let}`
+
+Seeds CLIENT state. Server-side it emits only a JSON payload.
+
+```slurp
+{$let count = 0}
+```
+
+```html
+<script type="application/json" data-slurp-let="count">0.0</script>
+```
+
+<Warning>
+  **It creates no template binding.** Writing `{$let n = 5}` and then `${ n }`
+  renders the empty string. Note also the `0.0`: a numeric literal round-trips
+  through `f64`, so an integer comes back out as a float.
+</Warning>
+
+Object and array literals are not valid values, because the language has no such
+literals. `{$let cfg = {a: 1}}` is a lex error. Pass the value through the render
+context instead.
+
+## `{slot}` and `{layout}`
+
+Only two slot names are ever filled: `default` and `head`. Any other name renders
+as a literal `<slot name="x">` element in the output.
+
+```slurp
+{layout "@layouts/base"}
+  {head}<title>Products</title>{/head}
+  <h1>Products</h1>
+{/layout}
+```
+
+<Warning>
+  **The two layout forms are not equivalent.** With `{layout "..."}` the `{head}`
+  children are extracted and placed in the layout's head slot. With the element
+  form `<layout src="...">` they are not, and render inline in the body wherever
+  they were written.
+</Warning>
+
+There is no `layout` frontmatter directive. A `layout:` line in frontmatter is
+silently ignored.
+
+### Slot fallback
+
+`{slot}fallback{/slot}` renders its fallback only when nothing filled the slot at
+all.
+
+<Warning>
+  Inside a component or a layout the caller's children are ALWAYS supplied, even when
+  there are none, so the fallback of the `default` slot is unreachable there.
+  `<Card />` against a component containing `<slot>fallbk</slot>` renders nothing in
+  that position, not `fallbk`.
+</Warning>
+
+A named slot always falls through, because only `default` and `head` are ever
+filled, so `<slot name="other">OTHER-FB</slot>` renders as
+`<slot name="other">OTHER-FB</slot>` in the output: the literal element, with the
+fallback inside it.
+
+## `{sections}` and `{blocks}`
+
+Host integration points. Neither takes a closing tag.
+
+`{sections}` emits pre-rendered section HTML the host injected under the reserved
+context key `__slurp_sections_html`. `{sections "header"}` reads
+`__slurp_section_group_header_html` instead, which is how global chrome lives in a
+layout. The page-level key is stripped when entering a component or layout scope,
+so a stray `{sections}` in a component cannot duplicate the page; group keys are
+deliberately not stripped.
+
+`{blocks}` renders the child blocks of the nearest enclosing section or block, each
+from its own `blocks/<type>.slurp` file, preferring an enclosing `block` over an
+enclosing `section` so nesting works. Each child is wrapped for the editor:
+
+```html
+<div data-bs-block="{id}" style="display:contents">...</div>
+```
+
+Guards on that path: a block type must match `[A-Za-z0-9_-]+`, because it arrives
+from saved editor state and is used as a registry path; a block whose file hosts
+its own type is skipped by a cycle guard; and every block is charged against the
+shared iteration budget.
+
+<Note>
+  Neither tag produces anything under `slurp build`, because the CLI supplies no
+  section state. A page with a `section { }` schema built from the CLI renders
+  `${ section.settings.heading }` as the empty string, not as the schema default.
+  Defaults are applied by the host's `render_section` call. See
+  [Schemas](/reference/schema).
+</Note>
+
+## `{debug}`, `{redirect}`, `{next}`
+
+`{debug expr}` pretty-prints a value into a visible `<pre data-slurp-debug>` in
+DEVELOPMENT mode and is stripped with no trace in production. `slurp build` always
+uses production mode, so `{debug}` never reaches a build.
+
+`{redirect "path"}` and `{next}` are middleware-only signals that render nothing.
+Using either outside middleware is a `RedirectOutsideMiddleware` error. Middleware
+is a compile option, not a directory convention, so the CLI treats every file as
+non-middleware unless told otherwise with `--middleware`.
+
+## `{with}` does not exist
+
+`with` is in the lexer's keyword table but no parser supports it, so it is a hard
+error rather than an unknown-tag no-op:
+
+```slurp
+{with user}${ name }{/with}
+```
+
+```
+error[UnexpectedToken]: Unknown block: {with}
+```
+
+There is no scoping tag in Slurp. Write the full path, or bind the value in the
+host's render context.
