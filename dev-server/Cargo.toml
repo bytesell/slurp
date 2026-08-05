@@ -34,7 +34,7 @@ clap = { version = "4", features = ["derive"] }
 #
 # It duplicates `workspace.package.version`, so bump both together, and publish
 # slurp-compiler BEFORE slurp-dev-server or the release will not resolve.
-slurp-compiler = { path = "../compiler", version = "0.1.0" }
+slurp-compiler = { path = "../compiler", version = "0.1.1" }
 # TLS: rustls, not the default native-tls. reqwest's default feature set pulls
 # `openssl` + `openssl-sys`, which makes a fresh Linux clone fail at LINK time
 # unless libssl-dev and pkg-config happen to be installed. rustls is pure Rust
