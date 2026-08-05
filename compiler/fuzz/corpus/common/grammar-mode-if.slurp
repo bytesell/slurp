@@ -1,0 +1,8 @@
+{if q}{if x}y{/if}{/if}
+{if q}${a}{/if}
+{if q}{else}{/if}
+{if q}`t`{/if}
+{if q}</div>{/if}
+{if q}---{/if}
+{if q}{html v}{/if}
+{if q}{* c *}{/if}

@@ -1,0 +1,62 @@
+{
+  "name": "@slurp/runtime",
+  "version": "0.1.0",
+  "description": "Optional browser runtime for Slurp themes: client navigation, {fetch} data loading and infinite scroll.",
+  "license": "MIT",
+  "author": "ByteSell LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytesell/slurp.git",
+    "directory": "runtime"
+  },
+  "bugs": {
+    "url": "https://github.com/bytesell/slurp/issues"
+  },
+  "homepage": "https://github.com/bytesell/slurp#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/slurp.core.js",
+  "types": "./dist/slurp.core.d.ts",
+  "//exports": "The `./experimental/*` subpaths are implemented and unit-tested, but the compiler emits none of the markers they bind to (`x-data=\"slurpFetch(...)\"`, `[data-slurp-sentinel]`), so against the 0.1.0 compiler they attach to nothing and silently do no work. They are named `experimental/` so that cannot be discovered at runtime. See README.md in this directory. Do not promote them to `./fetch` and `./infinite` until the codegen lands.",
+  "exports": {
+    ".": {
+      "types": "./dist/slurp.core.d.ts",
+      "import": "./dist/slurp.core.js"
+    },
+    "./experimental/fetch": {
+      "types": "./dist/slurp.fetch.d.ts",
+      "import": "./dist/slurp.fetch.js"
+    },
+    "./experimental/infinite": {
+      "types": "./dist/slurp.infinite.d.ts",
+      "import": "./dist/slurp.infinite.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "jsdom": "^30.0.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.10",
+    "vite": "^7.1.14"
+  },
+  "dependencies": {
+    "alpinejs": "^3.14.0",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0"
+  }
+}

@@ -1,0 +1,1 @@
+{fetch "/api/x" as d}{loading}L{/loading}{error}E{/error}{empty}N{/empty}${d.a}{/fetch}

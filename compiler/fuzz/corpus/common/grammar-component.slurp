@@ -1,0 +1,1 @@
+<Card title="lit" count={1} on={true} data={obj}><p>child</p></Card>

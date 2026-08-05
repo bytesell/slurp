@@ -1,0 +1,191 @@
+---
+{* No props - the navbar reads $cart from the render context. *}
+---
+
+{*
+  {$let} seeds CLIENT state and must sit in the BODY, not in frontmatter:
+  frontmatter only accepts directives, and an unrecognised statement there is
+  silently discarded, so this line emitted nothing at all when it lived above.
+
+  In the body it compiles to a JSON payload the browser runtime picks up:
+    <script type="application/json" data-slurp-let="menuOpen">false</script>
+
+  It creates NO server-side binding. ${ menuOpen } renders empty here and
+  {if menuOpen} is always false, so the markup below is written to render in
+  its CLOSED state and to be opened by the runtime toggling a class.
+*}
+{$let menuOpen = false}
+
+<nav class="navbar">
+  <div class="navbar__inner">
+
+    {* Logo. Quote the numbers: unquoted width=120 lexes as an attribute NAME
+       and the value is silently dropped. *}
+    <a href="/" class="navbar__logo" aria-label="Go to homepage">
+      <img src="/logo.svg" alt="Our Store" width="120" height="36" />
+    </a>
+
+    {* Desktop nav links *}
+    <ul class="navbar__links" role="list">
+      <li><a href="/" class="navbar__link">Home</a></li>
+      <li><a href="/collections/all" class="navbar__link">Collections</a></li>
+      <li><a href="/about" class="navbar__link">About</a></li>
+    </ul>
+
+    {* Cart icon with reactive badge *}
+    <a href="/cart" class="navbar__cart" aria-label="View cart">
+      <svg class="navbar__cart-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="9" cy="21" r="1" />
+        <circle cx="20" cy="21" r="1" />
+        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+      </svg>
+      {if $cart.count > 0}
+        <span class="navbar__cart-badge" aria-live="polite">${ $cart.count }</span>
+      {/if}
+    </a>
+
+    {*
+      Mobile menu toggle.
+
+      on:click compiles to a LITERAL on:click attribute. Slurp itself never
+      binds it, and neither does @slurp/runtime - it is a declaration for a
+      host runtime to pick up. It is also not interpolated: unlike an ordinary
+      attribute, a ${ } inside an on: value is passed through verbatim.
+
+      aria-expanded is written as a literal "false" rather than ${ menuOpen },
+      because {$let} state is not readable server-side and would render the
+      attribute empty. "false" is the correct SERVER-rendered starting state.
+    *}
+    <button
+      class={
+        "navbar__toggle",
+        "navbar__toggle--open": menuOpen
+      }
+      on:click="menuOpen = !menuOpen"
+      aria-expanded="false"
+      aria-controls="mobile-menu"
+      aria-label="Toggle navigation"
+    >
+      <span class="navbar__toggle-bar"></span>
+      <span class="navbar__toggle-bar"></span>
+      <span class="navbar__toggle-bar"></span>
+    </button>
+  </div>
+
+  {*
+    Mobile menu.
+
+    This was written as {if menuOpen} ... {/if}, which can never render: the
+    condition is evaluated ONCE on the server, where menuOpen is null, so the
+    menu was absent from the HTML entirely and no client toggle could ever
+    reveal it. An {if} is not a reactive region - it is decided at render time
+    and baked into the output.
+
+    So the markup is always emitted, in its closed state, and opening it is a
+    matter of the --open class. CSS hides it by default.
+  *}
+  <div
+    id="mobile-menu"
+    class={
+      "navbar__mobile",
+      "navbar__mobile--open": menuOpen
+    }
+  >
+    <ul role="list">
+      <li><a href="/" class="navbar__link" on:click="menuOpen = false">Home</a></li>
+      <li><a href="/collections/all" class="navbar__link" on:click="menuOpen = false">Collections</a></li>
+      <li><a href="/about" class="navbar__link" on:click="menuOpen = false">About</a></li>
+      <li><a href="/cart" class="navbar__link" on:click="menuOpen = false">Cart (${ $cart.count })</a></li>
+    </ul>
+  </div>
+</nav>
+
+<style>
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+}
+.navbar__inner {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  height: 4rem;
+}
+.navbar__logo { margin-right: auto; }
+.navbar__links {
+  display: flex;
+  gap: 1.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.navbar__link {
+  color: #374151;
+  text-decoration: none;
+  font-weight: 500;
+}
+.navbar__link:hover { color: #111827; }
+.navbar__cart {
+  position: relative;
+  color: #374151;
+  display: flex;
+  align-items: center;
+}
+.navbar__cart-badge {
+  position: absolute;
+  top: -0.5rem;
+  right: -0.5rem;
+  background: #111827;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.2rem;
+}
+.navbar__toggle {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+.navbar__toggle-bar {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #374151;
+  border-radius: 2px;
+  transition: transform 0.2s;
+}
+.navbar__mobile {
+  display: none;
+  border-top: 1px solid #e5e7eb;
+  padding: 1rem 1.5rem;
+}
+.navbar__mobile--open { display: block; }
+.navbar__mobile ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+@media (max-width: 768px) {
+  .navbar__links { display: none; }
+  .navbar__toggle { display: flex; }
+}
+</style>

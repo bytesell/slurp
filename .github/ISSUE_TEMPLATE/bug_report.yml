@@ -1,0 +1,92 @@
+name: Bug report
+description: Something behaves differently from what SLURP_DOCS.md says
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a report.
+
+        **Two things worth checking first**, because they save everyone time:
+
+        1. **Do not report a security vulnerability here.** Use GitHub's private
+           vulnerability reporting instead, from the Security tab. See
+           [SECURITY.md](../blob/main/SECURITY.md).
+        2. **Check [SLURP_DOCS.md](../blob/main/SLURP_DOCS.md) for the feature.**
+           Slurp is pre-1.0 and several things are documented as not implemented
+           or not wired, including function calls, spread props, `slot="name"`
+           routing, `on:` handlers and `navigate=false`. If the doc already says
+           so, the useful issue is about the documentation or the priority, and
+           saying that up front helps.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: |
+        The smallest template that shows the problem, plus the render context if
+        one is involved. Because slurp renders against a JSON context, a bug is
+        often impossible to reproduce without it.
+      render: text
+      placeholder: |
+        Template:
+        ---
+        props { name: string }
+        ---
+        <p>${ name }</p>
+
+        Context:
+        { "name": "Alice" }
+
+        Command:
+        slurp build --input . --output dist --verbose
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Actual output
+      description: |
+        The HTML you got, or the error text. Build with `--verbose`: warnings are
+        hidden without it, and most slurp limits warn rather than fail.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Slurp version
+      placeholder: "0.1.0, or a commit SHA"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which part
+      options:
+        - compiler / CLI
+        - dev server
+        - image service
+        - browser runtime
+        - editor tooling (VS Code, Prettier)
+        - documentation
+        - not sure
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: OS and toolchain
+      placeholder: "Ubuntu 24.04, rustc 1.88.0, node 20.11"

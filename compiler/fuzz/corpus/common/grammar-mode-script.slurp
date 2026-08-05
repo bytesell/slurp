@@ -1,0 +1,8 @@
+<script>{if x}y{/if}</script>
+<script>${a}</script>
+<script>{else}</script>
+<script>`t`</script>
+<script></div></script>
+<script>---</script>
+<script>{html v}</script>
+<script>{* c *}</script>

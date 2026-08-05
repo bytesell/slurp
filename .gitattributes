@@ -1,0 +1,24 @@
+# LF in the working tree, on every platform.
+#
+# `core.autocrlf=true` is the Windows default, and it hands out CRLF working
+# copies of files stored as LF. Two things here break under that:
+#
+#   1. `llms-full.txt` is GENERATED, and CI checks it for drift by comparing it
+#      against a fresh run of the generator. The generator emits LF. A CRLF
+#      working copy therefore differs on every line, so the check fails on a
+#      Windows clone that has changed nothing. Observed, not hypothetical.
+#
+#   2. Test fixtures and the `.slurp` sources under `examples/` are compared as
+#      bytes in several places.
+#
+# Declaring it here means the setting is a property of the repository rather
+# than of each contributor's git config, so nobody has to know.
+* text=auto eol=lf
+
+# Genuinely binary, and must never be touched by any conversion. The wasm is
+# built rather than committed; the entry is here so that an accidental commit
+# of a build artifact cannot be corrupted silently.
+*.wasm binary
+*.png binary
+*.jpg binary
+*.woff2 binary

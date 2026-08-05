@@ -1,0 +1,65 @@
+---
+props {
+  productId: string
+}
+---
+
+{* {$let} belongs in the BODY. In frontmatter it is an unrecognised statement
+   and is silently discarded, so these two lines used to emit nothing. *}
+{$let loading = false}
+{$let success = false}
+
+{*
+  The server renders this button in its RESTING state, and that is all it can
+  do on its own:
+
+  - loading and success are client state, so they are null here. The two
+    conditional classes are simply absent from the output, disabled={} is
+    omitted (an empty expression drops the attribute), and aria-busy is
+    written as a literal "false".
+  - The label below is an {if} chain, which is resolved once at render time.
+    It always emits "Add to Cart". A host runtime that swaps the label has to
+    replace the text itself; the {if} will not re-run.
+  - The id is published as data-product-id rather than being read out of the
+    on:click string. An ordinary attribute interpolates; an on: value does not.
+*}
+<button
+  class={
+    "btn",
+    "btn--primary",
+    "btn--add-to-cart",
+    "btn--loading": loading,
+    "btn--success": success
+  }
+  data-product-id="${ productId }"
+  disabled={loading}
+  aria-busy="false"
+  aria-label="Add to cart"
+  on:click="addToCart"
+>
+  {if loading}
+    Adding...
+  {else if success}
+    Added!
+  {else}
+    Add to Cart
+  {/if}
+</button>
+
+<style>
+.btn--add-to-cart {
+  width: 100%;
+  justify-content: center;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn--loading {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.btn--success {
+  background: #15803d;
+}
+.btn--success:hover {
+  background: #166534;
+}
+</style>

@@ -1,0 +1,44 @@
+{
+  "name": "@slurp/language",
+  "version": "0.1.0",
+  "description": "Editor tooling for the Slurp template language: TextMate grammar, completions and hover docs.",
+  "license": "MIT",
+  "author": "ByteSell LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytesell/slurp.git",
+    "directory": "language"
+  },
+  "bugs": {
+    "url": "https://github.com/bytesell/slurp/issues"
+  },
+  "homepage": "https://github.com/bytesell/slurp#readme",
+  "//private": "Consumed only by vscode-extension in this workspace. Not published to npm; `vsce` bundles it into the .vsix. Flip this to publish it standalone.",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./format": {
+      "types": "./dist/format.d.ts",
+      "import": "./dist/format.js"
+    },
+    "./syntaxes/slurp": "./syntaxes/slurp.tmLanguage.json"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "monaco-editor": "^0.56.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.4.0",
+    "vite": "^7.1.14",
+    "vitest": "^4.1.10"
+  }
+}

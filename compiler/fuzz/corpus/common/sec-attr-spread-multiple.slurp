@@ -1,0 +1,1 @@
+<div id="a" {html attrs} class="c" {html more}>x</div>@@@{"attrs": "€=1", "more": "onclick=\"alert(1)\" data-ok=\"2\""}

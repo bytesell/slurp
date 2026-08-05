@@ -1,0 +1,38 @@
+---
+props {
+  variant: "sale" | "new" | "low-stock" | "default" = "default"
+}
+---
+
+{*
+  A block tag cannot appear inside an attribute expression: {match} in a
+  class={...} is a hard parse error. The conditional class-list form is the
+  way to map a prop onto a class. Each entry is "name": condition, and an
+  entry whose condition is falsy is left out.
+*}
+<span class={
+  "badge",
+  "badge--sale": variant == "sale",
+  "badge--new": variant == "new",
+  "badge--low-stock": variant == "low-stock",
+  "badge--default": variant != "sale" && variant != "new" && variant != "low-stock"
+}>
+  <slot />
+</span>
+
+<style>
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.badge--sale      { background: #fef2f2; color: #b91c1c; }
+.badge--new       { background: #f0fdf4; color: #15803d; }
+.badge--low-stock { background: #fffbeb; color: #b45309; }
+.badge--default   { background: #f3f4f6; color: #374151; }
+</style>

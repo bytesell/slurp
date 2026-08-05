@@ -1,0 +1,20 @@
+---
+middleware "auth"
+---
+
+{* Session guard for the account pages.
+
+   Middleware is a COMPILE OPTION, not a path convention: the host that mounts
+   this file passes `is_middleware: true`, and only then are `{redirect}` and
+   `request.*` legal. Inside middleware the opposite rule applies - `request`,
+   `env` and `loop` are the only path roots you may read, so there is no store,
+   no cart and no product here. *}
+{if !request.cookies.session}
+  {redirect "/login"}
+{/if}
+
+{* Expiry is deliberately NOT checked here. The language has no clock and no
+   callable functions, so `Date.now()` parses and evaluates to null, and a
+   comparison against null compares Equal - the branch would never fire while
+   looking like it worked. Expire the cookie wherever it is minted and let the
+   check above treat an expired session as a missing one. *}

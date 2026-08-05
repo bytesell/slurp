@@ -1,0 +1,525 @@
+---
+using "@components/ReviewCard"
+using type { Order, Review } from "@types/product"
+
+middleware "auth"
+
+type UserProfile {
+  id: string
+  name: string
+  email: string
+  avatar: string
+  memberSince: string
+  totalOrders: number
+  totalSpent: number
+}
+
+type Address {
+  id: string
+  name: string
+  line1: string
+  line2?: string
+  city: string
+  state: string
+  zip: string
+  country: string
+  default: bool
+}
+---
+
+{* Only the BLOCK form of {layout} can fill the layout's head slot. With the
+   element form, <layout src="...">, the {head} children stay in the body. *}
+{layout "@layouts/base"}
+  {* base.slurp already emits <title> and the meta description from `seo`, so
+     the head slot carries only what the layout does not. *}
+  {head}
+    <meta name="robots" content="noindex, nofollow" />
+  {/head}
+
+  <div class="account-page section__inner">
+
+    {* --- Profile header ---
+
+       {fetch} issues no request on the server. It reads `profile` out of the
+       render context and picks a branch: absent gives {loading}, a value
+       carrying an __error key gives {error}, and anything else renders the body
+       with the name rebound. The branch order is fixed - body, {loading},
+       {error}, {empty} - and none of the three markers takes a closing tag. *}
+    {fetch profile: UserProfile from "/api/profile" cache(60)}
+
+      {* {$let} SEEDS client state and creates no template binding, so these
+         names are readable by the browser runtime, not by this template. *}
+      {$let editingProfile = false}
+      {$let displayName = profile.name}
+
+      <div class="account-header">
+        <div class="account-header__avatar">
+          {if profile.avatar}
+            <Image src={profile.avatar} alt={profile.name} width={80} height={80} />
+          {else}
+            {* There is no `initials` filter, and no callable functions either:
+               truncate to a single character instead. *}
+            <div class="avatar-placeholder">
+              ${ profile.name | truncate(1, "") }
+            </div>
+          {/if}
+        </div>
+
+        <div class="account-header__info">
+          {* Which of the two states shows is CLIENT state, so it is toggled
+             with x-show rather than with a server-side {if}. *}
+          <div class="profile-edit" x-show="editingProfile">
+            <input
+              class="name-input"
+              type="text"
+              value={profile.name}
+              on:input="displayName = $event.target.value"
+              aria-label="Display name"
+            />
+            <div class="profile-edit-actions">
+              <button
+                class="btn btn--primary"
+                on:click="$fetch('/api/profile', { method: 'PATCH', body: { name: displayName } }); editingProfile = false"
+              >Save</button>
+              <button class="btn btn--ghost" on:click="editingProfile = false">Cancel</button>
+            </div>
+          </div>
+          <div class="profile-view" x-show="!editingProfile">
+            <h1 class="account-header__name">${ profile.name }</h1>
+            <button class="btn btn--ghost btn--sm" on:click="editingProfile = true">Edit</button>
+          </div>
+
+          <p class="account-header__email">${ profile.email }</p>
+          <p class="account-header__meta">
+            Member since ${ profile.memberSince | date("MMMM YYYY") }
+            &middot; ${ profile.totalOrders | plural("order") }
+            &middot; ${ profile.totalSpent | currency } total spent
+          </p>
+        </div>
+      </div>
+
+    {loading}
+      <div class="account-header account-header--loading">
+        <div class="skeleton skeleton--avatar"></div>
+        <div class="account-header__info">
+          <div class="skeleton skeleton--name"></div>
+          <div class="skeleton skeleton--meta"></div>
+        </div>
+      </div>
+
+    {error}
+      <div class="error-banner" role="alert">
+        <p>Could not load profile: ${ error.message }</p>
+      </div>
+
+    {/fetch}
+
+    {* --- Tab navigation ---
+
+       The active tab is a SERVER-known value taken from the query string, so
+       each panel below is really rendered rather than hidden. Note the
+       parentheses: filters bind loosest of all operators, so without them
+       `params.tab | default("orders") == "orders"` would apply `default` to
+       the comparison instead of to `params.tab`.
+
+       There is no `===` in Slurp. `==` is already type-strict deep equality. *}
+    <nav class="account-tabs" role="tablist" aria-label="Account sections">
+      <a
+        role="tab"
+        href="/account?tab=orders"
+        class={"account-tab", "account-tab--active": (params.tab | default("orders")) == "orders"}
+        aria-selected={(params.tab | default("orders")) == "orders"}
+      >Orders</a>
+      <a
+        role="tab"
+        href="/account?tab=reviews"
+        class={"account-tab", "account-tab--active": params.tab == "reviews"}
+        aria-selected={params.tab == "reviews"}
+      >My Reviews</a>
+      <a
+        role="tab"
+        href="/account?tab=addresses"
+        class={"account-tab", "account-tab--active": params.tab == "addresses"}
+        aria-selected={params.tab == "addresses"}
+      >Addresses</a>
+      <a
+        role="tab"
+        href="/account?tab=settings"
+        class={"account-tab", "account-tab--active": params.tab == "settings"}
+        aria-selected={params.tab == "settings"}
+      >Settings</a>
+    </nav>
+
+    {* --- Orders tab --- *}
+    {if (params.tab | default("orders")) == "orders"}
+      <div role="tabpanel" aria-label="Orders">
+        {* An empty array takes the {empty} branch, so the body never has to ask
+           how many orders there are. There are no array properties in Slurp:
+           `orders.length` resolves to null and renders nothing. *}
+        {fetch orders: Order[] from "/api/orders" paginate(10)}
+
+          <div class="orders-table">
+            <div class="orders-table__header">
+              <span>Order</span>
+              <span>Date</span>
+              <span>Status</span>
+              <span>Total</span>
+              <span></span>
+            </div>
+            {each order in orders}
+              <div class="orders-table__row">
+                <span class="order-number">#${ order.number }</span>
+                <span class="order-date">${ order.createdAt | date("MMM D, YYYY") }</span>
+                <span>
+                  {* {match} arms are a bare pattern, then ->, then a body.
+                     There is no {case} keyword, and `_` is the wildcard. *}
+                  {match order.status}
+                    "delivered"  -> <span class="status-badge status-badge--green">Delivered</span>
+                    "shipped"    -> <span class="status-badge status-badge--blue">Shipped</span>
+                    "processing" -> <span class="status-badge status-badge--yellow">Processing</span>
+                    "cancelled"  -> <span class="status-badge status-badge--red">Cancelled</span>
+                    _            -> <span class="status-badge">${ order.status }</span>
+                  {/match}
+                </span>
+                <span class="order-total">${ order.total | currency }</span>
+                <a href="/account/orders/${ order.id }" class="btn btn--ghost btn--sm">View</a>
+              </div>
+            {/each}
+          </div>
+
+          <div class="pagination-simple">
+            <button class="btn btn--ghost" on:click="orders.prev()">&larr; Previous</button>
+            <button class="btn btn--ghost" on:click="orders.next()">Next &rarr;</button>
+          </div>
+
+        {loading}
+          <div class="tab-loading">
+            {repeat 5}
+              <div class="skeleton skeleton--order-row"></div>
+            {/repeat}
+          </div>
+
+        {error}
+          <p class="error-text">Could not load orders: ${ error.message }</p>
+
+        {empty}
+          <div class="tab-empty">
+            <p>You haven't placed any orders yet.</p>
+            <a href="/collections/all" class="btn btn--primary">Start Shopping</a>
+          </div>
+
+        {/fetch}
+      </div>
+    {/if}
+
+    {* --- Reviews tab --- *}
+    {if params.tab == "reviews"}
+      <div role="tabpanel" aria-label="My Reviews">
+        {fetch reviews: Review[] from "/api/account/reviews" cache(120)}
+          <div class="reviews-list">
+            {* A loop variable is invisible inside a component unless it is
+               passed as a prop, so `review` is handed over explicitly. *}
+            {each review in reviews}
+              <ReviewCard review={review} compact />
+            {/each}
+          </div>
+        {loading}
+          {repeat 3}
+            <div class="skeleton skeleton--review"></div>
+          {/repeat}
+        {error}
+          <p class="error-text">${ error.message }</p>
+        {empty}
+          <div class="tab-empty">
+            <p>You haven't written any reviews yet.</p>
+            <a href="/collections/all" class="btn btn--ghost">Shop Products</a>
+          </div>
+        {/fetch}
+      </div>
+    {/if}
+
+    {* --- Addresses tab --- *}
+    {if params.tab == "addresses"}
+      <div role="tabpanel" aria-label="Addresses">
+        {fetch addresses: Address[] from "/api/addresses" cache(300)}
+          <div class="addresses-grid">
+            {* {empty} is a BRANCH MARKER inside {each}: it takes no closing tag
+               of its own, and {/each} still closes the loop. *}
+            {each address in addresses}
+              <div class="address-card">
+                {if address.default}
+                  <span class="address-default-badge">Default</span>
+                {/if}
+                <p class="address-name">${ address.name }</p>
+                <p>${ address.line1 }</p>
+                {if address.line2}
+                  <p>${ address.line2 }</p>
+                {/if}
+                <p>${ address.city }, ${ address.state } ${ address.zip }</p>
+                <p>${ address.country }</p>
+                <div class="address-card__actions">
+                  <button class="btn btn--ghost btn--sm">Edit</button>
+                  {if !address.default}
+                    {* An on: handler is stored VERBATIM and is never
+                       interpolated, so the id rides on a data attribute -
+                       which, being an element attribute, does interpolate. *}
+                    <button
+                      class="btn btn--ghost btn--sm"
+                      data-address-id="${ address.id }"
+                      on:click="$fetch('/api/addresses/' + $event.target.dataset.addressId + '/default', { method: 'POST' })"
+                    >Set Default</button>
+                  {/if}
+                </div>
+              </div>
+            {empty}
+              <div class="tab-empty">
+                <p>No saved addresses yet.</p>
+                <button class="btn btn--primary">Add Address</button>
+              </div>
+            {/each}
+          </div>
+        {loading}
+          <div class="skeleton skeleton--address"></div>
+        {error}
+          <p class="error-text">${ error.message }</p>
+        {/fetch}
+      </div>
+    {/if}
+
+    {* --- Settings tab --- *}
+    {if params.tab == "settings"}
+      <div role="tabpanel" aria-label="Settings" class="settings-panel">
+        <h2 class="settings-panel__heading">Email Preferences</h2>
+        <label class="toggle-row">
+          <input type="checkbox" checked on:change="$fetch('/api/profile/prefs', { method: 'PATCH', body: { orderUpdates: $event.target.checked } })" />
+          <span>Order updates</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" checked on:change="$fetch('/api/profile/prefs', { method: 'PATCH', body: { promotions: $event.target.checked } })" />
+          <span>Promotions &amp; new arrivals</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" on:change="$fetch('/api/profile/prefs', { method: 'PATCH', body: { newsletter: $event.target.checked } })" />
+          <span>Weekly newsletter</span>
+        </label>
+
+        <h2 class="settings-panel__heading">Danger Zone</h2>
+        <button class="btn btn--ghost btn--danger" on:click="$cart.clear(); $fetch('/api/auth/logout', { method: 'POST' }).then(() => window.location = '/')">
+          Sign Out
+        </button>
+      </div>
+    {/if}
+
+  </div>
+
+  {* {debug} pretty-prints a value in DEVELOPMENT mode and is stripped without
+     trace in production, which is what `slurp build` always uses. *}
+  {if env.dev}
+    {debug profile}
+  {/if}
+
+{/layout}
+
+<style>
+.section__inner { max-width: 960px; margin: 0 auto; padding: 0 1.5rem; }
+.account-page { padding: 2.5rem 0 4rem; }
+
+/* -- Header -- */
+.account-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  background: #fff;
+  margin-bottom: 2rem;
+}
+.account-header__avatar img,
+.avatar-placeholder {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.avatar-placeholder {
+  background: #111827;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.5rem;
+}
+.account-header__name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+}
+.account-header__email { color: #6b7280; font-size: 0.9375rem; margin: 0.125rem 0; }
+.account-header__meta { font-size: 0.8125rem; color: #9ca3af; margin: 0; }
+.name-input {
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  padding: 0.35rem 0.625rem;
+  font-size: 1rem;
+  font-weight: 600;
+  width: 100%;
+  max-width: 260px;
+}
+.profile-view { display: flex; align-items: center; gap: 0.625rem; }
+.profile-edit-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+
+/* -- Tabs -- */
+.account-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e5e7eb;
+  margin-bottom: 1.5rem;
+}
+.account-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  padding: 0.625rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+}
+.account-tab:hover { color: #111827; }
+.account-tab--active {
+  color: #111827;
+  border-bottom-color: #111827;
+  font-weight: 600;
+}
+
+/* -- Orders table -- */
+.orders-table {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+.orders-table__header,
+.orders-table__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.875rem 1.25rem;
+}
+.orders-table__header {
+  background: #f9fafb;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.orders-table__row { border-top: 1px solid #e5e7eb; }
+.order-number { font-weight: 600; }
+.order-date, .order-total { font-size: 0.9375rem; }
+.status-badge {
+  display: inline-block;
+  padding: 0.2rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.status-badge--green  { background: #f0fdf4; color: #15803d; }
+.status-badge--blue   { background: #eff6ff; color: #1d4ed8; }
+.status-badge--yellow { background: #fffbeb; color: #b45309; }
+.status-badge--red    { background: #fef2f2; color: #b91c1c; }
+
+/* -- Reviews -- */
+.reviews-list { display: flex; flex-direction: column; gap: 1rem; }
+
+/* -- Addresses -- */
+.addresses-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+.address-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: #fff;
+  font-size: 0.9375rem;
+  color: #374151;
+  line-height: 1.6;
+  position: relative;
+}
+.address-default-badge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: #f0fdf4;
+  color: #15803d;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+.address-name { font-weight: 600; margin-bottom: 0.125rem; }
+.address-card p { margin: 0; }
+.address-card__actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+
+/* -- Settings -- */
+.settings-panel { display: flex; flex-direction: column; gap: 0.75rem; }
+.settings-panel__heading {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.9375rem;
+  color: #374151;
+  cursor: pointer;
+}
+
+/* -- Shared -- */
+.tab-empty { text-align: center; padding: 3rem; color: #6b7280; }
+.tab-empty p { margin-bottom: 1rem; }
+.tab-loading { display: flex; flex-direction: column; gap: 0.5rem; }
+.pagination-simple {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+.pagination-info { font-size: 0.875rem; color: #6b7280; }
+.error-text { color: #991b1b; font-size: 0.9375rem; }
+.error-banner {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.error-banner p { color: #991b1b; margin: 0; }
+.btn--sm { padding: 0.3rem 0.625rem; font-size: 0.8125rem; }
+.btn--danger { color: #991b1b; }
+.btn--danger:hover { background: #fef2f2; border-color: #fca5a5; }
+
+/* -- Skeletons -- */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+.skeleton { background: #e5e7eb; border-radius: 0.375rem; animation: pulse 1.8s ease-in-out infinite; }
+.skeleton--avatar    { width: 72px; height: 72px; border-radius: 50%; flex-shrink: 0; }
+.skeleton--name      { height: 1.25rem; width: 180px; margin-bottom: 0.5rem; }
+.skeleton--meta      { height: 0.875rem; width: 260px; }
+.skeleton--order-row { height: 3rem; border-radius: 0.375rem; }
+.skeleton--review    { height: 6rem; border-radius: 0.75rem; }
+.skeleton--address   { height: 8rem; border-radius: 0.75rem; }
+</style>

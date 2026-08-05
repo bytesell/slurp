@@ -1,0 +1,36 @@
+{
+  "name": "@slurp/compiler-wasm",
+  "version": "0.1.0",
+  "description": "WebAssembly build of the Slurp compiler: parse, render, validate, extract_schema and render_section for browser and editor hosts.",
+  "license": "MIT",
+  "author": "ByteSell LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytesell/slurp.git",
+    "directory": "compiler-wasm"
+  },
+  "homepage": "https://github.com/bytesell/slurp#readme",
+  "main": "./index.cjs",
+  "types": "./index.d.ts",
+  "bugs": {
+    "url": "https://github.com/bytesell/slurp/issues"
+  },
+  "files": [
+    "LICENSE",
+    "index.cjs",
+    "index.d.ts",
+    "pkg/slurp_compiler.js",
+    "pkg/slurp_compiler_bg.wasm",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

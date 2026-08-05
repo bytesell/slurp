@@ -1,0 +1,5 @@
+---
+props { a: string 
+  b: number }
+---
+${a}${b}

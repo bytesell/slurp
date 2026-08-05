@@ -1,0 +1,147 @@
+# Slurp
+
+> A lightweight, agent-first templating engine. You write pages, components and
+> layouts; it compiles them to plain HTML with almost no client JavaScript.
+> Sections and blocks additionally declare a typed schema, so a non-technical
+> person can edit a page through a form without touching the template. The
+> mental model closest to it is a small Astro.
+
+Version 0.1.0, pre-1.0. The language and the API will change without a
+deprecation cycle until 1.0.
+
+Everything below was verified against the compiler, mostly by rendering the
+construct and recording the result. `llms-full.txt` is the complete reference
+and is GENERATED from the same data an MCP server serves at run time, so the two
+cannot drift. That is enforced, not merely intended: CI regenerates the file and
+fails if it differs from what is committed.
+
+## Read this first if you are writing a template
+
+There is an MCP server, `@slurp/mcp`, that runs the real compiler in-process. It
+gives you `slurp_validate` (structured diagnostics including the security walk),
+`slurp_render` (HTML plus development-mode warnings), `slurp_lint` (the silent
+failures the compiler does not report), `slurp_schema` and `slurp_reference`.
+Use it if you can: it closes the correction loop in one call.
+
+Without it, read `llms-full.txt` and pay particular attention to the gotchas
+below, because most Slurp mistakes are SILENT. The language is deliberately
+total and tolerant: missing data renders the empty string, budgets truncate
+rather than abort, and unknown editor settings are dropped rather than rejected.
+That is what makes it safe to render an untrusted template in a shared service,
+and it is also why a mistake tends to produce a plausible-looking page rather
+than an error.
+
+## A complete file
+
+```slurp
+---
+using "@components/ProductCard"
+section {
+  name: "Featured"
+  settings {
+    heading: text = "Featured products"
+    limit:   number = 8 { min: 1, max: 24 }
+  }
+}
+---
+<section>
+  <h2>${ section.settings.heading }</h2>
+  {each product, i in products | limit(8) | sort("price")}
+    <ProductCard product={product} featured={loop.first} />
+  {empty}
+    <p>Nothing here yet.</p>
+  {/each}
+</section>
+```
+
+## Syntax surface, complete
+
+- Interpolation: `${ expr }`, always HTML-escaped. `{ expr }` is the same thing.
+- Raw output: `{html expr}`, or `{html expr sanitize}` for untrusted input. This
+  is the only way to bypass escaping.
+- Comments: `{* stripped from the output *}`.
+- Block tags, all of them: `{if}` `{else if}` `{else}`, `{each}` `{empty}`,
+  `{match}`, `{fetch}` `{loading}` `{error}` `{empty}`, `{repeat}`, `{try}`
+  `{error}`, `{slot}`, `{layout}`, `{head}`, `{sections}`, `{blocks}`,
+  `{$let}`, `{debug}`, `{redirect}`, `{next}`.
+  There is NO `{with}` and no `{case}`.
+- Frontmatter, between `---` lines: `using`, `using type`, `type`, `props`,
+  `middleware`, `section { }`, `block { }`. There is NO `layout` directive.
+- Value filters, 13: `upper lower currency truncate fixed date default plural
+  int float js json unsafe_js`.
+- Loop filters, 4, usable ONLY in an `{each}` header: `limit sort reverse
+  filter`. The two tables are disjoint.
+- Operators: `+ - * / % == != < > <= >= && || ! ?:` and the `|` filter pipe.
+  There is no `===`, `!==`, `??`, `?.`, `in`, `**`, no bitwise operator, no
+  assignment, and no arrow function.
+- Setting kinds in a schema, 9: `text richtext color image icon link select
+  number toggle`.
+
+## The gotchas, in the order they bite
+
+1. **A quoted COMPONENT prop is a literal string. A quoted ELEMENT attribute
+   interpolates.** This asymmetry is the most common mistake in the language and
+   nothing reports it.
+   `<Card title="Hi ${name}" />` passes the characters through verbatim;
+   `<Card title={`Hi ${name}`} />` is what you meant;
+   `<span data-x="Hi ${name}">` was already correct.
+2. **A `${ }` in a `<script>` body must end in `| js` or `| json`.** A script
+   body is raw text, so HTML entity escaping is inert there. `| js` escapes for
+   inside a string literal you wrote and adds no quotes; `| json` emits a
+   complete self-delimiting literal. This one IS a hard compile error.
+3. **A JavaScript template literal in an attribute gets eaten.** Slurp
+   interpolates `${ }` in attribute values itself, against the SERVER context, so
+   a client-side variable renders empty with no other sign.
+   `<a :href="`/p/${item.slug}`">` is wrong; `<a :href="'/p/' + item.slug">` is
+   right. Reported as a warning, not an error.
+4. **In JavaScript statement position, `| js` is an ERROR.** `| js` claims the
+   slot is inside a quoted string, and a declared slot is emitted verbatim.
+   `@click="add(${ id | js })"` is refused; use `| json`, or quote the slot.
+5. **Filter arguments must be LITERALS.** A variable argument is read as the
+   empty string, so the filter falls back to its default. `currency(cur)`
+   renders a leading space and NO currency symbol. `default` is the sole
+   exception: its argument is evaluated in scope.
+6. **`| date` parses ISO strings, not epoch milliseconds.** Fewer than three
+   dash-separated parts and the input is returned UNCHANGED, so epoch millis
+   render verbatim. There are no time tokens at all.
+7. **Money arrives as a STRING.** A server decimal serialises as `"49.990000"`,
+   so calling `.toFixed` on it in emitted JavaScript throws. Coerce first.
+8. **A nested `"` inside `${ }` ends the attribute.** `<div title="${ a["k"] }">`
+   truncates at the inner quote. Use `title={ a["k"] }` or single quotes inside.
+9. **There are NO callable functions.** `Math.max(a, b)` parses and evaluates to
+   null, silently. There are no array properties either, so `items.length` is
+   null.
+10. **Components and layouts get their own root scope.** They see page globals
+    overlaid by their explicit props, with props winning. They do NOT see the
+    caller's local bindings, so an `{each}` loop variable is invisible inside a
+    component unless passed as a prop.
+11. **An unresolvable component renders a placeholder, not an error.** A typo in
+    an import path produces a clean build with a missing card.
+12. **`{$let}` creates no template binding.** It seeds client state and emits
+    only a JSON payload, so reading the name back renders empty.
+13. **Truncation diagnostics exist only in DEVELOPMENT mode.** `slurp build` uses
+    production mode, where a loop over 1000 items silently loses its tail.
+14. **Arithmetic coerces, comparisons do not.** `"a" + 1` is `"a1"` and `1 / 0`
+    is `0`, but `"10" > 9` is FALSE and `1 == "1"` is false. Coerce with `| int`.
+15. **Unknown frontmatter statements are silently skipped.** A misspelled
+    directive produces no diagnostic.
+
+## Files
+
+- [llms-full.txt](https://github.com/bytesell/slurp/blob/main/llms-full.txt):
+  the complete reference. Tags, expressions, filters, components, script rules,
+  frontmatter, schemas, every error code and every limit.
+- [README.md](https://github.com/bytesell/slurp/blob/main/README.md): install,
+  the CLI, and the known gaps in 0.1.0.
+- [SLURP_DOCS.md](https://github.com/bytesell/slurp/blob/main/SLURP_DOCS.md):
+  the long-form language documentation.
+- [SECURITY.md](https://github.com/bytesell/slurp/blob/main/SECURITY.md): where
+  the default escaping is and is not sufficient. Read before using `{html}`.
+- [mcp/README.md](https://github.com/bytesell/slurp/blob/main/mcp/README.md):
+  the MCP server, and how to register it with a coding agent.
+
+## Optional
+
+- [CONTRIBUTING.md](https://github.com/bytesell/slurp/blob/main/CONTRIBUTING.md)
+- [CHANGELOG.md](https://github.com/bytesell/slurp/blob/main/CHANGELOG.md)
+- [PERFORMANCE.md](https://github.com/bytesell/slurp/blob/main/PERFORMANCE.md)

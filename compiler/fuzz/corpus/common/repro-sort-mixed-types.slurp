@@ -1,0 +1,1 @@
+{each x in items | sort}${x}{/each}@@@{"items":[3,"b",true,null,1,"a",false,2,{"o":1},[1]]}

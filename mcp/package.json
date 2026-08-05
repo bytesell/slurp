@@ -1,0 +1,67 @@
+{
+  "name": "@slurp/mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for Slurp: validate, render, inspect and look up .slurp templates in-process, so a coding agent can close its own correction loop.",
+  "license": "MIT",
+  "author": "ByteSell LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytesell/slurp.git",
+    "directory": "mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/bytesell/slurp/issues"
+  },
+  "homepage": "https://github.com/bytesell/slurp#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "slurp",
+    "mcp",
+    "model-context-protocol",
+    "templating",
+    "agent"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "slurp-mcp": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup && node scripts/generate-llms-full.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "node dist/bin.js",
+    "build:llms": "node scripts/generate-llms-full.mjs",
+    "check:llms": "node scripts/generate-llms-full.mjs --check"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@slurp/compiler-wasm": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.4.0",
+    "vite": "^7.1.14",
+    "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

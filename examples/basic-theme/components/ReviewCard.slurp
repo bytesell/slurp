@@ -1,0 +1,107 @@
+---
+using "@components/Badge"
+using type { Review } from "@types/product"
+
+props {
+  review: Review
+  compact: boolean = false
+}
+---
+
+<article class={
+  "review-card",
+  "review-card--compact": compact
+}>
+  <header class="review-card__header">
+    <div class="review-card__author-row">
+      <span class="review-card__author">${ review.author }</span>
+      {if review.verified}
+        <Badge variant="new">Verified Purchase</Badge>
+      {/if}
+    </div>
+
+    {*
+      Star rating using two {repeat} blocks.
+      {repeat} binds NO loop variables - loop.index, loop.first and loop.last
+      are all null inside one, so a single {repeat 5} cannot tell which star
+      it is on. The count is an arbitrary expression though, so counting the
+      filled and the empty stars separately says the same thing and works.
+      Note also width="16": an unquoted width=16 would be lost entirely.
+    *}
+    <div class="review-card__stars" aria-label="${ review.rating } out of 5 stars">
+      {repeat review.rating}
+        <svg class="star star--filled" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+      {/repeat}
+      {repeat 5 - review.rating}
+        <svg class="star" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+      {/repeat}
+    </div>
+
+    <time class="review-card__date" datetime="${ review.createdAt }">
+      ${ review.createdAt | date("MMMM D, YYYY") }
+    </time>
+  </header>
+
+  <div class="review-card__body">
+    {if review.title}
+      <p class="review-card__review-title">${ review.title }</p>
+    {/if}
+
+    {if compact}
+      <p class="review-card__text">${ review.body | truncate(120) }</p>
+    {else}
+      <p class="review-card__text">${ review.body }</p>
+    {/if}
+  </div>
+</article>
+
+<style>
+.review-card {
+  padding: 1.25rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+.review-card--compact { padding: 1rem; }
+.review-card__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+}
+.review-card__author-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.review-card__author {
+  font-weight: 600;
+  color: #111827;
+}
+.review-card__stars {
+  display: flex;
+  gap: 2px;
+}
+.star { color: #d1d5db; }
+.star--filled { color: #f59e0b; }
+.review-card__date {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+}
+.review-card__review-title {
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 0.25rem;
+}
+.review-card__text {
+  color: #4b5563;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  margin: 0;
+}
+</style>

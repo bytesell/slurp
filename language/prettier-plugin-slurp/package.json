@@ -1,0 +1,46 @@
+{
+  "name": "prettier-plugin-slurp",
+  "version": "0.1.0",
+  "description": "Prettier plugin that formats .slurp template files.",
+  "license": "MIT",
+  "author": "ByteSell LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytesell/slurp.git",
+    "directory": "language/prettier-plugin-slurp"
+  },
+  "bugs": {
+    "url": "https://github.com/bytesell/slurp/issues"
+  },
+  "homepage": "https://github.com/bytesell/slurp#readme",
+  "keywords": [
+    "prettier",
+    "prettier-plugin",
+    "slurp",
+    "template"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "peerDependencies": {
+    "prettier": "^3.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "//devDependencies": "@slurp/language is a BUILD-time dependency, not a runtime one. tsup.config.ts sets noExternal on it, so it is bundled into dist/index.js, which imports nothing but prettier/doc. It must not sit in `dependencies`: it is `private: true` and will never exist on npm, so a published manifest naming it resolves to a version that 404s forever.",
+  "devDependencies": {
+    "@slurp/language": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.4.0",
+    "prettier": "^3.0.0",
+    "vitest": "^4.1.10",
+    "vite": "^7.1.14"
+  }
+}

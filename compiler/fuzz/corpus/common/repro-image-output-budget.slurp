@@ -1,0 +1,1 @@
+{repeat 20000}<Image src={u} width={1} height={1} />{/repeat}

@@ -1,0 +1,4 @@
+---
+section { name: "x" }
+---
+<script>{elseBranch:1}</script>

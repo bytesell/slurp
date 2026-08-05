@@ -1,0 +1,18 @@
+[toolchain]
+# The minimum supported Rust version, pinned so that a too-old toolchain gets a
+# clear rustup message instead of the confusing "feature `edition2024` is
+# required" error that edition 2024 produces on 1.84 and below.
+#
+# Edition 2024 itself only needs 1.85. The number is 1.88 because the dependency
+# tree requires it, currently `image` (and `time`, `cookie_store`). Building
+# under this pin is what proves the MSRV claim in Cargo.toml is true; without it
+# a developer on a newer stable cannot tell that the claim has drifted.
+#
+# Pinning also means clippy lints do not churn under everyone when a new stable
+# lands. CI runs a second job on `stable` to catch breakage from newer
+# toolchains; reproduce that locally with `RUSTUP_TOOLCHAIN=stable cargo build`.
+#
+# Raising this is a breaking change for downstream users. Bump `rust-version` in
+# Cargo.toml in the same commit.
+channel = "1.88"
+components = ["rustfmt", "clippy"]

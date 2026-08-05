@@ -1,0 +1,26 @@
+{
+  "name": "@slurp/integration-tests",
+  "version": "0.1.0",
+  "description": "Cross-package integration tests. Never published.",
+  "license": "MIT",
+  "author": "ByteSell LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytesell/slurp.git",
+    "directory": "tests/integration"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@slurp/compiler-wasm": "workspace:*",
+    "vitest": "^4.1.10",
+    "typescript": "^5.4.0",
+    "jsdom": "^30.0.1",
+    "vite": "^7.1.14"
+  }
+}

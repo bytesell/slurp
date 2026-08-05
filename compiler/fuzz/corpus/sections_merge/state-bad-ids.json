@@ -1,0 +1,9 @@
+---
+section {
+  name: "S"
+  settings { heading: text = "h" n: number = 1 t: toggle = true s: select(a, b) = a c: color = "#fff" }
+  blocks { item { max: 3 settings { label: text = "L" } blocks { leaf { settings { v: text = "v" } } } } }
+}
+---
+{blocks}
+@@@{"id":"<script>","type":"a b c","settings":{"heading":{"nested":1},"n":"NaN","s":"zzz","c":"javascript:x"}}

@@ -1,0 +1,1 @@
+<a href="${u}">x</a>@@@{"u":" javascript:alert(1)"}

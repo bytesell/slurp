@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/bytesell/slurp/security/advisories/new
+    about: Do NOT open a public issue. This opens a private advisory visible only to maintainers.
+  - name: Language reference
+    url: https://github.com/bytesell/slurp/blob/main/SLURP_DOCS.md
+    about: Check here first. Unimplemented and unwired features are marked inline.
+  - name: Contributing guide
+    url: https://github.com/bytesell/slurp/blob/main/CONTRIBUTING.md
+    about: How to build the project and what a change has to pass.

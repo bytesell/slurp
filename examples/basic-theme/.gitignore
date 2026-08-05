@@ -1,0 +1,49 @@
+# .gitignore for a Slurp theme.
+#
+# Written by `slurp gitignore`. Run it in a theme directory, or copy this file.
+# It is short on purpose: a theme generates very little, and the one thing that
+# matters here is what must NOT be ignored.
+
+# ── Build output ─────────────────────────────────────────────────────────────
+# `slurp build` writes here. Never committed: it is rebuilt from source, and a
+# committed copy goes stale silently because nothing checks it.
+dist/
+
+# ── Node ─────────────────────────────────────────────────────────────────────
+# Only if the theme uses npm for its stylesheet toolchain (Tailwind and similar).
+node_modules/
+.eslintcache
+*.tsbuildinfo
+
+# ── Environment ──────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Editors and OS ───────────────────────────────────────────────────────────
+.idea/
+.DS_Store
+Thumbs.db
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DO NOT IGNORE THESE. Each one is committed on purpose.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# COMPILED CSS. If the theme compiles a stylesheet (Tailwind or otherwise), the
+# OUTPUT is committed alongside the source. This is the rule most likely to be
+# broken by adding a well-meaning `*.css` or `styles/` line, and the failure is
+# invisible in every static check: the theme publishes, the pages render, and
+# every one of them is unstyled HTML because the stylesheet 404s. Compile to a
+# path the theme actually serves (not into `dist/`), and commit the result.
+#
+# THE DEV GLOBALS FILE (`globals.json`, `dev-globals.json` or whatever the theme
+# calls it). It is passed with `--globals` and holds build-time values a page
+# cannot resolve at runtime. It contains no secrets by design, and without it a
+# freshly cloned theme builds with those values empty. `slurp build` no longer
+# copies it into `dist/`, so committing it does not publish it with the site.
+#
+# `theme.json`, if the theme has one. It is the manifest, not a build artifact.
+#
+# If a theme ever does need a secret at build time, it belongs in `.env` (already
+# ignored above) and NOT in the globals file.

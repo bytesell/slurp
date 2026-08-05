@@ -1,0 +1,1 @@
+<button {html attrs}>go</button>@@@{"attrs": "@click=\"submit()\" x-model=\"email\" :disabled=\"loading\" x-on:keydown.enter=\"go()\" data-id=\"5\" aria-label=\"ok\" disabled"}
