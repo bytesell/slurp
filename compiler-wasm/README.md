@@ -121,4 +121,5 @@ renderer's own script-context backstops, so an undeclared `${ }` in a `<script>`
 body and a false `| js` claim are caught there, but do not use a WASM render as a
 production render path.
 
-See the note at the top of `compiler/src/wasm/mod.rs` and `SECURITY.md`.
+See the note at the top of `compiler/src/wasm/mod.rs` and
+[the security model](https://github.com/bytesell/slurp/blob/main/docs/security-model.md).

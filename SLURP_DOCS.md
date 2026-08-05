@@ -719,9 +719,17 @@ Before putting a value into any Alpine attribute, read the JS-evaluated-attribut
 
 ### `navigate=false`
 
-Opts a link out of client navigation. The compiler emits a bare `navigate="false"` and the runtime reads that same spelling (`runtime/src/core/navigation.ts`), pinned by a compiler integration test.
+Opts a link out of client navigation, so it takes a full page load. All three spellings mean the same thing and all emit `navigate="false"`, which is what the runtime reads (`runtime/src/core/navigation.ts`):
 
-It only does anything on a page where client navigation is running at all, which needs a `navigate` attribute on `<body>` and a `[data-slurp-page]` container. The compiler generates neither; a theme or host supplies them. See [Section 14](#14-wasm--typescript-integration).
+```slurp
+<a href="/a" navigate=false>
+<a href="/b" navigate="false">
+<a href="/c" navigate={false}>
+```
+
+**Bare `navigate` is the opposite: it means opted IN.** That is the spelling a page puts on `<body>` to turn client navigation on at all, so a bare `navigate` on an anchor does not opt it out.
+
+The attribute only does anything on a page where client navigation is running, which needs `navigate` on `<body>` and a `[data-slurp-page]` container. The compiler generates neither; a theme or host supplies them. See [Section 14](#14-wasm--typescript-integration).
 
 ---
 
@@ -1507,12 +1515,20 @@ slurp-image [OPTIONS]
 
 Options:
   --port <PORT>                    TCP port [default: 3001]
+  --bind <ADDR>                    Bind address [default: 127.0.0.1]
+  --cors-allow-origin <ORIGIN>     Allowed CORS origin, repeatable, `*` for any
+                                   [default: send no CORS headers]
+  --max-concurrent-transforms <N>  In-flight transforms [default: core count]
+  --request-timeout-secs <N>       Whole-request deadline [default: 30]
+  --max-output-pixels <N>          Output pixels after resize [default: 8000000]
   --cache-dir <DIR>                On-disk cache directory [default: /tmp/slurp-image-cache]
   --cache-ttl <SECS>               Cache TTL in seconds [default: 3600]
   --memory-cache-size <N>          In-memory cache entries [default: 512]
   --max-disk-cache-bytes <N>       Disk cache ceiling [default: 2 GiB]
   --disk-sweep-interval-secs <N>   Disk cache sweep interval [default: 300]
 ```
+
+**The defaults are closed on purpose.** The service fetches attacker-supplied URLs, so it binds loopback and sends no CORS headers until you ask for otherwise.
 
 Not configurable by flag or environment variable: max source size 20 MiB, max decoded size 50 MiB, max width 8192, fetch timeout 10 s, rate limit 100 requests per 60 s per IP.
 

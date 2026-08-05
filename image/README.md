@@ -26,7 +26,7 @@ guards:
 - caps on source size, decoded size and output pixels,
 - transform work off the async workers, behind a concurrency limit.
 
-See [SECURITY.md](https://github.com/bytesell/slurp/blob/main/SECURITY.md) and
+See [the security model](https://github.com/bytesell/slurp/blob/main/docs/security-model.md) and
 `DECISIONS.md` in this directory for the order these run in and why.
 
 It has no authentication, so it binds loopback by default and sends no CORS

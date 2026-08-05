@@ -27,7 +27,7 @@ actually fails when the fix is reverted, and say so.
 
 <!-- Delete this section if it does not. -->
 
-- [ ] I did not describe a protection the code does not deliver, and anything I claimed in `SECURITY.md` cites the file and the **symbol** that enforces it, not a line number
+- [ ] I did not describe a protection the code does not deliver, and anything I claimed in `docs/security-model.md` cites the file and the **symbol** that enforces it, not a line number
 - [ ] Any sanitizer I touched is still allowlist-based
 - [ ] If I added a compile-time check, I said which paths it reaches: the `compile*` entry points and `slurp validate` always, the WASM export `validate_full` if it is in the security walk, and no other WASM export
 
