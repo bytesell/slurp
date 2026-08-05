@@ -238,7 +238,7 @@ jobs:
       # makes a CI-only failure reproducible locally: the file IS the input.
       - name: Upload reproducers
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-crashes-${{ matrix.os }}
           path: compiler/fuzz/crashes/
