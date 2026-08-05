@@ -30,7 +30,7 @@
     "copy-check": "node scripts/check-copy-rule.mjs"
   },
   "engines": {
-    "node": ">=20",
+    "node": ">=22",
     "pnpm": ">=9"
   },
   "packageManager": "pnpm@9.0.0",

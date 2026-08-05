@@ -1247,7 +1247,7 @@ fn signature(target: Target, data: &[u8]) -> u64 {
                 Ok(t) => feat.push_str(&format!("ok:{}", t.len().next_power_of_two())),
                 Err(e) => feat.push_str(&format!(
                     "err:{}",
-                    &e.to_string().chars().take(40).collect::<String>()
+                    e.to_string().chars().take(40).collect::<String>()
                 )),
             }
         }
@@ -1260,7 +1260,7 @@ fn signature(target: Target, data: &[u8]) -> u64 {
             )),
             Err(e) => feat.push_str(&format!(
                 "err:{}",
-                &e.to_string().chars().take(40).collect::<String>()
+                e.to_string().chars().take(40).collect::<String>()
             )),
         },
     }

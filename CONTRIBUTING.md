@@ -15,7 +15,7 @@ For anything larger than a bug fix, open an issue first so the design can be dis
 | Tool | Version | Notes |
 |---|---|---|
 | Rust | 1.88 or newer | Pinned by `rust-toolchain.toml`. Edition 2024 needs 1.85; the dependency tree pushes the real floor to 1.88 |
-| Node.js | 20 or newer | |
+| Node.js | 22 or newer | jsdom, which the integration suite renders into, fails on Node 20 with `webidl.util.markAsUncloneable is not a function` |
 | pnpm | 9 or newer | `corepack enable` is the easiest way to get it |
 | wasm-pack | 0.15 or newer | Required: `pnpm build` builds `@bytesell/slurp-compiler-wasm`, and the compiler integration tests import it. `cargo install wasm-pack --locked` |
 
