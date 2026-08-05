@@ -1,6 +1,6 @@
 # Contributing to Slurp
 
-Thanks for taking an interest. This document covers how to build the project, what your change has to pass, and the conventions that are specific enough to be worth writing down.
+Thanks for taking an interest. This document covers how to build the project, what your change has to pass, and the conventions specific to this codebase.
 
 ## Before you start
 
@@ -21,7 +21,7 @@ For anything larger than a bug fix, open an issue first so the design can be dis
 
 **If your toolchain is too old you will not get a version message.** Edition 2024 fails on Rust 1.84 and below with `feature 'edition2024' is required`, which reads like a broken project. `rust-toolchain.toml` pins 1.88 so rustup selects the right toolchain automatically; if you see that error anyway, run `rustup update`.
 
-The pin is at 1.88 rather than the 1.85 edition 2024 needs because the `image` crate requires it. Pinning keeps clippy lints from churning and makes the declared MSRV the version everyone actually builds against, which is the only way a dependency bump that raises the floor gets noticed. To try a newer toolchain locally, prefix a command with `RUSTUP_TOOLCHAIN=stable`.
+The pin is at 1.88 rather than the 1.85 edition 2024 needs because the `image` crate requires it. Pinning keeps clippy lints from churning and makes the declared MSRV the version everyone builds against, so a dependency bump that raises the floor gets noticed. To try a newer toolchain locally, prefix a command with `RUSTUP_TOOLCHAIN=stable`.
 
 If `cargo check` reports that a package requires a newer rustc, do not lower the pin. Either hold that dependency back, or raise `channel` in `rust-toolchain.toml` and `rust-version` in `Cargo.toml` together, and note the bump in `CHANGELOG.md`.
 
@@ -69,7 +69,7 @@ pnpm -C mcp run check:llms
 RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-That job is a deliberate canary and it can go red without anyone changing the code, when a new stable ships a new lint. Fix the lint rather than suppressing it: so far every one has pointed at something worth tidying.
+That job is a canary, so it can go red without anyone changing the code, when a new stable ships a new lint. Fix the lint rather than suppressing it. So far every one has pointed at something worth tidying.
 
 `cargo fmt --all --check` is blocking. Fix a failure with `cargo fmt --all`, never by relaxing the check.
 
@@ -119,7 +119,7 @@ There is an architecture rationale in `compiler/DECISIONS.md`, `image/DECISIONS.
 
 ## Conventions
 
-### The renderer is total, and that is deliberate
+### The renderer is total
 
 Missing data renders `""`. Budgets truncate. Unknown editor settings are dropped and unknown block types are ignored. Slurp renders untrusted templates in shared multi-tenant services, so a bad template must never take a page down.
 
@@ -130,14 +130,14 @@ Missing data renders `""`. Budgets truncate. Unknown editor settings are dropped
 ### Security-relevant changes
 
 - **Escaping is context-sensitive, and so is slurp's.** `renderer/escape.rs` holds five different escapers and `renderer/js_slot.rs` decides which one a slot needs. Before touching any of them or any call site, read "How `${ }` is treated in each context" in [docs/security-model.md](./docs/security-model.md). A change that looks like a simplification there can silently remove a control: the ordering in `escape_slot` is load-bearing (the CSS strip runs first, because doing it after the JS pass would remove the backslashes that pass added), and the verbatim-emission exemption for a filtered value is reachable only while `script_depth > 0`.
-- **Refusing is a legitimate answer, and sometimes the only honest one.** Where no automatic escaper fits a position, slurp raises `UnsafeScriptInterpolation` rather than applying one that does not. Do not "improve" such a refusal into an escaper that leaves the payload intact while looking like a fix.
+- **Refusing is a legitimate answer.** Where no automatic escaper fits a position, slurp raises `UnsafeScriptInterpolation` rather than applying one that does not. Do not "improve" such a refusal into an escaper that leaves the payload intact while looking like a fix.
 - **Never describe a protection that the code does not deliver.** If you document a security property, cite the file and the **symbol** that enforces it, never a line number. Line numbers in prose rot by construction, and a documented control that does not exist is worse than no document, because it is the first thing a researcher will test.
 - Sanitizers stay allowlist-based. Do not convert one to a blocklist.
-- The compile-time checks in `lib.rs` run in the `compile*` paths, in `slurp validate`, and in the WASM export `validate_full` only. The other WASM exports skip them deliberately. If you add a check, say in `docs/security-model.md` which of those paths it reaches.
+- The compile-time checks in `lib.rs` run in the `compile*` paths, in `slurp validate`, and in the WASM export `validate_full` only. The other WASM exports skip them. If you add a check, say in `docs/security-model.md` which of those paths it reaches.
 
 ### The lexer keyword list is one place, and it must stay that way
 
-The block-tag keyword list is `BLOCK_KEYWORDS` in `compiler/src/lexer/mod.rs`, and it is the single source of truth: `lex_template`, `lex_raw_script` and `lex_raw_script_text` all read it, so a new keyword cannot be taught to one and not the others. It used to be three hand-written copies, and they drifted; the symptom was a tag lexing as an expression and **rendering as empty with no diagnostic**, which is a genuinely difficult thing to debug.
+The block-tag keyword list is `BLOCK_KEYWORDS` in `compiler/src/lexer/mod.rs`, and it is the single source of truth: `lex_template`, `lex_raw_script` and `lex_raw_script_text` all read it, so a new keyword cannot be taught to one and not the others. It used to be three hand-written copies, and they drifted; the symptom was a tag lexing as an expression and **rendering as empty with no diagnostic**, which is very hard to debug.
 
 The same shape recurs twice more in that file and both are also consolidated: `RAW_TEXT_TAGS` decides both which tags enter a raw-text mode and which close tags leave it, and `raw_brace_starts_slurp` is the one predicate for "this `{` opens a slurp construct". **Do not reintroduce a second copy of any of the three.** If you need the list somewhere else, read the const.
 
@@ -157,7 +157,7 @@ This applies to documentation, comments, commit messages and UI strings alike.
 
 The reason is plain readability: the typographic forms read as machine-generated and are inconsistent across the tree.
 
-This is enforced, not merely asked for. `pnpm copy-check` (`scripts/check-copy-rule.mjs`) scans every file git considers part of the repository and fails on any of the three characters; CI runs it as its own job. Ignored build output is out of scope, and binary files are skipped. If a file genuinely needs one of the characters, prefer writing it as an escape (`String.fromCharCode(0x2014)`) over adding an entry to the script's allow list.
+This is enforced. `pnpm copy-check` (`scripts/check-copy-rule.mjs`) scans every file git considers part of the repository and fails on any of the three characters; CI runs it as its own job. Ignored build output is out of scope, and binary files are skipped. If a file genuinely needs one of the characters, prefer writing it as an escape (`String.fromCharCode(0x2014)`) over adding an entry to the script's allow list.
 
 ## Tests
 

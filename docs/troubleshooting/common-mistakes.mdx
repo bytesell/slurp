@@ -54,8 +54,8 @@ Three tools, in the order to reach for them.
 
     `slurp_lint` exists for exactly that set. Every rule in it describes
     something both `slurp validate` and `slurp build` accept with zero output.
-    See [Working with agents](/tooling/agents) for wiring the server up. It is
-    worth running even when no agent is involved.
+    See [Working with agents](/tooling/agents) for wiring the server up. Run it
+    even when no agent is involved.
   </Step>
 </Steps>
 
@@ -170,7 +170,7 @@ Detected by `slurp_lint`, rule `let-binding-not-readable`.
 
 ### The path is just wrong
 
-Worth saying, because it is the boring answer and it is often the right one.
+The boring answer, and often the right one.
 `${ produts.name }` renders empty exactly like every case above. Path access is
 null-safe at every depth, so `${ a.b.c.d }` on a null `a` is empty rather than an
 error. Check the JSON you are feeding in before hunting for a language subtlety.
@@ -233,7 +233,7 @@ Detected by `slurp_lint`, rule `component-prop-literal-interpolation`.
 
 ## My `<script>` tag will not compile
 
-Unlike most things here, this one is a hard build failure. That is deliberate.
+Unlike most things here, this one is a hard build failure.
 
 ### `UnsafeScriptInterpolation` in a script body
 
@@ -255,7 +255,7 @@ script body must therefore declare what it is.
 <script>var m = "${ user.name | js }";</script>
 ```
 
-`| unsafe_js` is deliberately not accepted in a script body.
+`| unsafe_js` is not accepted in a script body.
 
 A JavaScript template literal cannot be written in a script body at all, for the
 same reason it cannot be written in an attribute: Slurp reads `${` as its own
@@ -353,9 +353,8 @@ tail of a list still builds and still exits 0.
 - Output is capped at **16 MiB**.
 
 The per-loop cap on `{each}` records a warning in both build modes, so `-v` shows
-it. Note that `{repeat n}` clamps `n` to 1,000 with **no** diagnostic at all,
-which is worth knowing before concluding that a quiet build means nothing was
-truncated.
+it. `{repeat n}` clamps `n` to 1,000 with **no** diagnostic at all, so a quiet
+build is not evidence that nothing was truncated.
 
 See [Limits](/troubleshooting/limits) for every budget, its real number, and what
 crossing it does.

@@ -111,9 +111,9 @@ to port 3001 so the page and the images share an origin.
   alongside it and proxy the path yourself.
 </Warning>
 
-The defaults are closed on purpose, because this service fetches URLs an
-attacker may have chosen: it binds `127.0.0.1` and sends no CORS headers. Widen
-that deliberately.
+The defaults are closed. This service fetches URLs an attacker may have chosen,
+so it binds `127.0.0.1` and sends no CORS headers. Widen them only where you
+need to.
 
 ```bash
 slurp-image --bind 0.0.0.0 --cors-allow-origin https://example.com
@@ -122,7 +122,7 @@ slurp-image --bind 0.0.0.0 --cors-allow-origin https://example.com
 There is no authentication, so put it behind a reverse proxy rather than on a
 public port.
 
-### Flags worth knowing
+### The flags that matter
 
 | Flag | Default | |
 |---|---|---|
@@ -192,7 +192,7 @@ A successful response carries the output MIME type and
 
 The service takes a URL from a query string and fetches it, so it is a
 server-side request forgery primitive unless it is written not to be. The guards
-are not optional hardening, they are the feature:
+are the feature, not optional hardening:
 
 - **Scheme allowlist.** Only `http` and `https`. Anything else is
   `invalid source URL`, including a URL carrying userinfo.
@@ -246,6 +246,6 @@ An attacker requesting many distinct variants therefore cannot fill the disk.
     The order the guards run in, and what they do not cover.
   </Card>
   <Card title="Dev server" icon="bolt" href="/tooling/dev-server">
-    What it serves, and what it deliberately does not.
+    What it serves, and what it does not.
   </Card>
 </CardGroup>

@@ -31,8 +31,7 @@ list with the null behaviour of each one, see
 
 ## Arguments must be literals
 
-This is the rule to internalise before anything else, because breaking it
-fails silently.
+Learn this rule before anything else. Breaking it fails silently.
 
 ```slurp
 <p>[${ product.price | currency(settings.currency) }]</p>
@@ -55,10 +54,10 @@ nothing.
 <p>€12,50
 ```
 
-The reason is the same reason there are no functions: an argument that could be
-an arbitrary expression is a place for a template to compute, and Slurp exists
-to render templates that cannot compute. Keeping arguments literal keeps a
-filter a fixed, auditable transformation.
+The reason is the same as for functions: an argument that could be an arbitrary
+expression is a place for a template to compute, and Slurp renders templates
+that cannot compute. Literal arguments keep a filter a fixed, auditable
+transformation.
 
 <Note>
   `default` is the one exception. Its argument is evaluated in scope, which is
@@ -158,7 +157,7 @@ Write `{if (product.stock | int) > 0}`. That trap is explained in full under
 ```
 
 Known codes are USD, EUR, GBP, JPY, CAD, AUD and CHF. Three things about the
-output are worth knowing up front:
+output:
 
 - The symbol always prefixes, for every code, so EUR renders as a leading euro
   sign rather than the trailing one much of Europe writes. Grouping and the
@@ -166,7 +165,7 @@ output are worth knowing up front:
 - Only JPY uses zero decimals. Everything else uses two, and rounds once, so
   `19.999` renders as `$20.00`.
 - An unknown code is not an error. The code plus a space becomes the symbol,
-  which is how `SEK 12.50` comes out and is a reasonable fallback.
+  which is how `SEK 12.50` comes out.
 
 ### Money arrives as a string
 

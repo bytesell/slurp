@@ -62,10 +62,10 @@ import '@bytesell/slurp-runtime/experimental/fetch'      // window.slurpFetch
 import '@bytesell/slurp-runtime/experimental/infinite'   // IntersectionObserver sentinels
 ```
 
-The prefix is the warning. It is deliberately not something you can reach by
-accident, because the failure mode is silence rather than an error.
+The prefix is the warning. The failure mode here is silence rather than an error,
+so these entry points are not reachable by accident.
 
-### Why ship them at all
+### What they are for
 
 They are useful today to an **embedding host**, which is the case slurp was
 extracted from. A host that renders slurp output and injects these markers

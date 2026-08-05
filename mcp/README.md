@@ -92,7 +92,7 @@ all reported here rather than at build time.
 
 Pass `files` instead of `source` to check several templates in one call. Pass
 `is_middleware: true` only for a file that really will be compiled as
-middleware, because the rules genuinely differ.
+middleware, because the rules differ.
 
 The security walk stops at its first violation, so at most one security
 diagnostic appears per call. Nothing here resolves imports across files either,

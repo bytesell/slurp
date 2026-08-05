@@ -114,8 +114,8 @@ is not one of the select options
 <Note>
   **`select(...)` options may be identifiers OR string literals**, and so may the
   default. `select(left, center)` and `select("left", "center")` parse identically.
-  A claim in circulation that options must be bare identifiers is false; both were
-  checked against the compiler.
+  Bare identifiers are not required, whatever other documentation says. Both
+  forms were checked against the compiler.
 
   `select()` with no options is `select needs at least one option`.
 </Note>
@@ -149,9 +149,9 @@ Both run through the same URL gate. A value with no scheme (a relative path, an
 anchor, a query string) is kept as written. A value WITH a scheme must be `http`,
 `https`, `mailto` or `tel`; anything else collapses to `""`.
 
-`image` gets this gate too, and that matters: it is validated where the value
-ENTERS rather than where a theme happens to use it, because a theme is free to put
-it in `background:url(...)` where no render-site check would fire.
+`image` gets this gate too, validated where the value ENTERS rather than where a
+theme uses it, because a theme is free to put it in `background:url(...)` where no
+render-site check would fire.
 
 ## Uniqueness and bounds at parse time
 
@@ -204,8 +204,8 @@ Two resolution rules that are not obvious from the syntax:
 
 ## Merge semantics
 
-Saved editor state is merged over the schema at render time, deliberately
-TOLERANTLY, so a theme upgrade can never break stored state:
+Saved editor state is merged over the schema at render time, TOLERANTLY, so a
+theme upgrade can never break stored state:
 
 | Situation | Result |
 |---|---|

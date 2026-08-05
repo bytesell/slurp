@@ -54,7 +54,6 @@ raw-text element is handed to the JS engine without decoding character
 references. ...
 ```
 
-The reason is worth one paragraph, because it explains every other rule below.
 `<script>` is a **raw text element**: the HTML parser hands its contents to the
 JavaScript engine without decoding character references. So the entity escaping
 that makes `${ }` safe in ordinary text does nothing at all there, and every
@@ -63,8 +62,7 @@ correct escaper either, because a value can land inside a string literal or in
 code position, and those need different treatments. So the compiler refuses
 rather than picking one.
 
-Two filters satisfy the rule, `| js` and `| json`. `| unsafe_js` deliberately
-does not.
+Two filters satisfy the rule, `| js` and `| json`. `| unsafe_js` does not.
 
 ## Choosing between `| js` and `| json`
 
@@ -228,7 +226,7 @@ Quote the slot (`'${ v | js }'`), or use `| json` for a bare JSON value, or
 
 `| js` is a **claim about context**, and a declared slot is then passed through
 verbatim. A false claim turns the automatic escaper off and puts nothing in its
-place, which is why it is refused rather than ignored.
+place, so it is refused rather than ignored.
 
 ### You can leave the filter off
 
@@ -248,9 +246,9 @@ compiler escapes it for the position it found:
 ```
 
 The first is a hostile value (`');alert(1);('`) neutralised inside the string it
-was written into. The other two are the ordinary numeric case, which is why
-leaving the filter off has to stay legal: comparing against a count or a loop
-index is a normal thing to write and cannot be proved safe or unsafe statically.
+was written into. The other two are the ordinary numeric case. Leaving the
+filter off stays legal because comparing against a count or a loop index is a
+normal thing to write and cannot be proved safe or unsafe statically.
 
 In development mode the renderer records an advisory on every undeclared slot,
 naming the attribute and telling you which filter would state your intent. It is

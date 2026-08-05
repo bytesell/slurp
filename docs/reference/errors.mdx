@@ -186,8 +186,8 @@ inside a string literal you wrote:
 <script>var name = '${ user.name | js }';</script>
 ```
 
-`| unsafe_js` deliberately does NOT satisfy the rule. The raw hatch in a script body
-is `{html expr}`.
+`| unsafe_js` does NOT satisfy the rule. The raw hatch in a script body is
+`{html expr}`.
 
 **Rule 2: a `| js` slot in a JavaScript-evaluated attribute that lands in statement
 or expression position** rather than inside a quoted string.
@@ -216,8 +216,7 @@ suggesting you declare it.
 <Note>
   HTML entity escaping does not protect a script context. A raw-text element reaches
   the JavaScript engine without character references being decoded, so the ordinary
-  text escaping is inert there. That is the whole reason the compiler refuses to
-  guess.
+  text escaping is inert there. That is why the compiler refuses to guess.
 
   Note also that a JavaScript template literal cannot be written in a `<script>`
   body at all, because Slurp claims the `${` sequence itself. Build the string by
@@ -396,8 +395,8 @@ several cases the condition IS detected and handled another way.
 
 ## Conditions that produce no error at all
 
-Slurp is total and tolerant by design. These are the failures with no diagnostic
-anywhere, which makes them the ones worth memorising.
+Slurp is total and tolerant. These are the failures with no diagnostic anywhere,
+which makes them the ones worth memorising.
 
 | What you wrote | What happens |
 |---|---|

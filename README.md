@@ -125,7 +125,7 @@ There are also WebAssembly bindings for browser and editor hosts. See [compiler-
 
 **Escaped by default, and the escaper follows the context.** HTML text and plain attributes are HTML-escaped; a `style` attribute has its CSS-structural characters removed; `srcdoc` goes through an allowlist sanitizer; a JavaScript-evaluated attribute is escaped for the string literal it sits in, or encoded as a JSON literal if it sits outside one. Inside a `<script>` body Slurp refuses instead: an interpolation there is a compile error unless you declare the context with `| js` or `| json`, because no automatic escaper is correct in every position.
 
-**Total and tolerant.** Missing data renders as the empty string, budgets truncate rather than aborting, and unknown editor settings are dropped. That is what makes it safe to render an untrusted template in a shared service, and it is also why a mistake tends to produce wrong output rather than an error. Build with `--verbose`.
+**Total and tolerant.** Missing data renders as the empty string, budgets truncate rather than aborting, and unknown editor settings are dropped. That makes an untrusted template safe to render in a shared service, and it means a mistake usually produces wrong output rather than an error. Build with `--verbose`.
 
 ## Documentation
 
@@ -140,7 +140,7 @@ There are also WebAssembly bindings for browser and editor hosts. See [compiler-
 
 **0.1.0, pre-1.0.** The Rust API and the template language will both change without a deprecation cycle until 1.0.
 
-Slurp was extracted from a production system where it renders multi-tenant sites, so parsing, rendering, escaping and the resource budgets are exercised daily. The edges are less settled: parts of `@bytesell/slurp-runtime` are not yet wired to compiler codegen and are published under `experimental/` for that reason, and the editor tooling and the compiler disagree on a few points of syntax, where the compiler is right. [runtime/README.md](./runtime/README.md) has the detail.
+Slurp was extracted from a production system where it renders multi-tenant sites, so parsing, rendering, escaping and the resource budgets are exercised daily. The edges are less settled. Parts of `@bytesell/slurp-runtime` are not wired to compiler codegen, and those entry points ship under `experimental/`. The editor tooling and the compiler disagree on a few points of syntax; the compiler is right. [runtime/README.md](./runtime/README.md) has the detail.
 
 ## Contributing
 

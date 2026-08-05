@@ -1,6 +1,6 @@
 ---
 title: "CLI"
-description: "Every subcommand and flag of the slurp binary, with what each one is actually for."
+description: "Every subcommand and flag of the slurp binary, with what each one is for."
 ---
 
 `cargo install slurp-compiler` gives you one binary, `slurp`, with four
@@ -38,7 +38,7 @@ The same is true of `validate`, where the flag is spelled `--warnings`:
 slurp validate --warnings
 ```
 
-The two differ in one detail worth knowing. `validate` always prints the warning
+The two differ in one detail. `validate` always prints the warning
 **count** in its summary line, even without `-w`, so you can tell there is
 something to look at:
 
@@ -301,14 +301,14 @@ slurp validate --dir . --middleware middleware --warnings
 slurp build --input . --output dist --globals ci-globals.json --verbose
 ```
 
-`validate` first is worth the extra seconds: it fails on the same errors without
-writing an output tree, so a failing pipeline leaves nothing half-built behind.
+Run `validate` first. It fails on the same errors without writing an output tree,
+so a failing pipeline leaves nothing half-built behind.
 
 ## Next
 
 <CardGroup cols={2}>
   <Card title="Dev server" icon="server" href="/tooling/dev-server">
-    Fixtures, reloads, and what it deliberately is not.
+    Fixtures, reloads, and what it is not.
   </Card>
   <Card title="Working with agents" icon="robot" href="/tooling/agents">
     The MCP server, which answers the same questions without a shell.

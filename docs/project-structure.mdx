@@ -54,8 +54,7 @@ dist/
   pages/product.html
 ```
 
-Three things in that listing are worth naming, because each one surprises
-someone.
+Three things in that listing surprise people.
 
 ## The output tree mirrors the input tree
 
@@ -79,8 +78,8 @@ component or a layout rendered on its own is a fragment rather than a document,
 and a layout in particular comes out carrying literal `<slot>` elements, so
 emitting them would fill the output with files nothing can serve.
 
-They are still compiled, deliberately. A syntax error, a security violation or
-an unknown filter in a component that no page imports yet still fails the build.
+They are still compiled. A syntax error, a security violation or an unknown
+filter in a component that no page imports yet still fails the build.
 
 <Warning>
   **Every other directory is emitted.** A `sections/Hero.slurp` builds to
@@ -148,8 +147,8 @@ slurp build --globals mock-context.json
 
 `--globals` seeds the render context with values a template must resolve at
 compile time. It is read and **not** copied to the output, even though it sits
-inside the input tree in the obvious layout. That is the whole reason it is
-singled out: before, the copy shipped it to production at a guessable path.
+inside the input tree in the obvious layout. That is why it is singled out: the
+copy used to ship it to production at a guessable path.
 
 <Warning>
   A `--globals` file that is missing, malformed, or not a JSON object is
@@ -163,9 +162,8 @@ singled out: before, the copy shipped it to production at a guessable path.
   a build that silently continued would come out clean and break in the browser.
 </Warning>
 
-Commit the globals file. It holds no secrets by design, and without it a fresh
-clone builds with those values empty. A build-time secret belongs in `.env`,
-never here.
+Commit the globals file. It holds no secrets, and without it a fresh clone builds
+with those values empty. A build-time secret belongs in `.env`, never here.
 
 ## How imports resolve
 

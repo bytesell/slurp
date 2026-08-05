@@ -46,9 +46,9 @@ committed.
 
 ## Everything returns a JSON string
 
-This is the one trap worth stating before anything else. Every export serialises
-through `JsValue::from_str`, so **every function returns a `string` you must
-`JSON.parse`**. None of them returns an object.
+Every export serialises through `JsValue::from_str`, so **every function returns
+a `string` you must `JSON.parse`**. None of them returns an object. Know this
+before anything else.
 
 ```ts
 import { parse, parseJson } from '@bytesell/slurp-compiler-wasm'
@@ -202,8 +202,8 @@ parseJson(validate_full(src, false)) // [{ code: 'UnsafeScriptInterpolation', li
 ```
 
 **Prefer `validate_full` for an authoring tool, a publish gate or a CI check.**
-The two are kept separate rather than merged so that pure editor-preview hosts
-are unaffected.
+The two stay separate rather than merged so pure editor-preview hosts are
+unaffected.
 
 Two things at the call site:
 
@@ -289,10 +289,9 @@ const state = JSON.stringify({ settings: { heading: 'Saved', bogus: 1 } })
 parseJson(render_section(ast, state, '{}')).html // '\n<h2>Saved</h2>'
 ```
 
-The merge is deliberately tolerant: unknown keys such as `bogus` above are
-dropped and out-of-range numbers are clamped to the schema's `min` and `max`,
-rather than rejected. That tolerance is what lets saved state survive a theme
-update.
+The merge is tolerant: unknown keys such as `bogus` above are dropped and
+out-of-range numbers are clamped to the schema's `min` and `max`, rather than
+rejected. That tolerance is what lets saved state survive a theme update.
 
 It renders in **production** mode and it does **not** take a block catalog, so
 `@theme`-targeted blocks are dropped from the output while surviving in storage.
@@ -309,10 +308,10 @@ That is a host-side concern; see
   that does.**
 </Warning>
 
-That is deliberate, not an oversight: `SLURP_SECRET_*` access, middleware scope
-and the redirect restrictions are server-side concerns enforced by the host, and
-a preview is not a deploy. A template that violates all of them parses and
-renders cleanly through the other six.
+`SLURP_SECRET_*` access, middleware scope and the redirect restrictions are
+server-side concerns enforced by the host, and a preview is not a deploy. A
+template that violates all of them parses and renders cleanly through the other
+six.
 
 The consequence to hold onto: **do not use a WASM render as a production render
 path.** Use the [Rust API](/reference/rust-api) server-side, where `compile` and

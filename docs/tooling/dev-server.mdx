@@ -52,9 +52,9 @@ clone, `cargo build -p slurp-dev-server` puts `slurp-dev` next to `slurp` in
     ```
 
     The real editing loop. Every `.slurp` change under `--source-dir` triggers a
-    full `slurp build` into `--theme-dir`, then a reload. This is the mode worth
-    using, and it is only reachable by running `slurp-dev` directly, because
-    `slurp dev` forwards just `--port` and `--fixtures`.
+    full `slurp build` into `--theme-dir`, then a reload. Use this mode. It is
+    only reachable by running `slurp-dev` directly, because `slurp dev` forwards
+    just `--port` and `--fixtures`.
   </Tab>
 </Tabs>
 
@@ -229,9 +229,9 @@ slurp-dev --allow-host mytheme.test
 
 That admits `mytheme.test` and nothing else. Path traversal is refused in every
 encoding, including through the dynamic-route and SSR branches, and the proxy
-deliberately does not relay the upstream's `access-control-allow-origin` header:
-a permissive dev backend answering `*` must not hand a foreign page read access
-to responses fetched with your cookies.
+does not relay the upstream's `access-control-allow-origin` header: a permissive
+dev backend answering `*` must not hand a foreign page read access to responses
+fetched with your cookies.
 
 <Warning>
   **This is a development server. Do not expose it.** It is not hardened for
@@ -243,8 +243,7 @@ to responses fetched with your cookies.
 ## Status
 
 `slurp-dev-server` is 0.1.0 and its CLI surface is unstable. `slurp dev`
-forwards a deliberately small part of it, and the flags it does not forward may
-still move.
+forwards a small part of it, and the flags it does not forward may still move.
 
 ## Next
 

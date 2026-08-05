@@ -4,8 +4,8 @@ description: "Compiling Slurp templates from inside a Rust application: the entr
 ---
 
 The `slurp-compiler` crate is the CLI and the library. Embedding it is the path
-Slurp is actually designed for: the CLI is a thin wrapper, and everything below
-is what a host server calls per request.
+Slurp is designed for: the CLI is a thin wrapper, and everything below is what a
+host server calls per request.
 
 <Warning>
   Slurp is **0.1.0, pre-1.0**. This API will change without a deprecation cycle
@@ -41,7 +41,7 @@ let html = compile_template(
 assert_eq!(html, "<h1>Shop</h1>");
 ```
 
-## Two shapes of entry point, and why
+## Two shapes of entry point
 
 There are two families, and picking the wrong one is the first thing to get
 right.
@@ -60,8 +60,8 @@ right.
   </Card>
 </CardGroup>
 
-The difference matters more than it looks, because **warnings are where the
-truncations live**. A `Result`-returning call that succeeds tells you nothing
+The difference matters, because **warnings are where the truncations live**. A
+`Result`-returning call that succeeds tells you nothing
 about whether a loop was capped at 1,000 items or the output budget cut the page
 in half. Only the accumulator carries that. See
 [Limits](/troubleshooting/limits).
@@ -111,7 +111,7 @@ It derives `Default`, so `..Default::default()` is the normal way to build one.
 </ParamField>
 
 <ParamField path="is_middleware" type="bool" default="false">
-  Compile under middleware rules. They are genuinely inverted, not merely looser:
+  Compile under middleware rules. They are inverted, not merely looser:
   `request.*`, `{redirect}` and `{next}` are legal **only** when this is `true`,
   and every other path root except `env` and `loop` is illegal when it is.
 
@@ -355,8 +355,8 @@ cleanly can still be refused:
 | `render_section` and the `sections::*` family | **No** | same |
 | `extract_schema`, `extract_block_schema` | **No** | parse only |
 
-The three `compile_with_*` functions hardcode `is_middleware = false` on purpose.
-Every entry point that reaches them compiles a **page**; passing `true` would
+The three `compile_with_*` functions hardcode `is_middleware = false`. Every
+entry point that reaches them compiles a **page**; passing `true` would
 relax the page rules, and taking a caller-supplied flag would let a page opt out
 of them. A middleware file is never compiled at all: the CLI checks it with
 `check_security(.., true)` and stops there, and a server resolves it at request
@@ -397,7 +397,7 @@ pub fn check_security(
 </Warning>
 
 `is_middleware` must match the value the eventual compile will use, because the
-rules genuinely differ.
+rules differ.
 
 ---
 
@@ -542,9 +542,9 @@ pub fn render_section_with_options(
 ) -> (String, ErrorAccumulator);
 ```
 
-The merge is deliberately **tolerant**: unknown setting keys are dropped,
-out-of-range numbers are clamped to the schema's `min` and `max`, and nothing is
-rejected. That tolerance is what lets saved state survive a theme update.
+The merge is **tolerant**: unknown setting keys are dropped, out-of-range numbers
+are clamped to the schema's `min` and `max`, and nothing is rejected. That
+tolerance is what lets saved state survive a theme update.
 
 ### The catalog is not optional if you use `@theme`
 

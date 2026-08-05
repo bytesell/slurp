@@ -1,13 +1,13 @@
 ---
 title: "How escaping works"
-description: "What Slurp escapes for you, what it deliberately does not, and where the line sits when you did not write the template."
+description: "What Slurp escapes for you, what it does not, and where the line sits when you did not write the template."
 ---
 
 Every `${ }` is escaped, and it is escaped for the exact place it lands rather
 than by one general-purpose rule. This page is what that means in practice:
 which contexts get which treatment, shown by rendering hostile values and
-printing the real output, plus the three places where the answer is deliberately
-"not escaped" and you have to know it.
+printing the real output, plus the three places where the answer is "not
+escaped" and you have to know it.
 
 The full threat model, with the enforcing function named for every property, is
 in the [security model](/security-model). This page is the working version.
@@ -32,17 +32,16 @@ With `review.body` set to `<script>alert('xss')</script>`:
 <p>&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;</p>
 ```
 
-It renders as visible text. `/` is deliberately left alone, because it has no
-meaning in HTML text and encoding it would corrupt every URL and date string
-that passes through.
+It renders as visible text. `/` is left alone: it has no meaning in HTML text,
+and encoding it would corrupt every URL and date string that passes through.
 
 This is compile-time, always on, and there is no opt-out short of `{html}`.
 
 ## Attribute values
 
-An attribute value gets the same five characters plus a backtick, which is more
-than a double-quoted attribute strictly needs. The extra characters are there so a
-value cannot break out even if the surrounding quoting is later changed.
+An attribute value gets the same five characters plus a backtick, more than a
+double-quoted attribute strictly needs. The extra characters mean a value cannot
+break out even if the surrounding quoting is later changed.
 
 ```slurp
 <div title="${ review.body }">
@@ -96,9 +95,9 @@ before testing the scheme, so this is neutralised the same way a plain `href` is
   Only a whole string literal is unwrapped. A binding whose value is a
   concatenation, an identifier or a ternary is left exactly as written, because
   its value is not knowable at compile time and guessing would break ordinary
-  bindings. So `:href="'/p/' + slug"` renders untouched. That is the right
-  trade: an expression like that cannot carry an attacker-chosen scheme in the
-  leading position, which is the thing the check exists to catch.
+  bindings. So `:href="'/p/' + slug"` renders untouched. An expression like that
+  cannot carry an attacker-chosen scheme in the leading position, which is what
+  the check exists to catch.
 </Note>
 
 For a URL that a merchant supplies through an editing form, prefer the `link`
@@ -186,7 +185,7 @@ With `doc` set to `<p>Hi <em>there</em></p><script>alert(1)</script><a href="jav
 
 The script is gone, the `javascript:` href is gone, the markup survives, and the
 anchor picked up `rel="noopener noreferrer"` on the way through. Sanitizing
-rather than escaping is what keeps `srcdoc` usable for the one thing it is for.
+rather than escaping keeps `srcdoc` usable for the one thing it is for.
 
 This applies to the plain attribute. The bound form (`:srcdoc`) is a JavaScript
 expression, so the rules in the previous section cover it instead.
@@ -224,7 +223,7 @@ disappears because no attribute outside the list is ever kept. Permitted URL
 schemes are `http`, `https` and `mailto`. The full tag and attribute lists are
 in the [security model](/security-model#raw-html-output).
 
-Two things `sanitize` does not do, worth knowing before you rely on it:
+Two things `sanitize` does not do:
 
 - `img`, `source` and `picture` survive with `src`, so sanitized content can
   still load an off-origin image. That is a tracking beacon: it leaks the
@@ -236,9 +235,8 @@ If no HTML at all should appear, use a plain `${ }` rather than a sanitizer.
 
 ## The three places nothing is escaped
 
-These are deliberate. Each one exists because the alternative would break a
-legitimate use, and each one means the same thing: **only put values the theme
-itself controls here.**
+Each one exists because the alternative would break a legitimate use, and each
+one means the same thing: **only put values the theme itself controls here.**
 
 ### `attr={ expr }` on a JavaScript-evaluated attribute
 
@@ -257,8 +255,8 @@ With `handler` set to `');alert(1);('`:
 ```
 
 The browser decodes that back to `');alert(1);('` and hands it to Alpine. This
-form is for composing handlers out of theme-written expressions, which is why it
-is not escaped. Use the quoted form for anything carrying data.
+form is for composing handlers out of theme-written expressions, so it is not
+escaped. Use the quoted form for anything carrying data.
 
 `srcdoc` is the one exception: it is sanitized no matter who composed it,
 because the value becomes a whole document.
@@ -291,8 +289,8 @@ narrowing, not safety. **Never route untrusted data into an attribute spread.**
 
 ## When you did not write the template
 
-Slurp exists to render templates from somewhere else, so it is worth being
-precise about which half of that is the engine's job.
+Slurp exists to render templates from somewhere else. Here is which half of
+that is the engine's job, and which half is yours.
 
 **What the engine guarantees.** A template is data transformed into markup: no
 code runs at render time, there are no callable functions, and rendering
@@ -330,8 +328,8 @@ all of which are greppable.
 
 Rendering is also **total**: missing data becomes the empty string, budgets
 truncate rather than aborting, and unknown editor settings are dropped rather
-than rejected. That is what makes an untrusted template safe to render in a
-shared service, and it is also why a badly wrong template still returns a 200.
+than rejected. An untrusted template is therefore safe to render in a shared
+service, and a badly wrong template still returns a 200.
 Build with `--verbose` and read
 [Common mistakes](/troubleshooting/common-mistakes).
 

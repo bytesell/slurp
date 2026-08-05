@@ -1,6 +1,6 @@
 # Slurp security model
 
-What slurp defends against, how, and where it deliberately does not. The reporting policy is in [SECURITY.md](../SECURITY.md).
+What slurp defends against, how, and where it does not. The reporting policy is in [SECURITY.md](../SECURITY.md).
 
 Every property here names the file and the symbol that enforces it, so a claim can be checked. If you find one that the code does not deliver, that is a bug in its own right.
 
@@ -59,7 +59,7 @@ In HTML text context, all `${ expr }` expression output is HTML-escaped before b
 | `"` | `&quot;` |
 | `'` | `&#39;` |
 
-`/` is deliberately not escaped: it has no special meaning in HTML text, and escaping it would corrupt URLs and date strings.
+`/` is not escaped: it has no special meaning in HTML text, and escaping it would corrupt URLs and date strings.
 
 This escaping is **compile-time and always on**, and there is no opt-out.
 
@@ -84,9 +84,9 @@ error[UnsafeScriptInterpolation]: an expression in a <script> body must end with
 the `| js` filter (data inside a JS string literal) or `| json` (a bare JSON value) ...
 ```
 
-The rule is enforced twice, on purpose. `lib.rs`'s security walk carries an `in_script` flag on `CheckCtx` and raises the error at compile time, which is what `slurp build` and `slurp validate` report. `Renderer::render_script_expression` is the render-time backstop for the paths that render without going through the security gate (section rendering, and the WASM `render` exports); there it emits nothing and records a diagnostic rather than falling back to an escaper that does not fit.
+The rule is enforced twice. `lib.rs`'s security walk carries an `in_script` flag on `CheckCtx` and raises the error at compile time, which is what `slurp build` and `slurp validate` report. `Renderer::render_script_expression` is the render-time backstop for the paths that render without going through the security gate (section rendering, and the WASM `render` exports); there it emits nothing and records a diagnostic rather than falling back to an escaper that does not fit.
 
-**A filtered value is emitted verbatim into a script body, and that exemption is what makes `| js` usable.** Before it, `var a = "${ v | js }"` rendered a literal `&#39;` inside the JS string, so there was no working way to interpolate into a script at all. The exemption is reached only while `script_depth > 0`; everywhere else `| js` output is still entity-escaped.
+**A filtered value is emitted verbatim into a script body.** Without that exemption `| js` is unusable: `var a = "${ v | js }"` rendered a literal `&#39;` inside the JS string, so there was no working way to interpolate into a script at all. The exemption is reached only while `script_depth > 0`; everywhere else `| js` output is still entity-escaped.
 
 ```slurp
 <script>var a = "${ v | js }";</script>   {* v = ');alert(1);('  ->  var a = "\');alert(1);(\'"; *}
@@ -119,9 +119,9 @@ With `v` set to `');alert(1);('` this renders `add('\');alert(1);(\'')`. The val
 
 renders `x-init="n = &#34');alert(1);('&#34"`, which the browser decodes to `n = "');alert(1);('"`.
 
-Opt-outs exist because a JS-evaluated attribute carries different kinds of value and only the author can tell them apart. `| js` declares "this is data inside a string literal"; `| unsafe_js` declares "this is JavaScript the theme itself wrote" (a prop composed into a handler, which escaping would corrupt); `| json` declares an already-encoded value. A declared slot is passed through unescaped.
+A JS-evaluated attribute carries different kinds of value and only the author can tell them apart, so there are three opt-outs. `| js` declares "this is data inside a string literal"; `| unsafe_js` declares "this is JavaScript the theme itself wrote" (a prop composed into a handler, which escaping would corrupt); `| json` declares an already-encoded value. A declared slot is passed through unescaped.
 
-**A false `| js` declaration is a compile error**, because a declared slot is emitted verbatim, so a wrong claim is strictly worse than no claim:
+**A false `| js` declaration is a compile error.** A declared slot is emitted verbatim, so a wrong claim is worse than no claim:
 
 ```slurp
 <div x-init="n = ${ v | js }"></div>
@@ -136,7 +136,7 @@ That is `lib.rs` `check_js_slot_positions` at compile time, with `Renderer::esca
 
 **3. Inside a `style` attribute or a bound `:style`.**
 
-There is no useful *escape* for CSS: CSS escapes are only valid inside identifiers and strings, and a value slot in a style attribute can sit in any of a dozen grammatical positions. So `renderer::escape::escape_css_value` **removes** the structural characters instead - `;` `{` `}` `(` `)` `"` `'` `\` `@` `*` `<` `>` and NUL. `:` and `/` are deliberately kept: neither can open a new declaration on its own, and both are needed by the legitimate `background:url(${ path })` shape, while dropping `*` is enough to make `/*` comment injection impossible.
+There is no useful *escape* for CSS: CSS escapes are only valid inside identifiers and strings, and a value slot in a style attribute can sit in any of a dozen grammatical positions. So `renderer::escape::escape_css_value` **removes** the structural characters instead - `;` `{` `}` `(` `)` `"` `'` `\` `@` `*` `<` `>` and NUL. `:` and `/` are kept: neither can open a new declaration on its own, and both are needed by the legitimate `background:url(${ path })` shape, while dropping `*` is enough to make `/*` comment injection impossible.
 
 ```slurp
 <div style="background:url(${ c })">
@@ -146,7 +146,7 @@ With `c` set to `a);color:red;x:url(b` this renders `style="background:url(acolo
 
 `renderer::is_css_attr` routes `style`, `:style` and `x-bind:style`. CSS neutralisation runs *before* the JS pass in `escape_slot`, because doing it afterwards would strip the backslashes that pass just added. In development mode, a value the strip actually changed produces a warning (`warn_css_stripped`), since silently mangling a value is how a slot becomes a mystery bug.
 
-**A `<style>` body is a different matter and is not covered.** `escape_css_value` is routed by attribute name; nothing applies it to text inside a `<style>` element. Do not interpolate untrusted data there.
+**A `<style>` body is not covered.** `escape_css_value` is routed by attribute name; nothing applies it to text inside a `<style>` element. Do not interpolate untrusted data there.
 
 **4. Inside `srcdoc`.**
 
@@ -156,9 +156,9 @@ With `c` set to `a);color:red;x:url(b` this renders `style="background:url(acolo
 <iframe srcdoc="${ d }"></iframe>
 ```
 
-With `d` set to `<img src=x onerror=alert(1)><b>ok</b>` this renders `srcdoc='<img src="x"><b>ok</b>'`. The handler is gone and the markup survives. Sanitising rather than entity-escaping is what keeps `srcdoc` usable for the one thing it exists for.
+With `d` set to `<img src=x onerror=alert(1)><b>ok</b>` this renders `srcdoc='<img src="x"><b>ok</b>'`. The handler is gone and the markup survives. Sanitising rather than entity-escaping keeps `srcdoc` able to carry markup, which is the one thing it exists for.
 
-The **bound** form (`:srcdoc` / `x-bind:srcdoc`) is deliberately not handled here: its value is a JavaScript expression evaluated in the browser, not markup, so the JS rules in point 2 cover it instead.
+The **bound** form (`:srcdoc` / `x-bind:srcdoc`) is not handled here: its value is a JavaScript expression evaluated in the browser, not markup, so the JS rules in point 2 cover it instead.
 
 **A related trap, not a security issue but a silent one.** slurp interpolates `${ }` inside script bodies and attributes, so an ordinary JavaScript template literal can be consumed by the compiler. This is now diagnosed in both places:
 
@@ -172,11 +172,11 @@ is the `<script>` case from point 1 and is a hard **compile error** - the messag
 <a :href="`/cart/${item.id}`">
 ```
 
-raises a **warning** (`JsTemplateLiteralInAttribute`, from `parser::html::warn_js_template_literal`). It is a warning rather than an error because slurp can legitimately interpolate a server value inside a backtick literal; the compiler cannot tell the author's client-side `item` from a server-side one, only that the shape is the one that goes wrong. The warning is deliberately suppressed when the backtick is unterminated, since a lone backtick is far more often ordinary prose. Note that `slurp validate` shows warnings only with `--warnings`.
+raises a **warning** (`JsTemplateLiteralInAttribute`, from `parser::html::warn_js_template_literal`). It is a warning rather than an error because slurp can legitimately interpolate a server value inside a backtick literal; the compiler cannot tell the author's client-side `item` from a server-side one, only that the shape is the one that goes wrong. The warning is suppressed when the backtick is unterminated: a lone backtick is far more often ordinary prose. Note that `slurp validate` shows warnings only with `--warnings`.
 
 #### Raw HTML Output
 
-`{html expr}` emits the expression value without escaping. This is intentional for cases where the developer controls the HTML content (e.g., a rich-text body stored in a CMS field). It is the developer's responsibility to ensure the content is safe. **Do not use `{html}` with content that originates from end-user input.**
+`{html expr}` emits the expression value without escaping. It is for cases where the developer controls the HTML content (e.g., a rich-text body stored in a CMS field). It is the developer's responsibility to ensure the content is safe. **Do not use `{html}` with content that originates from end-user input.**
 
 `{html expr sanitize}` runs the expression value through the `ammonia` crate before output. Ammonia operates on an **allowlist** of safe HTML elements and attributes, which is significantly safer than a blocklist approach because novel attack vectors are blocked by default.
 
@@ -200,7 +200,7 @@ The same sanitizer is what `Renderer::srcdoc_guard` runs over an `srcdoc` value,
 
 Weigh these before treating `sanitize` as sufficient:
 
-- `img`, `source` and `picture` are allowed with `src`, so sanitized content can still load off-origin resources. (`srcset` is deliberately NOT allowed: ammonia's URL-scheme check does not parse a `srcset` candidate list, so a `data:text/html` candidate survived it. Dropping the attribute is what makes the scheme rule above true.) That is a tracking beacon: it leaks the reader's IP address and a referrer to whoever authored the content. If that matters, strip HTML entirely rather than sanitizing it.
+- `img`, `source` and `picture` are allowed with `src`, so sanitized content can still load off-origin resources. (`srcset` is NOT allowed: ammonia's URL-scheme check does not parse a `srcset` candidate list, so a `data:text/html` candidate survived it. Dropping the attribute keeps the scheme rule above true.) That is a tracking beacon: it leaks the reader's IP address and a referrer to whoever authored the content. If that matters, strip HTML entirely rather than sanitizing it.
 - `class` and `id` are allowed, so sanitized content can adopt your stylesheet's classes and can collide with element IDs your own scripts query.
 
 The `sanitize` flag is the right default when displaying user-generated rich text. It is not appropriate where no HTML at all should appear: use a plain `${ }` expression there.
@@ -209,7 +209,7 @@ The `sanitize` flag is the right default when displaying user-generated rich tex
 
 ### Environment Variables
 
-**The compiler never reads the process environment.** It has no environment-variable lookup at all. `env` is an ordinary root in the render context, populated entirely by whatever host embeds the compiler, exactly like `site` or `product`. Understanding that is the whole of this section: the protection below is a check on a NAME written in a template, not a check on a value.
+**The compiler never reads the process environment.** It has no environment-variable lookup at all. `env` is an ordinary root in the render context, populated entirely by whatever host embeds the compiler, exactly like `site` or `product`. The protection below is therefore a check on a NAME written in a template, not a check on a value.
 
 **What the compiler enforces.** A path whose root is `env` and whose second segment literally begins with `SLURP_SECRET_` is a compile error (`SecretEnvInTemplate`). The check is `check_env_key_name` in `lib.rs`, in the analysis pass, before any output is generated.
 
@@ -221,7 +221,7 @@ ${ (env)["SLURP_SECRET_X"] }       {* compile error - the parenthesised form too
 
 **The refusal is unconditional, including inside middleware.** `check_env_key_name` takes no `is_middleware` argument and has no branch on it, so there is no file in which a `SLURP_SECRET_*` name is permitted. Middleware may read `env` (it is one of the three allowed roots), but not a key carrying that prefix.
 
-Both spellings of the access are covered, and that is deliberate: `env.X` and `env["X"]` are the same access, and the prefix test once ran on the dotted form only. `check_expr`'s `Index` arm re-joins a parenthesised `(env)["..."]`, whose two halves would otherwise be checked independently with neither being a rooted `env.KEY` path. A subscript key that is **not** a compile-time constant is refused outright (`check_env_key_expr`), because there is no way to prove statically that `env[k]` is not a secret.
+Both spellings of the access are covered. `env.X` and `env["X"]` are the same access, and the prefix test once ran on the dotted form only. `check_expr`'s `Index` arm re-joins a parenthesised `(env)["..."]`, whose two halves would otherwise be checked independently with neither being a rooted `env.KEY` path. A subscript key that is **not** a compile-time constant is refused outright (`check_env_key_expr`), because there is no way to prove statically that `env[k]` is not a secret.
 
 **What it does not enforce.** The match is on the literal prefix and nothing else. `${ env.STRIPE_KEY }` compiles cleanly, and renders whatever the host put at `context.env.STRIPE_KEY`. So this check catches a template author who names a secret in the obvious way; it cannot catch one who names it in any other way, and it cannot catch a host that seeded a secret into the context under a different key.
 
@@ -310,7 +310,7 @@ Any file whose header does not match one of these signatures is rejected (`Inval
 
 **These four decoders are the only ones linked into the binary.** `image/Cargo.toml` builds the crate with `default-features = false, features = ["jpeg", "webp", "png", "gif"]`. The default feature set would additionally link bmp, dds, exr, ff, hdr, ico, pnm, qoi, tga and tiff. That matters because format selection at decode time is by content, not by the header we matched: without the restriction, a file that satisfied the magic check could still be routed to a decoder this document never declared.
 
-**A recognised header is not sufficient on its own.** After the magic check, the format the decoder infers from the content must equal the format the header declared, or the request is rejected. AVIF and HEIC are a deliberate special case: an ISO base media header (the `ftyp` marker at bytes 4 to 8, with brand `avif`, `avis`, `heic` or `mif1`) is recognised so that such a file is reported as an unsupported source rather than as corrupt data, but no ISO base media decoder is compiled in. AVIF is an **output** format only.
+**A recognised header is not sufficient on its own.** After the magic check, the format the decoder infers from the content must equal the format the header declared, or the request is rejected. AVIF and HEIC are a special case: an ISO base media header (the `ftyp` marker at bytes 4 to 8, with brand `avif`, `avis`, `heic` or `mif1`) is recognised so that such a file is reported as an unsupported source rather than as corrupt data, but no ISO base media decoder is compiled in. AVIF is an **output** format only.
 
 #### Path Traversal Prevention
 
@@ -320,7 +320,7 @@ The `src` parameter is parsed as a URL by the `url` crate. Path traversal sequen
 
 The image optimizer applies in-memory rate limiting of **100 requests per 60 seconds per client** (`RateLimiter::check_and_record` in `image/src/handler.rs`).
 
-**The window is TUMBLING, not sliding.** The counter is hard-reset once the window has elapsed, so a client that empties its allowance at the end of one window and again at the start of the next can be admitted up to twice the nominal rate across the boundary. That is the standard fixed-window tradeoff and is accepted here, because this limiter is a last line of defence rather than the primary one.
+**The window is TUMBLING, not sliding.** The counter is hard-reset once the window has elapsed, so a client that empties its allowance at the end of one window and again at the start of the next can be admitted up to twice the nominal rate across the boundary. That is the standard fixed-window tradeoff. This limiter is a last line of defence, not the primary one.
 
 An IPv6 client is bucketed by its `/64` rather than by its address (`ClientKey::V6Net64`), because a routine allocation is a whole `/64` and per-address buckets would let one client mint unlimited distinct keys. An IPv4-mapped IPv6 address collapses into the IPv4 bucket, so a dual-stack listener cannot yield a second allowance. The bucket table is sharded over 16 mutexes, capped per shard, and pruned on a background timer rather than on the request path; a poisoned mutex fails closed.
 
@@ -332,7 +332,7 @@ Decode, resize and encode are seconds of CPU work on a large image. They run on 
 
 #### Network Exposure Defaults
 
-The service binds **loopback** by default and sends **no CORS headers** by default. Both are deliberate: it fetches attacker-supplied URLs, so exposing it should be an explicit act. Pass `--bind 0.0.0.0` to accept connections from the network and `--cors-allow-origin <origin>` (repeatable, or `*`) to enable CORS.
+The service binds **loopback** by default and sends **no CORS headers** by default. It fetches attacker-supplied URLs, so exposing it is an explicit act. Pass `--bind 0.0.0.0` to accept connections from the network and `--cors-allow-origin <origin>` (repeatable, or `*`) to enable CORS.
 
 ---
 
@@ -367,7 +367,7 @@ This matters because the HMR feed is not empty: it carries changed page paths an
 
 A request carrying a `Host` header must name a loopback host, otherwise it is refused with a 403 that explains why. A request with NO `Host` header at all is allowed through, so that HTTP/1.0 clients still work; a browser always sends one, and a browser is the only thing a rebinding attack can drive. Binding to `127.0.0.1` is not sufficient on its own: in a DNS rebinding attack the attacker's own domain is made to resolve to `127.0.0.1`, at which point the browser treats the attacker's origin as same-origin with the dev server and every response becomes cross-origin readable. The `Host` header is the only place that lie is visible.
 
-A developer who deliberately points a hosts-file entry at the dev server can opt that name in with `--allow-host <host>` (repeatable).
+A developer who points a hosts-file entry at the dev server can opt that name in with `--allow-host <host>` (repeatable).
 
 #### Backend Proxy
 
@@ -378,7 +378,7 @@ A developer who deliberately points a hosts-file entry at the dev server can opt
 
 Fixture responses (`--fixtures`) scope `access-control-allow-origin` to the requesting dev origin and add `Vary: Origin`. They never send `*`.
 
-All HTTP methods are forwarded rather than restricted to a safe subset, deliberately: themes legitimately `POST`, `PUT` and `DELETE` against their backend during development, and a method allowlist would break that without adding protection the `Origin` and `Host` guards do not already provide.
+All HTTP methods are forwarded rather than restricted to a safe subset. Themes legitimately `POST`, `PUT` and `DELETE` against their backend during development, and a method allowlist would break that without adding protection the `Origin` and `Host` guards do not already provide.
 
 #### `SLURP_MODE` Injection
 
@@ -386,7 +386,7 @@ The dev server injects `<script>window.SLURP_MODE = 'dev'</script>` into every p
 
 **It is the only producer of `window.SLURP_MODE` in this repository.** `slurp build` does not emit it, and there is no build pipeline here that sets `'production'`. A page built with `slurp build` and served by any host other than the dev server has `window.SLURP_MODE` undefined.
 
-That matters because the runtime branches on this value. Anything reading it must treat an absent value as production, so that the safe behaviour is the default rather than something a host has to remember to opt into. A host that genuinely wants editor or dev behaviour must set the global itself, deliberately, before the runtime loads.
+That matters because the runtime branches on this value. Anything reading it must treat an absent value as production, so that the safe behaviour is the default rather than something a host has to remember to opt into. A host that wants editor or dev behaviour must set the global itself, before the runtime loads.
 
 ---
 
@@ -394,11 +394,11 @@ That matters because the runtime branches on this value. Anything reading it mus
 
 The runtime (`@bytesell/slurp-runtime`) is an optional browser bundle. A page that uses no `{fetch}`, no `{$let}`, no `{try}` and no client navigation does not need it at all, and the whole of this subsection is then moot.
 
-**No `eval()`** - The runtime contains no `eval()`, no `new Function()`, and no string-argument `setTimeout`. Verified by grep across `runtime/src`. It does, however, load Alpine.js, and **Alpine evaluates its own attribute values as JavaScript**. That is Alpine's design, not a slurp defect, but it is why the JS-evaluated-attribute case above is a real injection sink rather than a theoretical one.
+**No `eval()`** - The runtime contains no `eval()`, no `new Function()`, and no string-argument `setTimeout`. Verified by grep across `runtime/src`. It does, however, load Alpine.js, and **Alpine evaluates its own attribute values as JavaScript**. That is Alpine's design, and it is why the JS-evaluated-attribute case above is a real injection sink rather than a theoretical one.
 
 **Fetch interceptor scope** - The interceptor is read from `window.SLURP_FETCH_INTERCEPTOR`, a global, not from an options object (`callFn` in `runtime/src/fetch/index.ts`). `SlurpRuntimeOptions.fetchInterceptor` still appears in `shared/interfaces.ts` but nothing in the repository reads or implements it; treat that type field as stale.
 
-**The gate is an allowlist, which is the right direction.** The interceptor runs only when `window.SLURP_MODE` is `'dev'` or `'editor'`, so an absent or unrecognised mode means no interception. That matters because nothing in this repository ever sets a production value (see the `SLURP_MODE` subsection above): a blocklist keyed on `=== 'production'` would have made an undefined mode permissive on every built page, which is exactly the failure this shape avoids.
+**The gate is an allowlist.** The interceptor runs only when `window.SLURP_MODE` is `'dev'` or `'editor'`, so an absent or unrecognised mode means no interception. That matters because nothing in this repository ever sets a production value (see the `SLURP_MODE` subsection above): a blocklist keyed on `=== 'production'` would have made an undefined mode permissive on every built page, which is exactly the failure this shape avoids.
 
 **DOM manipulation** - The runtime never uses `innerHTML` for content that came off the network. A client navigation parses the incoming document with `DOMParser`, then swaps in the parsed node with `replaceWith` (`doSwap` in `runtime/src/core/navigation.ts`); the new title is copied with `textContent`. The runtime contains no `innerHTML` write at all: the dev-mode error overlay builds every node with `createElement` and assigns every error field via `textContent` (`runtime/src/core/dev.ts`). `{html}` nodes are rendered by the Rust compiler at build time and never touched by the runtime.
 
@@ -414,8 +414,8 @@ The diagnostic provider parses `.slurp` files to provide real-time error highlig
 
 **Most WASM exports do not run the compile-time security checks, and exactly one does.**
 
-- `parse`, `render`, `render_dev`, `validate`, `extract_schema` and `render_section` do **not** run the security walk. That is deliberate: they exist for browser and editor hosts where a preview is not a deploy, and the rules they skip are server-side concerns.
-- **`validate_full(source, is_middleware)` runs it.** It is `validate` plus `slurp_compiler::check_security`, and it is a separate export rather than a change to `validate` precisely so the editor-preview hosts are unaffected while an authoring tool can get build parity.
+- `parse`, `render`, `render_dev`, `validate`, `extract_schema` and `render_section` do **not** run the security walk. They exist for browser and editor hosts where a preview is not a deploy, and the rules they skip are server-side concerns.
+- **`validate_full(source, is_middleware)` runs it.** It is `validate` plus `slurp_compiler::check_security`, a separate export rather than a change to `validate`, so the editor-preview hosts are unaffected while an authoring tool can get build parity.
 
 The distinction matters because several rules live in the security walk and not in the parser: an unfiltered `${ }` in a `<script>` body, a false `| js` claim in JavaScript statement position, `env.SLURP_SECRET_*`, `request.*` outside middleware, and `{redirect}` / `{next}` outside middleware. **A tool that calls only `validate` will report a file clean that `slurp build` then rejects.** If you are integrating slurp into an authoring tool, publish gate or CI check, call `validate_full`.
 
@@ -458,23 +458,23 @@ The sanitization decision is recorded at parse time, on `Node::RawHtml { expr, s
 
 - **An interpolated slot in JavaScript STATEMENT position is encoded, not escaped.** In a JS-evaluated attribute, a slot outside any string literal becomes a JSON literal. That is self-delimiting and cannot contribute structure to the surrounding program, which is the security property that matters, but it is not a general-purpose escape: the value's JavaScript *type* is whatever JSON gives it, so a string slot arrives quoted where the author may have expected a bare token. If you meant a bare value, say so with `| json`; if you meant theme-written code, say so with `| unsafe_js`.
 
-- **`attr={ expr }` on a JS-evaluated attribute is theme trust, by design.** The unquoted expression form carries no surrounding author text, so there is no quote context to read, and the renderer does NOT substitute a strict branch: the value is emitted with `escape_attr` only, which is inert in an attribute the JS engine will evaluate. `srcdoc` is the one exception, guarded whoever composed it, because that value becomes a whole document. But a `{html attrs}` attribute **spread** is a different matter and is explicitly not a sanitizer for untrusted data: its whole purpose is forwarding Alpine directives, and Alpine evaluates the value of every directive and every bind as JavaScript. `x-show="alert(1)"`, `:title="alert(1)"` and `x-for="i in [alert(1)]"` all pass the name gate today, unavoidably - an allowlist that admits `:disabled="loading"` cannot also exclude `:title="alert(1)"`, because they are the same construct. What `is_safe_attr_name` buys is narrowing, not safety: it rejects native `on*` handlers (including via a `:onclick` / `x-bind:onclick` alias) and the four initialization-time Alpine sinks. **Never route untrusted data into an attribute spread.**
+- **`attr={ expr }` on a JS-evaluated attribute is theme trust.** The unquoted expression form carries no surrounding author text, so there is no quote context to read, and the renderer does NOT substitute a strict branch: the value is emitted with `escape_attr` only, which is inert in an attribute the JS engine will evaluate. `srcdoc` is the one exception, guarded whoever composed it, because that value becomes a whole document. But a `{html attrs}` attribute **spread** is a different matter and is explicitly not a sanitizer for untrusted data: its whole purpose is forwarding Alpine directives, and Alpine evaluates the value of every directive and every bind as JavaScript. `x-show="alert(1)"`, `:title="alert(1)"` and `x-for="i in [alert(1)]"` all pass the name gate today, unavoidably - an allowlist that admits `:disabled="loading"` cannot also exclude `:title="alert(1)"`, because they are the same construct. What `is_safe_attr_name` buys is narrowing, not safety: it rejects native `on*` handlers (including via a `:onclick` / `x-bind:onclick` alias) and the four initialization-time Alpine sinks. **Never route untrusted data into an attribute spread.**
 
 - **A bound URL attribute is checked only when its value is a whole string literal.** `:href` and `x-bind:src` carry a JavaScript expression rather than a URL, so `renderer::bound_url_literal` unwraps one layer of string literal before the scheme test. A binding that is a concatenation, an identifier or a ternary is left alone, because its value is not knowable at compile time and neutralising it would break ordinary bindings. Such an expression cannot place an attacker-chosen scheme in the leading position, which is what the check exists to catch, but a value assembled in the browser is outside this guard by construction. (Until 2026-08-05 the bound form was not checked AT ALL: the value reached the test already wrapped in quotes, so the leading-scheme match never fired while `href` and `href={ expr }` were both neutralised correctly. Pinned by `a_script_scheme_cannot_ride_in_through_a_bound_url_attribute`.)
-- **`srcset` scheme checking is partial.** `is_url_attr` lists `srcset`, but `has_forbidden_url_scheme` inspects only the leading scheme, and an `srcset` value is a comma-separated list of `url descriptor` pairs. A script scheme in the second or later candidate is not caught. Candidate URLs are fetched as images, so this is a resource-load question rather than a script-execution one; splitting `srcset` correctly means implementing its grammar, and that is recorded rather than half-implemented.
+- **`srcset` scheme checking is partial.** `is_url_attr` lists `srcset`, but `has_forbidden_url_scheme` inspects only the leading scheme, and an `srcset` value is a comma-separated list of `url descriptor` pairs. A script scheme in the second or later candidate is not caught. Candidate URLs are fetched as images, so this is a resource-load question rather than a script-execution one. Splitting `srcset` correctly means implementing its grammar, and that grammar is not implemented.
 
 - **A `<style>` body has no CSS neutralisation.** `escape_css_value` is routed by attribute NAME (`is_css_attr` covers `style`, `:style`, `x-bind:style`), so nothing applies it to text inside a `<style>` element. Unlike the `<script>` case there is no compile-time refusal there either. Do not interpolate untrusted data into a `<style>` body.
 
-- **`{html}` without `sanitize` trusts the theme developer.** If a developer passes user-generated content through `{html}` without `sanitize`, XSS is possible. This is an intentional trade-off; there is no way to detect this statically without understanding the data flow of the entire application.
+- **`{html}` without `sanitize` trusts the theme developer.** If a developer passes user-generated content through `{html}` without `sanitize`, XSS is possible. This is a trade-off: there is no way to detect it statically without understanding the data flow of the entire application.
 
 - **The compile-time checks assume a trusted host.** `is_middleware` is a caller-supplied flag and `env` is a caller-supplied context root, so a host that mislabels a file or seeds a secret into the context defeats both checks without the compiler being able to notice. The embedding host is inside the trust boundary; the theme author is only partly inside it, per the trust levels at the top of this document.
 
-- **Rendering is total, so most failures are silent.** Missing data yields `""`, budget overruns truncate and record a diagnostic, and unknown section settings and block types are dropped rather than rejected. This is deliberate for a multi-tenant service where a template must never take a page down, but it means a template can be badly wrong and still render a 200. Build with `--verbose` to see warnings; without it they are hidden.
+- **Rendering is total, so most failures are silent.** Missing data yields `""`, budget overruns truncate and record a diagnostic, and unknown section settings and block types are dropped rather than rejected. That suits a multi-tenant service where a template must never take a page down, and it means a template can be badly wrong and still render a 200. Build with `--verbose` to see warnings; without it they are hidden.
 
 - **Rate limiting is in-memory.** The image optimizer's rate limiter resets when the process restarts and is not shared between multiple instances. Production deployments must add rate limiting at the reverse proxy layer.
 
-- **Dev server is not hardened for network exposure.** The `Origin`, `Host` and path-traversal guards are designed to protect against local threats (other browser tabs, a malicious page the developer visits, locally running malware). They are not a substitute for network-level access controls. The dev server binds to `127.0.0.1` only and offers no flag to widen that, which is deliberate.
+- **Dev server is not hardened for network exposure.** The `Origin`, `Host` and path-traversal guards are designed to protect against local threats (other browser tabs, a malicious page the developer visits, locally running malware). They are not a substitute for network-level access controls. The dev server binds to `127.0.0.1` only and offers no flag to widen that.
 
-- **The image optimizer has no source-domain allowlist.** It will fetch from any globally routable host. DNS rebinding itself is mitigated in code (see "SSRF Protection" above: the connection is pinned to the addresses that passed validation, and redirects are refused), so an RPZ resolver is not required for that. An explicit allowlist of permitted source domains is still worth adding where the set of sources is known, since it turns an open fetcher into a closed one.
+- **The image optimizer has no source-domain allowlist.** It will fetch from any globally routable host. DNS rebinding itself is mitigated in code (see "SSRF Protection" above: the connection is pinned to the addresses that passed validation, and redirects are refused), so an RPZ resolver is not required for that. Add an explicit allowlist of permitted source domains where the set of sources is known: it turns an open fetcher into a closed one.
 
 - **Image cache entries are keyed by URL, not by response.** Two requests for the same `src`, width and format share a cache entry, so an upstream that varies its response by request header or by client will have only its first response cached and served to everyone for the TTL.

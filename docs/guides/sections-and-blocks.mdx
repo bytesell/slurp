@@ -17,7 +17,7 @@ That division is the whole feature:
 
 Most engines leave the first part to the surrounding application, which means
 the form and the markup are two separate files that drift apart. Putting the
-schema in the template is what stops that.
+schema in the template stops that.
 
 ## Declare a section
 
@@ -89,7 +89,7 @@ A value that fails one of those checks never raises. Depending on the kind it
 either falls back to the declared default (`text`, `color`, `select`, `toggle`,
 and a `number` that is not a number) or is neutralised in place (`link` and
 `image` collapse to empty, `richtext` is sanitized, `number` is clamped). See
-[merging](#the-merge-is-tolerant-on-purpose) below.
+[merging](#the-merge-is-tolerant) below.
 
 <Note>
   `select` options may be bare identifiers or quoted strings, and the two are
@@ -194,7 +194,7 @@ Each child is wrapped in a `display: contents` element carrying its id, so an
 editor's click-to-select can resolve it without the wrapper affecting layout.
 
 `{blocks}` renders the children of the nearest enclosing section **or block**,
-preferring the block. That is what makes nesting work: a `group` block whose
+preferring the block. That is how nesting works: a `group` block whose
 file contains `{blocks}` renders its own children. A block whose file hosts its
 own type is skipped by a cycle guard rather than recursing.
 
@@ -229,7 +229,7 @@ Two rules that are easy to get backwards:
   template one.
 </Warning>
 
-## The merge is tolerant on purpose
+## The merge is tolerant
 
 Saved editor state is merged over the schema, never trusted as-is. The rule is
 that a theme upgrade must not be able to break a stored page, and a stored page
@@ -238,7 +238,7 @@ valid rather than to an error.
 
 Here is a real merge. The schema is the nine-kind example above, plus a
 `faq_item { max: 2 settings { question: text  answer: richtext } }` block. The
-saved state is deliberately wrong in every way at once:
+saved state is wrong in every way at once:
 
 ```json saved state
 {

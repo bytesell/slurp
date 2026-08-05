@@ -75,12 +75,12 @@ puts it in the language so the schema and the markup cannot drift apart.
 
 ## What to expect
 
-Slurp is deliberately **total and tolerant**. Missing data renders as the empty
+Slurp is **total and tolerant**. Missing data renders as the empty
 string, resource budgets truncate rather than abort, and unknown editor settings
 are dropped rather than rejected. That is what makes it safe to render an
 untrusted template in a shared service.
 
-It is also the thing that surprises people most, so it is worth stating plainly:
+It is also what surprises people most:
 
 <Warning>
   Most Slurp mistakes are silent. A typo in a property name renders nothing

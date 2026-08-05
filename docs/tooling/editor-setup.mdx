@@ -5,7 +5,7 @@ description: "The VS Code extension and the Prettier plugin: what they do, what 
 
 Two pieces of editor tooling exist: a VS Code extension for highlighting and
 navigation, and a Prettier plugin for formatting `.slurp` files. Both are useful
-and both are narrow, so it is worth knowing exactly where each one stops.
+and both are narrow. This page says exactly where each one stops.
 
 <Warning>
   **The editor tooling is a second description of the language, written by hand,
@@ -148,8 +148,8 @@ alone, because the compiler turns template whitespace into a literal text node
 and trimming those lines would change what the page renders.
 
 <Note>
-  It deliberately does not touch the inside of `${ ... }`. Normalising that
-  spacing means editing template content on a default-on save hook, and the
+  It does not touch the inside of `${ ... }`. Normalising that spacing means
+  editing template content on a default-on save hook, and the
   obvious regex gets it wrong: the lexer accepts a `}` inside a string literal,
   so `${ label | default("}") }` would come back with the author's fallback text
   silently changed, in a way that still compiles and is stable under

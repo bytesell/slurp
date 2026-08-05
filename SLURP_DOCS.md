@@ -48,7 +48,7 @@ Slurp is a server-side HTML templating engine written in Rust. Templates are com
 - Rendering is a **single server-side pass over a JSON context**. There is no reactivity, no function evaluation and no user code execution at render time.
 - Expression output is HTML-escaped by default. `{html}` is the only way to emit raw output. See [Section 10](#10-escaping-and-security), including the contexts where that escaping is not sufficient.
 - Compile-time security checks gate `env.SLURP_SECRET_*`, `request.*` scope, `{redirect}` and `{next}`. **They run in the `compile*` entry points, in `slurp validate`, and in the WASM export `validate_full`. Every other WASM export skips them.**
-- The renderer is deliberately **total and tolerant**: missing data renders `""`, budgets truncate, and unknown keys are dropped. Almost nothing raises. That is what makes it safe to render untrusted templates in a shared service, and it is also why most mistakes are silent rather than loud. The resource budgets record a warning either way, but `slurp build` prints warnings only under `--verbose`, so without `-v` a build that dropped the tail of a list is quiet and still exits 0. See "Resource budgets" in Section 11.
+- The renderer is **total and tolerant**: missing data renders `""`, budgets truncate, and unknown keys are dropped. Almost nothing raises. Totality is the property that makes rendering untrusted templates in a shared service safe, and it is also why most mistakes are silent rather than loud. The resource budgets record a warning either way, but `slurp build` prints warnings only under `--verbose`, so without `-v` a build that dropped the tail of a list is quiet and still exits 0. See "Resource budgets" in Section 11.
 - The compiler is available as a native Rust library, a WASM module, a CLI binary (`slurp`), and a dev server with hot reload.
 
 ---
@@ -613,7 +613,7 @@ A host pre-renders a page's ordered section list and injects the resulting HTML 
 - `{sections}` reads `__slurp_sections_html`.
 - `{sections "header"}` reads `__slurp_section_group_header_html`, which is how a layout hosts global chrome such as a header or footer.
 
-The page-level key is stripped when entering a component or layout scope, so a stray `{sections}` inside a component cannot duplicate the page. Group keys are deliberately not stripped, which is what lets layouts host groups. `${sections}` with a dollar sign remains an ordinary path expression and has nothing to do with this tag.
+The page-level key is stripped when entering a component or layout scope, so a stray `{sections}` inside a component cannot duplicate the page. Group keys are not stripped, so layouts can host groups. `${sections}` with a dollar sign remains an ordinary path expression and has nothing to do with this tag.
 
 #### `{blocks}`
 
@@ -685,7 +685,7 @@ Only class names whose condition is truthy are included. Multiple unconditional 
 
 Eleven attribute names are checked for a script scheme: `href`, `src`, `xlink:href`, `poster`, `formaction`, `action`, `cite`, `background`, `data`, `ping` and `srcset`, plus their `:` and `x-bind:` forms. A `javascript:`, `data:` or `vbscript:` value collapses to `""`. Detection strips control characters, Unicode whitespace, zero-width and bidi characters first, so obfuscated variants do not slip through.
 
-`srcset` is checked as a single opaque value rather than parsed into its candidate list, so a script scheme in a **later** candidate is not caught. That is recorded in `is_url_attr` rather than half-implemented: candidates are fetched as images, which makes it a resource-load question and not a script-execution one.
+`srcset` is checked as a single opaque value rather than parsed into its candidate list, so a script scheme in a **later** candidate is not caught. `is_url_attr` records that limitation: candidates are fetched as images, which makes it a resource-load question and not a script-execution one.
 
 ### Attribute value forms
 
@@ -1267,7 +1267,7 @@ All `${expr}` outputs are HTML-escaped. The following characters are replaced:
 | `"` | `&quot;` |
 | `'` | `&#39;` |
 
-`/` is deliberately not escaped.
+`/` is not escaped.
 
 ### THE ESCAPER IS CHOSEN BY CONTEXT
 
@@ -1278,7 +1278,7 @@ HTML entity escaping is right in HTML text and in a plain attribute value, and w
 - **Inside a `style` or `:style` attribute** the CSS-structural characters `; { } ( ) " ' \ @ * < >` are removed from the value. `:` and `/` are kept, so `background:url(${ path })` still works.
 - **Inside `srcdoc`** the value is run through the same ammonia allowlist sanitizer that `{html expr sanitize}` uses, at the layer the iframe will see it.
 
-A **`<style>` element body** and a `{html attrs}` **attribute spread** have no protection at all. The CSS strip is routed by attribute name, so nothing reaches text inside `<style>`; the spread's whole purpose is forwarding Alpine directives, which Alpine evaluates as JavaScript, so it can never be made safe for untrusted data. Do not interpolate untrusted data into either. [docs/security-model.md](./docs/security-model.md) has the worked examples and the remaining limitations.
+A **`<style>` element body** and a `{html attrs}` **attribute spread** have no protection at all. The CSS strip is routed by attribute name, so nothing reaches text inside `<style>`; the spread's whole purpose is forwarding Alpine directives, which Alpine evaluates as JavaScript, so it can never be made safe for untrusted data. Do not interpolate untrusted data into either. [docs/security-model.md](./docs/security-model.md) has the worked examples and the known gaps.
 
 ### A trap: JavaScript template literals
 
@@ -1408,8 +1408,8 @@ Build complete. 1 file(s) compiled.
 ```
 
 The build still SUCCEEDS. Truncating and continuing is the correct behaviour for a
-service rendering an untrusted template, and it is deliberate: a page that loses its
-tail is better than a page that fails. What you are protected from is not noticing.
+service rendering an untrusted template: a page that loses its tail is better than a
+page that fails. What you are protected from is not noticing.
 
 Note the exit code is 0, so a script that only checks the status will not catch this.
 Look for the warning, or count what you expected to render.
@@ -1528,7 +1528,7 @@ Options:
   --disk-sweep-interval-secs <N>   Disk cache sweep interval [default: 300]
 ```
 
-**The defaults are closed on purpose.** The service fetches attacker-supplied URLs, so it binds loopback and sends no CORS headers until you ask for otherwise.
+**The defaults are closed.** The service fetches attacker-supplied URLs, so it binds loopback and sends no CORS headers until you ask otherwise.
 
 Not configurable by flag or environment variable: max source size 20 MiB, max decoded size 50 MiB, max width 8192, fetch timeout 10 s, rate limit 100 requests per 60 s per IP.
 
@@ -1760,7 +1760,7 @@ Security limitations are separate and live in [docs/security-model.md](./docs/se
 
 ### `{debug}` stripped silently in production
 
-`{debug}` nodes emit nothing in `BuildMode::Production`. This is intentional and correct but can surprise developers who expect an error if `{debug}` is left in production templates.
+`{debug}` nodes emit nothing in `BuildMode::Production`. That is correct, and it can surprise developers who expect an error if `{debug}` is left in production templates.
 
 ### Currency formatting is manual (no ICU)
 

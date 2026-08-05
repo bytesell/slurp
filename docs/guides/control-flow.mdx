@@ -134,7 +134,7 @@ A null or missing collection is empty and takes the `{empty}` branch:
 
 That holds whether `cart.items` is `[]`, `null`, or absent from the context
 entirely. A misspelled collection name therefore renders your empty state, not
-an error, which is worth remembering when an empty state appears for no reason.
+an error. Remember that when an empty state appears for no reason.
 
 A value that is neither an array nor null is wrapped and iterated exactly once,
 with `loop.count` of 1. So pointing `{each}` at a single object gives you one
@@ -287,9 +287,9 @@ The lexer knows the word but no parser supports it, so every `{with}` is a hard
 build failure, and the four errors after the first are the parser recovering
 from it.
 
-Usually the answer is just to write the full path. If the repetition is
-genuinely painful, `{each}` over a non-array value iterates it exactly once,
-which gives you the shorter name:
+Usually the answer is to write the full path. If the repetition is painful,
+`{each}` over a non-array value iterates it exactly once, which gives you the
+shorter name:
 
 ```slurp
 {each u in user}

@@ -269,11 +269,11 @@ way. URL schemes are limited to `http`, `https` and `mailto`.
 
 <Note>
   **Every sanitized `<a>` gains `rel="noopener noreferrer"`,** not only one that
-  carries a `target`. That is stricter than the requirement, and it is pinned by a
-  test so nobody narrows it later.
+  carries a `target`. That is stricter than the requirement, and a test pins it so
+  nobody narrows it later.
 
-  `srcset` is deliberately not on the attribute allowlist, because the scheme
-  check does not parse its comma-separated candidate grammar.
+  `srcset` is not on the attribute allowlist: the scheme check does not parse its
+  comma-separated candidate grammar.
 </Note>
 
 ### `{html}` in attribute position
@@ -357,8 +357,8 @@ Host integration points. Neither takes a closing tag.
 context key `__slurp_sections_html`. `{sections "header"}` reads
 `__slurp_section_group_header_html` instead, which is how global chrome lives in a
 layout. The page-level key is stripped when entering a component or layout scope,
-so a stray `{sections}` in a component cannot duplicate the page; group keys are
-deliberately not stripped.
+so a stray `{sections}` in a component cannot duplicate the page. Group keys are
+not stripped.
 
 `{blocks}` renders the child blocks of the nearest enclosing section or block, each
 from its own `blocks/<type>.slurp` file, preferring an enclosing `block` over an

@@ -8,7 +8,7 @@ every recursive walk, every loop and every allocation needs a ceiling, because a
 crafted template must not be able to pin a render thread or exhaust a shared
 process.
 
-The design rule that follows is worth internalising before the table:
+One design rule governs the whole table:
 
 <Warning>
   **Exceeding a budget truncates the output. It does not abort the render.** A
@@ -60,9 +60,9 @@ warning[IterationLimitExceeded]: Iteration limit: collection has 1500 items, cap
 truncating a collection, and **it records nothing at all**. So a quiet build is
 not evidence that no repeat was clamped.
 
-The warning is emitted in both build modes, deliberately: the dropped rows leave
-no trace in the page, so a build that quietly loses a third of a product list
-would otherwise report itself clean.
+The warning is emitted in both build modes. The dropped rows leave no trace in
+the page, so a build that quietly loses a third of a product list would otherwise
+report itself clean.
 
 ### 1,000,000 iterations per render
 
@@ -112,8 +112,8 @@ the iteration budget bounds how often a loop **runs**, but a filter chain emits
 nothing until it finishes, so neither ever sees an intermediate value.
 
 - **8 MiB per value** is what makes the doubling unreachable. It is per-value
-  rather than cumulative on purpose: growth is multiplicative, so the first
-  intermediate to cross the cap ends the chain before the next doubling.
+  rather than cumulative: growth is multiplicative, so the first intermediate to
+  cross the cap ends the chain before the next doubling.
 
   ```
   error[IterationLimitExceeded]: Filter 'json' produced 8388616 bytes, over the
@@ -228,8 +228,8 @@ optimisation rather than a correctness decision.
 ### Stack: 2 MiB segments with a 128 KiB red zone
 
 On **native** targets the parser and renderer grow the stack on demand, in 2 MiB
-segments, whenever fewer than 128 KiB remain. That is what makes the depth
-ceilings above the real bound rather than whatever stack a caller happened to
+segments, whenever fewer than 128 KiB remain. The depth ceilings above are
+therefore the real bound, rather than whatever stack a caller happened to
 provide. A tokio SSR worker's default stack is not enough for 96 frames of
 element rendering.
 
@@ -250,8 +250,8 @@ enforced at merge time on **saved state**, which is untrusted JSON.
   any number, so this is a hard ceiling against a pathological saved state rather
   than a product decision.
 
-Both drop silently, and the data survives in storage. That is worth knowing,
-because it presents identically to the catalog problem described in
+Both drop silently, and the data survives in storage. It presents identically to
+the catalog problem described in
 [Common mistakes](/troubleshooting/common-mistakes#a-sections-blocks-vanished-but-the-data-is-still-saved):
 the editor saves and the page does not display.
 
@@ -277,7 +277,7 @@ the editor saves and the page does not display.
 
 ## Things that are not limits
 
-Worth naming, because people go looking for them.
+People go looking for these, so they are named here.
 
 - **There is no per-layout depth ceiling.** `LayoutDepthExceeded` is a declared
   error code that the compiler never emits; layout chains are bounded by the

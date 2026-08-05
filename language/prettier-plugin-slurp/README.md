@@ -29,17 +29,16 @@ npx prettier --write "**/*.slurp"
 The plugin registers the `slurp` language and the `.slurp` extension, so
 Prettier picks those files up on its own once the plugin is listed.
 
-## Scope, and a warning
+## Scope
 
 This formats **whitespace and indentation**. It does not validate, and a file it
 formats without complaint can still fail to compile.
 
 Use `slurp validate --dir .` for correctness. That runs the same parse and the
-same compile-time security checks a build runs, which is a different question
-from the one this plugin answers.
+same compile-time security checks a build runs.
 
-Note also that the editor tooling and the compiler currently disagree on a few
-points of syntax. Where they differ, the compiler is right. See
+The editor tooling and the compiler disagree on a few points of syntax. Where
+they differ, the compiler is right. See
 [SLURP_DOCS.md](https://github.com/bytesell/slurp/blob/main/SLURP_DOCS.md).
 
 ## License

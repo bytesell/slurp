@@ -138,7 +138,7 @@ Debounced by **time only**. `spawn_watcher` (`dev-server/src/watcher.rs`) collec
 
 `DependencyGraph` (`dev-server/src/watcher.rs`) maintains forward and reverse edges between pages and the components and layouts they import. `invalidate` re-indexes the changed file and walks the reverse edges depth-first (the worklist is a `Vec` drained with `pop()`), and `process_changes` unions the results into an `all_affected` set. The traversal is exhaustive and `visited`-guarded, so order does not change the result.
 
-What it drives is narrower than "incremental rebuild". Each affected `.slurp` path is run through `check_page`, which deliberately *parses* rather than renders, so the graph decides which files get re-checked for diagnostics rather than scoping a recompile of output. An affected path that is not `.slurp` contributes `"*"` to the broadcast page list alongside the specific pages, rather than replacing them.
+What it drives is narrower than "incremental rebuild". Each affected `.slurp` path is run through `check_page`, which *parses* rather than renders, so the graph decides which files get re-checked for diagnostics rather than scoping a recompile of output. An affected path that is not `.slurp` contributes `"*"` to the broadcast page list alongside the specific pages, rather than replacing them.
 
 Using the graph to re-render only the affected pages, and to send a targeted reload instead of a full one, is the unbuilt half.
 

@@ -48,9 +48,9 @@ otherwise empty directory is a valid one-page site, which is what the
   documents. Keep both directories at the input root and spell them exactly.
 </Warning>
 
-Components and layouts are still compiled. That is deliberate: a syntax error,
-an unknown filter or a security violation in a component that no page happens to
-import yet is caught now rather than later. `--verbose` shows the distinction:
+Components and layouts are still compiled. A syntax error, an unknown filter or
+a security violation in a component that no page happens to import yet is caught
+now rather than later. `--verbose` shows the distinction:
 
 ```bash
 slurp build --input site --output dist --globals site/data.json --verbose
@@ -79,9 +79,9 @@ site/                       dist/
   data.json                   (not copied)
 ```
 
-The file you pass to `--globals` is the one exception. It is build input rather
-than a site asset, and publishing it would put whatever you keep in it at a
-guessable URL, so it is skipped. The output directory is skipped too, so
+The file you pass to `--globals` is the one exception. It is build input, not a
+site asset, and publishing it would put whatever you keep in it at a guessable
+URL, so it is skipped. The output directory is skipped too, so
 rebuilding into a directory inside the input tree does not copy the last build
 into the next one.
 
@@ -173,10 +173,10 @@ global the page can read.
   different keys out of a shared context.
 </Warning>
 
-That is a real limit of the static path, and it is the reason `--globals` is
-described as build-time data rather than page data. When Slurp is embedded in a
-server the context arrives per request from the host, and each page gets its
-own. See [Embedding with Rust](/reference/rust-api).
+That is a real limit of the static path. `--globals` is build-time data, not
+page data. When Slurp is embedded in a server the context arrives per request
+from the host, and each page gets its own. See
+[Embedding with Rust](/reference/rust-api).
 
 ### Declaring data a page needs
 
@@ -223,8 +223,8 @@ CI.
 
 <Tip>
   Add `--verbose` to `build` and `--warnings` to `validate` while you work.
-  Slurp fails quietly by design, and those flags are what turn silent
-  truncations and unresolved values into printed lines.
+  Slurp fails quietly, and those flags turn silent truncations and unresolved
+  values into printed lines.
 </Tip>
 
 ## Next

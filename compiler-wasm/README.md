@@ -67,9 +67,9 @@ interpolation in a JavaScript-evaluated attribute. In production both happen
 silently. `{debug expr}` also renders only in development.
 
 That is the right trade for a server-side hot path and the wrong one for an
-editor, where a `style` value quietly losing characters is precisely what a
-preview should surface. Editors and preview panes should call `render_dev`.
-`render` is unchanged, so existing hosts keep production behaviour.
+editor, where a `style` value quietly losing characters is what a preview should
+surface. Editors and preview panes should call `render_dev`. `render` is
+unchanged, so existing hosts keep production behaviour.
 
 The budget diagnostics are **not** among them. Loop truncation at 1,000 items,
 the output-byte budget and the render-depth budget are reported in both modes,
@@ -78,8 +78,8 @@ because each one silently removes content from the page.
 ### `validate` vs `validate_full`
 
 **Prefer `validate_full` if you are building an authoring tool, a publish gate or
-a CI check.** These two do not report the same thing, and the difference is not
-cosmetic.
+a CI check.** These two do not report the same thing, and the difference is
+security-relevant.
 
 `validate` parses. `validate_full` parses **and** runs the compiler's
 compile-time security walk (`slurp_compiler::check_security`), which is where
@@ -93,13 +93,13 @@ several rules live that the parser knows nothing about:
 - `{redirect}` and `{next}` outside middleware.
 
 A tool that calls only `validate` therefore tells an author their file is clean
-and then `slurp build` rejects it. The two are kept separate rather than merged
-so that pure editor-preview hosts stay unaffected.
+and then `slurp build` rejects it. The two stay separate rather than merged so
+pure editor-preview hosts are unaffected.
 
 At the call site:
 
 - **`isMiddleware` must match the value the eventual compile will use.** The
-  rules genuinely differ: `request.*` and `{redirect}` are legal only in
+  rules differ: `request.*` and `{redirect}` are legal only in
   middleware, and most other path roots are illegal there. A caller with no way
   to know passes `false`, which is what `compile`, `compile_with_registry` and
   the `slurp validate` CLI all do.
@@ -113,8 +113,7 @@ At the call site:
 `render_section` do not run `security_check`; `validate_full` does.**
 `SLURP_SECRET_*` access, middleware scope and redirect restrictions are
 server-side concerns enforced by the host, and a template that violates them
-parses cleanly through the first six. That is deliberate, because a preview is
-not a deploy.
+parses cleanly through the first six. A preview is not a deploy.
 
 A WASM **render** enforces none of those rules either. It does still apply the
 renderer's own script-context backstops, so an undeclared `${ }` in a `<script>`

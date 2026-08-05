@@ -1,6 +1,6 @@
 ---
 title: "Displaying data"
-description: "Reading values out of the render context, what an expression can contain, and what it deliberately cannot."
+description: "Reading values out of the render context, what an expression can contain, and what it cannot."
 ---
 
 A template renders against a JSON context. Everything on the page comes from
@@ -51,8 +51,8 @@ A dynamic index works, including with an `{each}` loop index. After a `.` only
 an identifier is accepted, so `items.0` is a parse error and `items[0]` is the
 only spelling.
 
-Navigation is null-safe at every depth, which is why there is no `?.` operator
-in the language. There is nothing to guard against.
+Navigation is null-safe at every depth. There is no `?.` operator in the
+language because there is nothing to guard against.
 
 ## Missing values render nothing
 
@@ -76,9 +76,9 @@ does a whole missing chain. Nothing is reported, at any stage.
   anything else.
 </Warning>
 
-The behaviour is deliberate. Slurp is built to render templates the host did
-not write, where aborting a page because one field is absent is the wrong
-trade. Build with `--verbose` while you work, and read
+Slurp is built to render templates the host did not write, where aborting a
+page because one field is absent is the wrong trade. Build with `--verbose`
+while you work, and read
 [Common mistakes](/troubleshooting/common-mistakes) early.
 
 ## Operators
@@ -102,8 +102,7 @@ Arithmetic is `+ - * / %`, comparison is `== != < > <= >=`, logic is
 that might be blank. For a value that might be missing entirely, prefer
 [`| default(...)`](/guides/filters).
 
-A few behaviours differ from JavaScript and are worth knowing before they cost
-you a page:
+A few behaviours differ from JavaScript:
 
 | Expression | Result | Why |
 |---|---|---|
@@ -118,8 +117,7 @@ Any arithmetic result that would be NaN or infinite becomes 0.
 
 ## Arithmetic coerces, comparison does not
 
-This asymmetry is worth its own section because it produces a wrong page rather
-than an error.
+This asymmetry produces a wrong page rather than an error.
 
 ```slurp
 <p>[${ "10" > 9 }] [${ "10" >= 9 }] [${ "10" - 1 }]</p>
@@ -165,10 +163,10 @@ Two of those differ from JavaScript and both come up in real templates:
 
 ## What expressions cannot do
 
-Slurp expressions are not a small programming language. There is no way for a
-template to run code at render time, which is what makes it safe to render a
-template you did not write. The practical consequence is that several habits
-carried over from other engines silently produce nothing.
+Slurp expressions are not a small programming language. A template cannot run
+code at render time, which is what makes it safe to render a template you did
+not write. Several habits carried over from other engines silently produce
+nothing.
 
 **There are no callable functions.** A call parses and always evaluates to
 null, with no diagnostic:

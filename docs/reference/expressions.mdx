@@ -206,7 +206,7 @@ escaper; the compiler does, from the position.
 
 | Position | Escaper | What it does |
 |---|---|---|
-| HTML text | `escape_html` | `& < > " '` become character references. `/` is deliberately left alone so URLs and date formats survive. |
+| HTML text | `escape_html` | `& < > " '` become character references. `/` is left alone so URLs and date formats survive. |
 | Quoted attribute value | `escape_attr` | The above plus a backtick, as defence in depth against attribute breakout. |
 | `style` attribute slot | `escape_css_value` | REMOVES `; { } ( ) " ' \ @ * < >` and NUL. There is no useful CSS escape for a slot that could sit in any grammatical position, so the structural characters go. `:` and `/` are kept so `background:url(${path})` still works. |
 | JS-evaluated attribute, inside a string literal | `escape_js_string` | Backslash-encodes the backslash, both quotes, the backtick, `$`, newlines, U+2028, U+2029, `<` and `/`. |

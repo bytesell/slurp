@@ -13,8 +13,7 @@ One route, `GET /_slurp/image`, taking `src` (an absolute `http`/`https` URL),
 width-only resize that preserves aspect ratio and never upscales. Results are
 cached in memory and on disk.
 
-It fetches attacker-influenced URLs by design, so it carries a matching set of
-guards:
+It fetches attacker-influenced URLs, so it carries a matching set of guards:
 
 - scheme allowlist, userinfo rejected, length capped,
 - DNS resolved up front, every returned address required to be globally routable

@@ -25,8 +25,7 @@ slurp-image --port 3001
 
 It binds **loopback by default** and sends **no CORS headers**, which is correct
 for the usual deployment: reverse-proxied at the same origin as the site, under
-`/_slurp/image`. It has no authentication, so exposing it should be a deliberate
-act.
+`/_slurp/image`. It has no authentication. Expose it only if you mean to.
 
 ```bash
 # Deliberately exposed. Put a reverse proxy in front of it.
@@ -109,7 +108,7 @@ An error is JSON, `{"error": "..."}`:
 | Status | Meaning |
 |---|---|
 | 400 | Bad parameters, or a URL that fails validation |
-| 403 | Blocked (an SSRF refusal, reported vaguely on purpose) |
+| 403 | Blocked (an SSRF refusal, reported vaguely) |
 | 408 | The whole-request deadline expired |
 | 413 | Source image too large |
 | 422 | Undecodable, unsupported source format, decompression bomb, or the requested output is too large |
@@ -122,8 +121,8 @@ Only 429 and 503 carry a `Retry-After` (60 and 5 seconds). A 4xx caused by the
 request itself will fail again at any time, and telling a client to retry it is
 an invitation to hammer.
 
-Error messages for security failures are deliberately vague, so that the service
-is not an oracle for what is reachable from inside your network.
+Error messages for security failures are vague, so the service is not an oracle
+for what is reachable from inside your network.
 
 ---
 
@@ -148,8 +147,7 @@ is not an oracle for what is reachable from inside your network.
 ### Not exposed as flags
 
 Several limits live on `Config` and can only be set by a Rust caller using
-`slurp-image` as a library. Worth knowing they exist, because a 413 or a 422 you
-did not expect comes from here:
+`slurp-image` as a library. A 413 or a 422 you did not expect comes from here:
 
 | Field | Default |
 |---|---|
@@ -204,10 +202,10 @@ treatment is in [the security model](/security-model).
     Every hostname is DNS-resolved **before** connecting, and every address
     returned must be globally routable unicast.
 
-    It is an **allow-list, not a deny-list**, and that direction is the point: a
-    deny-list silently permits every range nobody thought to enumerate, and
-    `240.0.0.0/4` is easy to overlook while being real internal space in some
-    cloud fabrics. An IPv4-mapped IPv6 address is unwrapped and checked as IPv4,
+    It is an **allow-list, not a deny-list**: a deny-list silently permits every
+    range nobody thought to enumerate, and `240.0.0.0/4` is easy to overlook
+    while being real internal space in some cloud fabrics. An IPv4-mapped IPv6
+    address is unwrapped and checked as IPv4,
     so `::ffff:127.0.0.1` cannot slip through as "not `::1`".
 
     The resolved addresses are then **pinned into the HTTP client**, so a second
@@ -261,7 +259,7 @@ treatment is in [the security model](/security-model).
     slow encode cannot hold a connection and a transform permit indefinitely.
   </Accordion>
 
-  <Accordion title="Rate limiting, and its honest limitations">
+  <Accordion title="Rate limiting, and its limitations">
     An in-memory fixed-window counter, 100 requests per 60 seconds per client by
     default.
 
@@ -293,8 +291,8 @@ treatment is in [the security model](/security-model).
 - **Watch for 502s.** They mean DNS or the fetch failed, which usually means the
   source host is down or the URL is wrong, not that this service is unhealthy.
 - **A 403 is an SSRF refusal.** If a legitimate internal image host is being
-  refused, that is the allow-list working as designed. Serve those images from a
-  publicly routable host, or fetch them by another path.
+  refused, that is the allow-list working. Serve those images from a publicly
+  routable host, or fetch them by another path.
 
 ## Next
 

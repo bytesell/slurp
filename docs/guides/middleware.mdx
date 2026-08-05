@@ -16,8 +16,8 @@ middleware "auth"
 {/if}
 ```
 
-That is the entire feature. It exists so a page never has to ask whether it is
-allowed to be rendered, which means a page never has to read the request.
+That is the entire feature. A page never has to ask whether it is allowed to be
+rendered, so a page never has to read the request.
 
 ## It is a compile option, not a path convention
 
@@ -35,9 +35,9 @@ The flag takes a directory relative to the scanned tree, and is repeatable:
 slurp validate --dir . --middleware middleware --middleware auth/guards
 ```
 
-The reason it works this way is that a host embedding Slurp may keep its
-middleware anywhere, and the compiler has to be told which of two **inverted**
-rule sets to check a file under. It cannot guess from a path.
+A host embedding Slurp may keep its middleware anywhere, and the compiler has to
+be told which of two **inverted** rule sets to check a file under. It cannot
+guess from a path.
 
 <Warning>
   **Without the flag, a correct middleware file fails to validate.**
@@ -125,9 +125,9 @@ error[RedirectOutsideMiddleware]: {next} is only allowed inside middleware files
 ```
 
 A page that wants to know something about the request gets it the same way it
-gets everything else: the server puts it in the render context. That split is
-deliberate. A page reading cookies directly is a page whose output depends on
-data the host did not choose to give it.
+gets everything else: the server puts it in the render context. A page reading
+cookies directly is a page whose output depends on data the host did not choose
+to give it.
 
 ## What middleware can and cannot do
 
@@ -135,8 +135,8 @@ It has the whole template language available, minus the data. In practice that
 means `{if}`, `{match}` and comparisons over `request.*`, and then a
 `{redirect "/somewhere"}` or a `{next}`.
 
-What it does not have is everything the language does not have anywhere, and two
-of those bite here specifically:
+What it does not have is everything the language does not have anywhere. Two of
+those bite here specifically:
 
 <Warning>
   **There is no clock, and there are no callable functions.** `Date.now()` parses

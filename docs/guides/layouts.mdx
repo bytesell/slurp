@@ -62,8 +62,8 @@ default slot the same way, and that is all it does.
   </layout>
   ```
 
-  Use `{layout "..."}` whenever the page contributes anything to the head. It
-  costs nothing and the failure it avoids is silent.
+  Use `{layout "..."}` whenever the page contributes anything to the head. The
+  failure it avoids is silent.
 </Warning>
 
 The `src` must be a quoted string. `<layout src={expr}>` reads as empty, the
@@ -114,8 +114,7 @@ guard a page that emits a title in its head block produces two.
 
 ## A layout takes no props
 
-This is the one place a layout differs sharply from a component, and it is not
-obvious.
+This is the one place a layout differs sharply from a component.
 
 <Warning>
   A layout renders against the page globals and nothing else. Props are not
@@ -138,8 +137,8 @@ obvious.
 </Warning>
 
 So a `props` block in a layout is documentation for the reader. To vary a
-layout per page, put the value in the render context and read it as a global,
-which is exactly what `seo` is doing above.
+layout per page, put the value in the render context and read it as a global.
+That is what `seo` does above.
 
 ## Named slots do not exist
 
