@@ -1062,3 +1062,67 @@ fn an_attribute_spread_value_cannot_carry_a_script_scheme() {
         );
     }
 }
+
+/// A BOUND url attribute is scheme-checked like a plain one.
+///
+/// `:href` and `x-bind:href` were already on `is_url_attr`'s list, so this looked covered. It was
+/// not. Their value is the JS source Alpine evaluates rather than a URL, and a slot outside a JS
+/// string is encoded as a JSON string literal on the way in, so the hostile value reached
+/// `has_forbidden_url_scheme` already wrapped in quotes. That function tests the LEADING
+/// character for a scheme, found `"`, and reported none. The rendered attribute was
+/// `:href='"javascript:alert(1)"'`, which Alpine evaluates back to the bare string and assigns.
+///
+/// The plain `href` and `href={ expr }` forms were both neutralised correctly throughout, which
+/// is precisely what made this survive: the two forms anyone would test were the two that worked.
+#[test]
+fn a_script_scheme_cannot_ride_in_through_a_bound_url_attribute() {
+    for attr in [":href", "x-bind:href", ":src", "x-bind:src", ":action"] {
+        for hostile in [
+            "javascript:alert(1)",
+            "JaVaScRiPt:alert(1)",
+            "java\tscript:alert(1)",
+            "\u{feff}javascript:alert(1)",
+            "\u{a0}javascript:alert(1)",
+            "vbscript:msgbox(1)",
+        ] {
+            let html = render_ctx(
+                &format!(r#"<a {attr}="${{ link }}">x</a>"#),
+                serde_json::json!({ "link": hostile }),
+            );
+            let low = html.to_ascii_lowercase();
+            assert!(
+                !low.contains("javascript:") && !low.contains("vbscript:"),
+                "a script scheme survived a bound url attribute: {attr} = {hostile:?} -> {html}"
+            );
+        }
+    }
+}
+
+/// The other half of the same fix, and the half that makes it a fix rather than a mute button.
+///
+/// Neutralising every bound URL attribute would pass the test above and break every real theme,
+/// so what has to hold is that only an actual script scheme is removed. A bound attribute whose
+/// value is not a whole string literal is deliberately left alone: its value is not knowable
+/// here, and guessing at a concatenation or an identifier would be reading the wrong thing.
+#[test]
+fn an_ordinary_bound_url_attribute_is_left_alone() {
+    let html = render_ctx(
+        r#"<a :href="${ good }">a</a><a :href="'/p/' + slug">b</a><a :href="safe">c</a>"#,
+        serde_json::json!({ "good": "/products/1", "slug": "abc", "safe": "/ok" }),
+    );
+    // Pinned as OBSERVED, quotes included. On this path `escape_attr` entity-escapes the JS
+    // string delimiters, so the concatenation reads `&#39;/p/&#39; + slug` in the output rather
+    // than the source spelling. Asserting the source spelling is predicting, and it fails.
+    assert!(
+        html.contains(r#":href="&quot;/products/1&quot;""#),
+        "a benign bound URL was destroyed: {html}"
+    );
+    assert!(
+        html.contains(r#":href="&#39;/p/&#39; + slug""#),
+        "a concatenation binding was destroyed: {html}"
+    );
+    assert!(
+        html.contains(r#":href="safe""#),
+        "an identifier binding was destroyed: {html}"
+    );
+}

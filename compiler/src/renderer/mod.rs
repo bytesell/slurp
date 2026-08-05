@@ -1068,7 +1068,11 @@ impl Renderer {
         if value.is_empty() && !keep_empty {
             return String::new();
         }
-        if is_url_attr(name) && has_forbidden_url_scheme(&value) {
+        if is_url_attr(name)
+            && (has_forbidden_url_scheme(&value)
+                || bound_url_literal(name, &value)
+                    .is_some_and(|inner| has_forbidden_url_scheme(&inner)))
+        {
             // Neutralize a script-scheme URL (javascript:/data:/vbscript:) in an href/src.
             return format!(r#" {name}="""#);
         }
@@ -1952,6 +1956,50 @@ fn is_safe_attr_name(name: &str) -> bool {
 /// question rather than a script-execution one, and splitting srcset properly
 /// means implementing its grammar (descriptors, whitespace, commas inside data
 /// URLs). Recorded rather than half-implemented.
+/// SECURITY: recover the URL from a BOUND url attribute so it can be scheme-checked.
+///
+/// `:href` and `x-bind:href` are on [`is_url_attr`]'s list, but their value is not a URL. It is
+/// the JavaScript SOURCE Alpine will evaluate, and a slot that sits outside a JS string is
+/// encoded as a JSON string literal on the way in. So a hostile value arrives here already
+/// wrapped in quotes, and [`has_forbidden_url_scheme`] tests the leading character, finds `"`,
+/// and reports no scheme:
+///
+/// ```text
+/// template  <a :href="${ link }">          link = javascript:alert(1)
+/// value     "javascript:alert(1)"          <- what finish_attr used to see, and pass
+/// browser   <a :href='"javascript:alert(1)"'>
+/// ```
+///
+/// Alpine then evaluates that literal back to the bare string and assigns it, so the guard was
+/// absent on exactly the attributes it exists for. `href` and `href={ expr }` were both
+/// neutralised correctly, which is what made this easy to miss: the bound form was the one place
+/// it silently did not apply, and the protected forms are the ones people test.
+///
+/// Only a WHOLE literal is unwrapped. A concatenation, an identifier or a ternary has no value
+/// that is knowable here, so it is left alone rather than guessed at: refusing to guess keeps
+/// ordinary bindings like `:href="'/p/' + slug"` working, and those cannot carry an
+/// attacker-chosen scheme in the leading position anyway.
+fn bound_url_literal(name: &str, value: &str) -> Option<String> {
+    if !is_js_attr(name) {
+        return None;
+    }
+    let trimmed = value.trim();
+    let inner = trimmed
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .or_else(|| {
+            trimmed
+                .strip_prefix('\'')
+                .and_then(|s| s.strip_suffix('\''))
+        })?;
+    // A bare quote inside means this was never one literal (`"a" + x + "b"`), so the leading
+    // characters are not the whole URL and unwrapping would be reading the wrong thing.
+    if inner.contains('"') || inner.contains('\'') {
+        return None;
+    }
+    Some(inner.to_string())
+}
+
 fn is_url_attr(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     let target = lower

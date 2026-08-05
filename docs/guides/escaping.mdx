@@ -79,26 +79,31 @@ or later candidate is not caught. Those URLs are fetched as images rather than
 executed, so it is a resource-load question, but do not treat `srcset` as
 validated.
 
-<Warning>
-  The check runs on the **finished** attribute value, which means it is
-  effective on a plain `href` or `src` and not on the bound Alpine form. On
-  `:href` the value is a JavaScript expression, so the interpolated slot arrives
-  wrapped in JSON quotes and the leading-scheme test no longer matches:
+The bound Alpine forms are checked too. On `:href` or `x-bind:src` the attribute
+value is a JavaScript expression rather than a URL, so an interpolated slot
+arrives wrapped in quotes as a string literal. Slurp unwraps one layer of literal
+before testing the scheme, so this is neutralised the same way a plain `href` is:
 
-  ```slurp
-  <a :href="${ link }">Visit</a>
-  ```
+```slurp
+<a :href="${ link }">Visit</a>
+```
 
-  ```html
-  <a :href="&quot;javascript:alert(1)&quot;">Visit</a>
-  ```
+```html
+<a :href>Visit</a>
+```
 
-  Alpine evaluates that expression to the string and sets the URL. Route
-  untrusted URLs through a plain `href`, and validate them on the server if they
-  must go anywhere else. There is a `link` schema setting kind that does exactly
-  that check at the point a value is saved; see
-  [Sections and blocks](/guides/sections-and-blocks).
-</Warning>
+<Note>
+  Only a whole string literal is unwrapped. A binding whose value is a
+  concatenation, an identifier or a ternary is left exactly as written, because
+  its value is not knowable at compile time and guessing would break ordinary
+  bindings. So `:href="'/p/' + slug"` renders untouched. That is the right
+  trade: an expression like that cannot carry an attacker-chosen scheme in the
+  leading position, which is the thing the check exists to catch.
+</Note>
+
+For a URL that a merchant supplies through an editing form, prefer the `link`
+schema setting kind, which validates at the point the value is saved rather than
+at render. See [Sections and blocks](/guides/sections-and-blocks).
 
 ## JavaScript-evaluated attributes
 
