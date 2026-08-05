@@ -198,7 +198,12 @@ fn zzz_fuzz_replay_worker() {
 #[test]
 fn every_corpus_input_is_clean_on_every_target() {
     let _serial = fuzz_support::serial_guard();
-    let budget = Duration::from_secs(20);
+    // Generous on purpose. This is a wall-clock budget, and the thing it exists to catch is a
+    // hang, which is unbounded: 60s and 20s both catch that, but only 20s also catches a healthy
+    // input that lost its CPU slice to whatever else the machine is doing. That is not
+    // hypothetical, it fires on a loaded runner and reads as a real regression. 60s matches the
+    // subprocess budget below.
+    let budget = Duration::from_secs(60);
     let mut checked = 0usize;
     for &target in Target::ALL {
         for input in load_corpus(target) {

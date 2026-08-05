@@ -29,15 +29,10 @@
     "typecheck": "pnpm -r run typecheck",
     "copy-check": "node scripts/check-copy-rule.mjs"
   },
+  "//engines": "pnpm >=10 is load-bearing, not aspirational. The dompurify security override lives ONLY in pnpm-workspace.yaml now, and pnpm 9 does not read overrides from there - it read them from a `pnpm` field here, which pnpm 10 dropped. So installing this workspace with pnpm 9 would silently resolve dompurify below its advisory floor (measured: 3.4.8). Lower this floor only by restoring that field alongside the workspace one.",
   "engines": {
     "node": ">=22",
-    "pnpm": ">=9"
+    "pnpm": ">=10"
   },
-  "packageManager": "pnpm@9.0.0",
-  "//pnpm": "This override is DUPLICATED in pnpm-workspace.yaml on purpose. pnpm 9 (the version pinned above) reads it only from here; pnpm 10 dropped support for this field and reads it only from the workspace file, warning rather than failing. Keeping one copy alone silently drops the pin on whichever version is not covered - removing this block downgraded dompurify to 3.4.8 in a local test. Keep the two in sync, and delete this one only once packageManager is on pnpm 10+.",
-  "pnpm": {
-    "overrides": {
-      "dompurify": "^3.4.12"
-    }
-  }
+  "packageManager": "pnpm@11.20.0"
 }

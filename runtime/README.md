@@ -33,10 +33,7 @@ ESM only. These modules are browser chunks that mutate `window` on import, so
 Each boot step is isolated in a `try`/`catch`, so a failure in one cannot stop
 Alpine from starting.
 
-`cn()` resolves Tailwind conflicts through `tailwind-merge` 3, which understands
-**Tailwind CSS v4** class groups. On Tailwind v3 the joining and deduplication
-still work, but conflicts between utilities whose groups changed in v4 may not
-resolve the way that version's cascade would.
+`cn()` targets **Tailwind CSS v4**, via `tailwind-merge` 3.
 
 ## What is implemented but NOT wired to the compiler
 

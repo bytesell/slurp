@@ -54,7 +54,7 @@
     "vite": "^8.2.0",
     "vitest": "^4.1.10"
   },
-  "//dependencies": "tailwind-merge 3 targets Tailwind CSS v4 and drops v3's class groups, so this pins which Tailwind `cn()` resolves conflicts for. That is a consumer-facing contract, not an internal version: `cn` is exported from the package root AND published on `window`, and the unit tests only exercise utilities that behave identically under both majors, so they cannot catch a regression here. Moving between tailwind-merge majors means restating the supported Tailwind version in README.md.",
+  "//dependencies": "tailwind-merge 3 is what makes `cn()` target Tailwind CSS v4, so it states a consumer-facing contract rather than an internal version: `cn` is exported from the package root AND published on `window`. The unit tests only exercise utilities that behave identically across tailwind-merge majors, so they cannot catch a change here. Moving major means restating the supported Tailwind version in README.md.",
   "dependencies": {
     "alpinejs": "^3.15.12",
     "clsx": "^2.1.1",
