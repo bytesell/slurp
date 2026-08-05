@@ -78,9 +78,14 @@ lands, these move to `./fetch` and `./infinite` and this section goes away.
 
 Related gaps, all documented inline in
 [SLURP_DOCS.md](../SLURP_DOCS.md#typescript-runtime): `{$let}` has no hydrator
-(nothing reads `data-slurp-let`), the runtime registers zero Alpine magics and
-zero Alpine directives, and `navigate=false` does not work because the compiler
-emits `data-navigate="false"` while the runtime reads `navigate`.
+(nothing reads `data-slurp-let`), and the runtime registers zero Alpine magics
+and zero Alpine directives.
+
+One trap that is not a gap. `navigate=false` on a link, unquoted, compiles to
+`navigate="false"`, which is the spelling `navigation.ts` checks, and it works.
+The **quoted** spelling `navigate="false"` does not: the parser only recognises
+the bare-word form, so the quoted one compiles to a bare `navigate` attribute
+and the link stays opted in. Write it unquoted.
 
 ## Development
 

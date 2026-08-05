@@ -1,7 +1,6 @@
 version: 2
 
 updates:
-  # ── Rust ──────────────────────────────────────────────────────────────────
   - package-ecosystem: cargo
     directory: "/"
     schedule:
@@ -11,6 +10,7 @@ updates:
       # Patch bumps are noise individually and useful in a batch. Several of the
       # advisories this repo has carried were cleared by a patch bump alone.
       rust-patch:
+        patterns: ["*"]
         update-types: ["patch"]
     ignore:
       # A major bump here needs a source change and a look at the MSRV, so it
@@ -24,7 +24,6 @@ updates:
     commit-message:
       prefix: "deps"
 
-  # ── npm / pnpm ────────────────────────────────────────────────────────────
   - package-ecosystem: npm
     directory: "/"
     schedule:
@@ -41,7 +40,6 @@ updates:
     commit-message:
       prefix: "deps"
 
-  # ── GitHub Actions ────────────────────────────────────────────────────────
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

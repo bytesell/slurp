@@ -155,7 +155,7 @@ function registerTools(server: McpServer): void {
       description: [
         'Render a template against a JSON context and return the HTML plus every diagnostic from both the validation and the render pass.',
         '',
-        'Rendering uses DEVELOPMENT mode on purpose. Three diagnostics exist only in that mode and are silently dropped in production: a loop truncated at 1000 items, CSS-structural characters stripped from a style value slot, and an undeclared slot in a JavaScript-evaluated attribute. `slurp build` uses production mode, so it will not tell you about any of them. {debug expr} also renders only here.',
+        'Rendering uses DEVELOPMENT mode on purpose. Two advisories exist only in that mode and are dropped in production: CSS-structural characters stripped from a style value slot, and an undeclared slot in a JavaScript-evaluated attribute. {debug expr} also renders only here. Loop truncation is NOT one of them - it warns in either mode, though `slurp build` prints warnings only with -v.',
         '',
         'Rendering is deterministic and side-effect free: no network request is made, no file is read, and {fetch} picks a branch by reading its name out of the context you pass rather than fetching anything.',
         '',

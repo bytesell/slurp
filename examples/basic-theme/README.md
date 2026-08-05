@@ -3,9 +3,9 @@
 An e-commerce storefront used as a reference implementation, a starter theme and a test
 harness for the Slurp compiler.
 
-Everything documented below has been checked against the compiler by rendering it. Where a
-feature exists in the browser runtime rather than in `slurp build`, this file says so
-explicitly, because the difference decides whether a page works with no JavaScript served.
+Every claim below was checked by rendering it. Where a feature lives in the browser runtime
+rather than in `slurp build`, this file says so, because that difference decides whether a
+page works with no JavaScript served.
 
 ## Structure
 
@@ -33,6 +33,7 @@ basic-theme/
   middleware/
     auth.slurp            # Session guard with a redirect
   mock-context.json       # Populated render context for local preview
+  .gitignore              # Written by `slurp gitignore`
   README.md
 ```
 
@@ -61,10 +62,16 @@ cd examples/basic-theme && slurp dev
 slurp-dev --theme-dir examples/basic-theme --globals examples/basic-theme/mock-context.json
 ```
 
-There is no `slurp watch`. The subcommands are `build`, `validate` and `dev`.
+There is no `slurp watch`. The subcommands are `build`, `validate`, `dev` and `gitignore`.
 
 `--globals` supplies page context. It is a different thing from `--fixtures`, which maps a
-request path to a canned JSON response so `{fetch}` resolves with no backend running.
+request path to a canned JSON response so `{fetch}` resolves with no backend running. The
+globals file is read, not copied: it does not appear in the output directory. Every other
+non-`.slurp` file in the input tree is copied through, which is how `README.md` and
+`.gitignore` end up in `dist/`.
+
+`build` emits pages only. `components/` and `layouts/` are compiled and checked, but they are
+not pages, so no HTML is written for them.
 
 ## Features demonstrated
 
@@ -225,9 +232,8 @@ never checked at render time, so a missing required prop is simply null.
 
 ## Client-side behaviour
 
-This is the part to read carefully. `slurp build` produces plain HTML and injects NOTHING.
-The runtime is a separate package, `@slurp/runtime`, and a theme loads it by hand. This theme
-does it in `layouts/base.slurp`:
+`slurp build` produces plain HTML and injects NOTHING. The runtime is a separate package,
+`@slurp/runtime`, and a theme loads it by hand. This theme does it in `layouts/base.slurp`:
 
 ```slurp
 <script src="/slurp.core.js"></script>
@@ -239,9 +245,12 @@ does it in `layouts/base.slurp`:
   `transition` uses the View Transitions API. Both are real attributes the runtime reads.
   Caveat: the swap targets a `[data-slurp-page]` element, which the compiler never emits, so
   without one the runtime falls back to a full page load.
-- **`navigate=false` on a link,** to opt that link out. It compiles to a real
-  `navigate="false"` attribute, which is the spelling the runtime checks. Cross-origin links,
-  `target`, `download`, hash links and modified clicks are all skipped anyway.
+- **`navigate=false` on a link,** to opt that link out. Write it UNQUOTED: the parser
+  recognises only the bare-word form, and it compiles to `navigate="false"`, which is the
+  spelling the runtime checks. Quoted, `navigate="false"` compiles to a bare `navigate`
+  attribute and the link stays opted IN, which is the opposite of what was written, with no
+  diagnostic. Cross-origin links, `target`, `download`, hash links and modified clicks are all
+  skipped anyway.
 - **`{fetch}` options** `cache(n)`, `retry(n)`, `timeout(n)`, `poll(n)`, `paginate(n)`,
   `infinite(n)` and the bare flag `abort-on-navigate`. Note the CALL syntax: `cache(300)`,
   not `cache:300`, and `paginate(12)`, not `paginate limit=12`. An unrecognised option is

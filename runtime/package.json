@@ -19,7 +19,7 @@
   "type": "module",
   "main": "./dist/slurp.core.js",
   "types": "./dist/slurp.core.d.ts",
-  "//exports": "The `./experimental/*` subpaths are implemented and unit-tested, but the compiler emits none of the markers they bind to (`x-data=\"slurpFetch(...)\"`, `[data-slurp-sentinel]`), so against the 0.1.0 compiler they attach to nothing and silently do no work. They are named `experimental/` so that cannot be discovered at runtime. See README.md in this directory. Do not promote them to `./fetch` and `./infinite` until the codegen lands.",
+  "//exports": "Do not promote experimental/fetch and experimental/infinite to ./fetch and ./infinite until the compiler emits the markers they bind to. See DECISIONS.md.",
   "exports": {
     ".": {
       "types": "./dist/slurp.core.d.ts",

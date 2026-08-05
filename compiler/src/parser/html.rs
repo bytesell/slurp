@@ -269,15 +269,34 @@ fn parse_element_attrs(p: &mut Parser, tag_name: &str) -> Option<(Vec<Attribute>
             Token::NavigateAttr => {
                 p.advance();
                 if p.eat(&Token::AttrEquals) {
-                    let is_false = match p.peek().clone() {
-                        Token::BoolLiteral(false) => true,
+                    // Every way an author can write "false" has to mean the same thing. Anything
+                    // this misses falls through to "attribute present", which the runtime reads
+                    // as opted IN - the exact opposite of what was asked for, with no
+                    // diagnostic. An opt-out that fails to the wrong side is worse than one
+                    // that does not exist, so the tolerance here is deliberate.
+                    //
+                    // The count is how many tokens the spelling occupies: the brace form is
+                    // three (`{`, `false`, `}`), everything else is one.
+                    let consume = match p.peek().clone() {
+                        Token::BoolLiteral(false) => Some(1),
                         // In HtmlTag mode `false` is lexed as AttrName("false")
-                        Token::AttrName(ref s) if s == "false" => true,
-                        Token::Ident(ref s) if s == "false" => true,
-                        _ => false,
+                        Token::AttrName(ref s) if s == "false" => Some(1),
+                        Token::Ident(ref s) if s == "false" => Some(1),
+                        // `navigate="false"`, the spelling ordinary HTML leads you to write.
+                        Token::StringLiteral(ref s) if s == "false" => Some(1),
+                        // `navigate={false}`, the brace form used for every other attribute.
+                        Token::LBrace
+                            if matches!(p.peek_nth(1), Token::BoolLiteral(false))
+                                && matches!(p.peek_nth(2), Token::ExprClose) =>
+                        {
+                            Some(3)
+                        }
+                        _ => None,
                     };
-                    if is_false {
-                        p.advance();
+                    if let Some(n) = consume {
+                        for _ in 0..n {
+                            p.advance();
+                        }
                         attrs.push(Attribute {
                             name: "navigate".into(),
                             value: AttributeValue::NavigateFalse,
@@ -675,6 +694,40 @@ mod tests {
         } else {
             panic!();
         }
+    }
+
+    /// Every spelling of `navigate=false` must mean the same thing.
+    ///
+    /// The quoted form is the one ordinary HTML leads you to write, and it used to fall through
+    /// to "attribute present", which the runtime reads as opted IN. An opt-out that silently
+    /// does the opposite is worse than no opt-out, so this pins all four spellings.
+    #[test]
+    fn every_spelling_of_navigate_false_opts_out() {
+        for src in [
+            r#"<a href="/x" navigate=false>l</a>"#,
+            r#"<a href="/x" navigate="false">l</a>"#,
+            r#"<a href="/x" navigate='false'>l</a>"#,
+            r#"<a href="/x" navigate={false}>l</a>"#,
+        ] {
+            let doc = parse_ok(src);
+            let Node::Element(el) = &doc.children[0] else {
+                panic!("not an element: {src}")
+            };
+            let nav = el.attrs.iter().find(|a| a.name == "navigate").expect(src);
+            assert!(
+                matches!(nav.value, AttributeValue::NavigateFalse),
+                "{src} did not opt out; got {:?}",
+                nav.value
+            );
+        }
+
+        // Presence alone still means opted IN, which is the point of the attribute.
+        let doc = parse_ok(r#"<a href="/x" navigate>l</a>"#);
+        let Node::Element(el) = &doc.children[0] else {
+            panic!()
+        };
+        let nav = el.attrs.iter().find(|a| a.name == "navigate").unwrap();
+        assert!(matches!(nav.value, AttributeValue::Boolean));
     }
 
     #[test]

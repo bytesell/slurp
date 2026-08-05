@@ -34,7 +34,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
-  "//devDependencies": "@slurp/language is a BUILD-time dependency, not a runtime one. tsup.config.ts sets noExternal on it, so it is bundled into dist/index.js, which imports nothing but prettier/doc. It must not sit in `dependencies`: it is `private: true` and will never exist on npm, so a published manifest naming it resolves to a version that 404s forever.",
+  "//devDependencies": "@slurp/language stays here, never in dependencies: it is private, so a published manifest naming it would 404. tsup noExternal bundles it into dist/.",
   "devDependencies": {
     "@slurp/language": "workspace:*",
     "tsup": "^8.5.1",

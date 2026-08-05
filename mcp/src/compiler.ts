@@ -147,13 +147,12 @@ export interface RenderOutcome {
 /**
  * Parse then render, in DEVELOPMENT mode.
  *
- * Development mode is not a debug convenience here, it is the point. Three
- * diagnostics are recorded in development mode and silently dropped in
- * production: the per-loop 1000-item truncation, the CSS-structural strip in a
- * `style` value slot, and the undeclared slot in a JavaScript-evaluated
- * attribute. A caller that renders in production mode watches a loop lose its
- * tail with no diagnostic at all, which is the right trade for a server hot
- * path and the wrong one for an authoring tool.
+ * Development mode is not a debug convenience here, it is the point. Two
+ * advisories are recorded only in development mode: the CSS-structural strip in
+ * a `style` value slot, and the undeclared slot in a JavaScript-evaluated
+ * attribute. Both silently change what a production render emits, which is the
+ * right trade for a server hot path and the wrong one for an authoring tool.
+ * Loop truncation is recorded in BOTH modes.
  *
  * `{debug expr}` also renders only in development mode, which is why a template
  * containing one produces output here and nothing under `slurp build`.

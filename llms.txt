@@ -119,8 +119,8 @@ section {
     an import path produces a clean build with a missing card.
 12. **`{$let}` creates no template binding.** It seeds client state and emits
     only a JSON payload, so reading the name back renders empty.
-13. **Truncation diagnostics exist only in DEVELOPMENT mode.** `slurp build` uses
-    production mode, where a loop over 1000 items silently loses its tail.
+13. **A loop over 1000 items loses its tail and the build still exits 0.** The
+    warning is recorded in every mode, but `slurp build` prints it only with `-v`.
 14. **Arithmetic coerces, comparisons do not.** `"a" + 1` is `"a1"` and `1 / 0`
     is `0`, but `"10" > 9` is FALSE and `1 == "1"` is false. Coerce with `| int`.
 15. **Unknown frontmatter statements are silently skipped.** A misspelled
@@ -135,8 +135,8 @@ section {
   the CLI, and the known gaps in 0.1.0.
 - [SLURP_DOCS.md](https://github.com/bytesell/slurp/blob/main/SLURP_DOCS.md):
   the long-form language documentation.
-- [SECURITY.md](https://github.com/bytesell/slurp/blob/main/SECURITY.md): where
-  the default escaping is and is not sufficient. Read before using `{html}`.
+- [docs/security-model.md](https://github.com/bytesell/slurp/blob/main/docs/security-model.md):
+  where the default escaping is and is not sufficient. Read before using `{html}`.
 - [mcp/README.md](https://github.com/bytesell/slurp/blob/main/mcp/README.md):
   the MCP server, and how to register it with a coding agent.
 

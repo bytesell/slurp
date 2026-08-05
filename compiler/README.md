@@ -8,7 +8,7 @@ This crate ships three things:
 
 - a Rust library (`compile`, `parse`, `render`, `check_security`,
   `extract_schema`, ...),
-- the `slurp` command line binary (`build`, `validate`, `dev`),
+- the `slurp` command line binary (`build`, `validate`, `dev`, `gitignore`),
 - WASM bindings: `parse`, `render`, `render_dev`, `validate`, `validate_full`,
   `extract_schema` and `render_section`. All but `validate_full` are for editor
   previews and skip the compile-time security walk; `validate_full` runs it, so

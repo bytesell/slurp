@@ -14,13 +14,20 @@ width-only resize that preserves aspect ratio and never upscales. Results are
 cached in memory and on disk.
 
 It fetches attacker-influenced URLs by design, so it carries a matching set of
-guards: a scheme allowlist, rejection of userinfo, DNS resolved up front with
-every returned address required to be globally routable unicast, those
-addresses pinned into the HTTP client to defeat rebinding, redirects disabled
-entirely, magic-byte validation of the response body backed by a decoder-format
-allowlist, and caps on source size, decoded size and output pixels. Transform
-work runs off the async workers behind a concurrency limit. See
-[SECURITY.md](https://github.com/bytesell/slurp/blob/main/SECURITY.md).
+guards:
+
+- scheme allowlist, userinfo rejected, length capped,
+- DNS resolved up front, every returned address required to be globally routable
+  unicast, and those addresses pinned into the HTTP client so a second lookup
+  cannot rebind,
+- redirects disabled entirely,
+- magic-byte validation of the response body, backed by a decoder-format
+  allowlist so a polyglot cannot be routed to a different decoder,
+- caps on source size, decoded size and output pixels,
+- transform work off the async workers, behind a concurrency limit.
+
+See [SECURITY.md](https://github.com/bytesell/slurp/blob/main/SECURITY.md) and
+`DECISIONS.md` in this directory for the order these run in and why.
 
 It has no authentication, so it binds loopback by default and sends no CORS
 headers. Pass `--bind 0.0.0.0` and `--cors-allow-origin <origin>` to widen that,

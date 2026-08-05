@@ -5,19 +5,15 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for filing a report.
+        **Do not report a security vulnerability here.** Use GitHub's private
+        vulnerability reporting, from the Security tab. See
+        [SECURITY.md](../blob/main/SECURITY.md).
 
-        **Two things worth checking first**, because they save everyone time:
-
-        1. **Do not report a security vulnerability here.** Use GitHub's private
-           vulnerability reporting instead, from the Security tab. See
-           [SECURITY.md](../blob/main/SECURITY.md).
-        2. **Check [SLURP_DOCS.md](../blob/main/SLURP_DOCS.md) for the feature.**
-           Slurp is pre-1.0 and several things are documented as not implemented
-           or not wired, including function calls, spread props, `slot="name"`
-           routing, `on:` handlers and `navigate=false`. If the doc already says
-           so, the useful issue is about the documentation or the priority, and
-           saying that up front helps.
+        **Check [SLURP_DOCS.md](../blob/main/SLURP_DOCS.md) first.** Slurp is
+        pre-1.0 and several things are documented as not implemented or not
+        wired, including function calls, spread props, `slot="name"` routing and
+        `on:` handlers. If the doc already says so, the useful issue is about the
+        documentation or the priority, and saying that up front helps.
 
   - type: textarea
     id: what-happened
