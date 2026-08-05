@@ -31,7 +31,7 @@ clap = { version = "4", features = ["derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true }
-minify-html = "0.15"
+minify-html = "0.18"
 # Grow the stack on demand for deep recursive-descent parse/render (native only;
 # wasm relies on the depth caps). Same approach rustc uses.
 stacker = "0.1"
