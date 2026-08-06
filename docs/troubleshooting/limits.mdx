@@ -192,7 +192,7 @@ Both refuse the file outright, before the parser sees anything.
 
 The token cap bounds the memory a single source file can turn into. The mode
 stack bounds nesting of the lexer's own contexts, where `${`, a backtick, a tag
-and each block tag all push a mode. It exists so that a 600 KB file of `${\``
+and each block tag all push a mode. It exists so that a 600 KB file of `` ${` ``
 costs a bounded amount of work, rather than producing a multi-million-token
 stream the parser then walks only to reject.
 
