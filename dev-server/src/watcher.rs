@@ -200,6 +200,7 @@ pub fn spawn_source_watcher(
     slurp_bin: Arc<PathBuf>,
     source_dir: Arc<PathBuf>,
     theme_dir: Arc<PathBuf>,
+    globals: Option<Arc<PathBuf>>,
     hub: HmrHub,
 ) {
     let (tx, mut rx) = mpsc::unbounded_channel::<PathBuf>();
@@ -232,7 +233,14 @@ pub fn spawn_source_watcher(
             }
             pending = false;
 
-            if let Err(e) = build_source(&slurp_bin, &source_dir, &theme_dir).await {
+            if let Err(e) = build_source(
+                &slurp_bin,
+                &source_dir,
+                &theme_dir,
+                globals.as_deref().map(|p| p.as_path()),
+            )
+            .await
+            {
                 error!("{e}");
             }
             hub.broadcast(HmrMessage::Reload {
@@ -248,18 +256,31 @@ pub fn spawn_source_watcher(
 /// The two directories are passed as `OsStr`, not `&str`: a path that is not valid UTF-8 has to
 /// reach the child process as itself. Substituting a placeholder would build some other directory
 /// and report success.
-pub async fn build_source(bin: &Path, source_dir: &Path, theme_dir: &Path) -> DevResult<()> {
+/// `globals` is forwarded to `slurp build --globals`. Without it the statically built pages lose
+/// every `${ platform.* }` and `${ storefront.* }` while dynamic SSR routes keep them, because the
+/// SSR path seeds its context from the parsed file directly. That split is invisible: the page
+/// renders, and only `<script src="">` and an empty `<title>` say anything is wrong.
+pub async fn build_source(
+    bin: &Path,
+    source_dir: &Path,
+    theme_dir: &Path,
+    globals: Option<&Path>,
+) -> DevResult<()> {
     info!(
         "Building {} -> {}",
         source_dir.display(),
         theme_dir.display()
     );
-    let status = tokio::process::Command::new(bin)
-        .arg("build")
+    let mut cmd = tokio::process::Command::new(bin);
+    cmd.arg("build")
         .arg("--input")
         .arg(source_dir)
         .arg("--output")
-        .arg(theme_dir)
+        .arg(theme_dir);
+    if let Some(globals) = globals {
+        cmd.arg("--globals").arg(globals);
+    }
+    let status = cmd
         .status()
         .await
         .map_err(|e| DevServerError::Compiler(format!("failed to spawn slurp build: {e}")))?;

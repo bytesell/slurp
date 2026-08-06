@@ -211,11 +211,19 @@ async fn run_server() -> DevResult<()> {
         // when the rebuild loop would be asking. Resolving at startup turns that into a clear
         // startup error instead of an intermittent one mid-session.
         let slurp_bin = Arc::new(slurp_bin()?);
-        build_source(&slurp_bin, src, &state.theme_dir).await?;
+        let globals_path = args.globals.clone().map(Arc::new);
+        build_source(
+            &slurp_bin,
+            src,
+            &state.theme_dir,
+            globals_path.as_deref().map(|p| p.as_path()),
+        )
+        .await?;
         spawn_source_watcher(
             slurp_bin,
             src.clone(),
             state.theme_dir.clone(),
+            globals_path,
             state.hub.clone(),
         );
     }
