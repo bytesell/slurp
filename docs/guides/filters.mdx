@@ -1,6 +1,6 @@
 ---
 title: "Filters"
-description: "Formatting values on the way out: text, numbers, money, dates and collections, and why arguments must be literals."
+description: "Text, number, money, date and collection filters, and literal arguments."
 ---
 
 A filter transforms a value as it is rendered. Filters are the only
@@ -25,13 +25,13 @@ They chain left to right:
 <p>hello th...
 ```
 
-This page covers the filters by the job they do. For the complete alphabetical
-list with the null behaviour of each one, see
+This page groups the filters by task. For the complete alphabetical list with
+the null behaviour of each one, see
 [the filter reference](/reference/filters).
 
 ## Arguments must be literals
 
-Learn this rule before anything else. Breaking it fails silently.
+Breaking this rule fails silently.
 
 ```slurp
 <p>[${ product.price | currency(settings.currency) }]</p>
@@ -42,8 +42,8 @@ Learn this rule before anything else. Breaking it fails silently.
 ```
 
 A filter argument is read as a literal and never evaluated. A variable argument
-is seen as the empty string, so `currency` falls back to no symbol at all and
-you get a leading space where the currency marker should be. The compiler says
+is seen as the empty string, so `currency` falls back to no symbol at all and a
+leading space appears where the currency marker should be. The compiler says
 nothing.
 
 ```slurp
@@ -54,19 +54,13 @@ nothing.
 <p>€12,50
 ```
 
-The reason is the same as for functions: an argument that could be an arbitrary
-expression is a place for a template to compute, and Slurp renders templates
-that cannot compute. Literal arguments keep a filter a fixed, auditable
-transformation.
-
 <Note>
-  `default` is the one exception. Its argument is evaluated in scope, which is
-  what makes `default(user.name)` useful. Every other filter reads its
-  arguments literally.
+  `default` is the one exception. Its argument is evaluated in scope, so
+  `default(user.name)` works. Every other filter reads its arguments literally.
 </Note>
 
-If you need a currency chosen at runtime, branch on it or format the value
-server-side and pass the finished string through.
+For a currency chosen at runtime, branch on it or format the value server-side
+and pass the finished string through.
 
 ## Filters bind loosest
 
@@ -82,7 +76,7 @@ A filter applies to the whole expression to its left, including a ternary.
 
 The status is `archived`, so the ternary chose `"live"`, and `upper` then
 applied to that result rather than to the `"draft"` it sits next to.
-Parenthesise if you meant the other thing:
+Parenthesise for the other reading:
 
 ```slurp
 <p>${ post.status == "archived" ? "live" : ("draft" | upper) }</p>
@@ -131,16 +125,16 @@ default length is 50 and the default suffix is three dots.
 <p>4.3<p>10<p>49.99
 ```
 
-`fixed` is what you reach for instead of `toFixed`, and it returns a string
-with exactly that many decimal places.
+`fixed` replaces `toFixed`, and it returns a string with exactly that many
+decimal places.
 
 `int` and `float` parse all-or-nothing. `"12abc"` becomes 0, not 12, and so
 does anything else that is not cleanly a number, including null, arrays and
 objects.
 
-Coercion matters more than it looks, because comparisons in Slurp do not
-coerce. `{if product.stock > 0}` is false when stock is the string `"10"`.
-Write `{if (product.stock | int) > 0}`. That trap is explained in full under
+Comparisons in Slurp do not coerce, so `{if product.stock > 0}` is false when
+stock is the string `"10"`. Write `{if (product.stock | int) > 0}`. That trap is
+explained in full under
 [displaying data](/guides/displaying-data#arithmetic-coerces-comparison-does-not).
 
 ## Money
@@ -180,8 +174,7 @@ a number. Filters coerce, so this is invisible most of the time:
 <p>$49.99
 ```
 
-It stops being invisible in JavaScript you emit, where the value is a string
-and has no numeric methods:
+In emitted JavaScript the value is a string and has no numeric methods:
 
 ```slurp
 <script>var total = Number(${ order.total | json }).toFixed(2);</script>
@@ -192,9 +185,9 @@ and has no numeric methods:
 ```
 
 Without the `Number(...)` wrapper that is `"49.990000".toFixed(2)`, which
-throws at runtime. The compiler does not read the JavaScript you emit, so
-nothing warns. Where you can, format with `| currency` or `| fixed` server-side
-and pass the finished string.
+throws at runtime. The compiler does not read emitted JavaScript, so nothing
+warns. Format with `| currency` or `| fixed` server-side and pass the finished
+string where possible.
 
 ## Dates
 
@@ -210,7 +203,7 @@ and pass the finished string.
 
 The complete token set is `YYYY`, `YY`, `MMMM`, `MMM`, `MM`, `M`, `DD` and `D`.
 There are no time tokens at all: no hours, minutes, seconds, timezone or
-day-of-week. If you need a time, format it server-side.
+day-of-week. For a time, format it server-side.
 
 There is also no escaping in the format string, so a stray `D` or `M` in
 surrounding text gets substituted. Keep the format to the date and write the
@@ -230,14 +223,14 @@ words outside the filter.
 <p>[1700000000000]
 ```
 
-The number renders verbatim with no diagnostic, which is a confusing thing to
-find on a page. Return RFC 3339 strings from the server and it cannot arise.
+The number renders verbatim with no diagnostic. Return RFC 3339 strings from the
+server and it cannot arise.
 
 ## Fallbacks and counts
 
 `default` substitutes when a value is empty, where empty means null, the empty
-string, the empty array or the empty object. Note that `0` and `false` are not
-empty and pass straight through.
+string, the empty array or the empty object. `0` and `false` are not empty and
+pass straight through.
 
 ```slurp
 <p>${ user.nickname | default("Anonymous") }</p>
@@ -285,7 +278,7 @@ They are a separate set from everything above.
 | `reverse` | reverses the collection |
 | `filter(key, value)` | keeps items whose `item[key]` equals `value` |
 
-They chain, in the order you write them:
+They chain in the order written:
 
 ```slurp
 {each p in products | filter("featured", true) | limit(2)}<li>${ p.name }</li>{/each}
@@ -295,7 +288,7 @@ They chain, in the order you write them:
 <li>Notebook<li>Desk
 ```
 
-Two sharp edges:
+Two edge cases:
 
 ```slurp
 {each p in products | sort("price", "DESC")}<li>${ p.name }</li>{/each}
@@ -317,20 +310,20 @@ erratically, so a mixed collection sorts deterministically.
 
 ## Sending values to JavaScript
 
-`js` and `json` exist for one job: putting a value safely inside a `<script>`
-body or a JavaScript-evaluated attribute. Every `${ }` in a script body must
-end in one of them, and which one depends on where the slot sits.
+`js` and `json` put a value safely inside a `<script>` body or a
+JavaScript-evaluated attribute. Every `${ }` in a script body must end in one of
+them, and which one depends on where the slot sits.
 
 ```slurp
 <script>var name = ${ user.name | json };</script>
 ```
 
-That is its own topic, with rules the compiler enforces at build time. See
+The compiler enforces those rules at build time. See
 [Scripts and attributes](/guides/scripts-and-attributes).
 
 ## When a filter goes wrong
 
-Filters fail in three different ways, and knowing which is which saves time.
+Filters fail in three ways.
 
 **An unknown filter fails the build.** So does using a loop filter in value
 position, or a value filter in an `{each}` header. The two sets are disjoint
@@ -373,7 +366,7 @@ collection, which then renders the `{empty}` branch:
 <Tip>
   A loop filter that errors empties the collection rather than raising, so a
   broken filter looks exactly like missing data. If an `{empty}` branch appears
-  when you know the data is there, read the filter arguments first.
+  while the data is present, check the filter arguments first.
 </Tip>
 
 ## Next

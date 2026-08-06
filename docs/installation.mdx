@@ -1,12 +1,10 @@
 ---
 title: "Installation"
-description: "The compiler, plus the optional pieces and what each one is for."
+description: "The compiler, the optional components, and editor tooling."
 ---
 
-One thing is required: the `slurp` CLI. Everything else on this page solves a
-specific problem, so skip anything whose problem you do not have. The
-["Which of these do I need"](#which-of-these-do-i-need) table is the short
-answer.
+Only the `slurp` CLI is required. Everything else on this page is optional. The
+[Choosing components](#choosing-components) table lists what each piece covers.
 
 ## The compiler
 
@@ -48,19 +46,19 @@ Validation ok: 4 file(s), 0 error(s), 0 warning(s).
 `validate` exits 0 on success and 1 if anything failed, so it is safe to put in
 a script or a pre-commit hook.
 
-## Which of these do I need
+## Choosing components
 
-| Piece | Install | Reach for it when |
+| Piece | Install | Use when |
 |---|---|---|
 | `slurp` CLI | `cargo install slurp-compiler` | Always. It builds and validates. |
-| `slurp-dev` | `cargo install slurp-dev-server` | You want hot reload while editing. |
-| `slurp-image` | `cargo install slurp-image` | Your templates use `<Image>`. Plain `<img>` needs nothing. |
-| `@bytesell/slurp-runtime` | `pnpm add @bytesell/slurp-runtime` | You want client navigation or Alpine on the page. |
-| `@bytesell/slurp-mcp` | `pnpm add -D @bytesell/slurp-mcp` | A coding agent writes Slurp for you. |
-| `prettier-plugin-slurp` | `pnpm add -D prettier-plugin-slurp` | You format with Prettier. |
-| VS Code extension | [see below](#vs-code) | You edit `.slurp` files in VS Code. |
-| `slurp-compiler` as a library | a Cargo dependency | You render templates from a Rust server. |
-| `@bytesell/slurp-compiler-wasm` | `pnpm add @bytesell/slurp-compiler-wasm` | You render templates from JavaScript. |
+| `slurp-dev` | `cargo install slurp-dev-server` | Hot reload while editing. |
+| `slurp-image` | `cargo install slurp-image` | Templates use `<Image>`. Plain `<img>` needs nothing. |
+| `@bytesell/slurp-runtime` | `pnpm add @bytesell/slurp-runtime` | Client navigation or Alpine on the page. |
+| `@bytesell/slurp-mcp` | `pnpm add -D @bytesell/slurp-mcp` | A coding agent writes Slurp. |
+| `prettier-plugin-slurp` | `pnpm add -D prettier-plugin-slurp` | Formatting with Prettier. |
+| VS Code extension | [see below](#vs-code) | Editing `.slurp` files in VS Code. |
+| `slurp-compiler` as a library | a Cargo dependency | Rendering templates from a Rust server. |
+| `@bytesell/slurp-compiler-wasm` | `pnpm add @bytesell/slurp-compiler-wasm` | Rendering templates from JavaScript. |
 
 ## The dev server
 
@@ -72,10 +70,10 @@ The crate is `slurp-dev-server` and the binary is `slurp-dev`. It watches a
 theme, rebuilds on change and pushes a reload over a WebSocket.
 
 `slurp dev` is a **launcher**, not a second implementation: it looks for a
-`slurp-dev` binary next to the `slurp` binary, falls back to your `PATH`, and
+`slurp-dev` binary next to the `slurp` binary, falls back to `PATH`, and
 forwards only `--port` and `--fixtures`. Without `slurp-dev-server` installed,
-`slurp dev` has nothing to launch. Invoke `slurp-dev` directly when you need the
-flags the launcher does not forward, such as `--theme-dir`, `--globals` or
+`slurp dev` has nothing to launch. Invoke `slurp-dev` directly for the flags the
+launcher does not forward, such as `--theme-dir`, `--globals` or
 `--backend-url`.
 
 <Warning>
@@ -83,7 +81,7 @@ flags the launcher does not forward, such as `--theme-dir`, `--globals` or
   network exposure. It is a local tool.
 </Warning>
 
-See [Dev server](/tooling/dev-server) for what it does and does not do.
+See [Dev server](/tooling/dev-server).
 
 ## The image service
 
@@ -92,13 +90,13 @@ cargo install slurp-image
 slurp-image --port 3001
 ```
 
-An HTTP service that resizes and transcodes images on demand. You need it only
-if a template uses the `<Image>` component, which emits URLs pointing at it. An
-ordinary `<img>` tag is ordinary HTML and involves no service at all.
+An HTTP service that resizes and transcodes images on demand. It is required
+only when a template uses the `<Image>` component, which emits URLs pointing at
+it. A plain `<img>` tag involves no service.
 
-It binds loopback and sends no CORS headers by default, because it fetches
-URLs an attacker may influence. See [Images](/guides/images) for running it and
-for what it refuses.
+It binds loopback and sends no CORS headers by default, because it fetches URLs
+an attacker may influence. See [Images](/guides/images) for running it and for
+what it refuses.
 
 ## The browser runtime
 
@@ -106,10 +104,9 @@ for what it refuses.
 pnpm add @bytesell/slurp-runtime
 ```
 
-Optional in the strong sense. `slurp build` produces plain HTML and injects no
-script tag, so a page that does not need client navigation or `{fetch}`
-refetching ships no JavaScript from Slurp. A theme that wants the runtime loads
-it by hand:
+`slurp build` produces plain HTML and injects no script tag, so a page that does
+not need client navigation or `{fetch}` refetching ships no JavaScript from
+Slurp. A theme that wants the runtime loads it explicitly:
 
 ```html
 <script type="module" src="/slurp.core.js"></script>
@@ -132,12 +129,10 @@ pnpm add -D @bytesell/slurp-mcp
 ```
 
 An MCP server that gives a coding agent tools to validate, render, lint and
-inspect templates, plus the language reference. Slurp is small and unusual
-enough that a model will otherwise invent syntax that compiles and renders
-wrong.
+inspect templates, plus the language reference.
 
 It runs the real compiler in-process through `@bytesell/slurp-compiler-wasm`,
-so it needs no `slurp` binary on your `PATH`. Requires **Node 20 or newer**.
+so it needs no `slurp` binary on `PATH`. Requires **Node 20 or newer**.
 
 Most clients can fetch it on demand rather than installing it:
 
@@ -233,7 +228,7 @@ cargo build --workspace --release
 
 The three binaries land in `target/release/` as `slurp`, `slurp-dev` and
 `slurp-image`. `slurp dev` prefers a `slurp-dev` sitting beside it, so a
-workspace build gives you a working `slurp dev` with nothing installed.
+workspace build yields a working `slurp dev` with nothing installed.
 
 The JavaScript packages are a separate build, and they need Node 22 or newer,
 pnpm 9 or newer, and `wasm-pack`:
@@ -254,12 +249,12 @@ server and the compiler integration tests both import, so run it before
     Build and render a real page in about five minutes.
   </Card>
   <Card title="Project structure" icon="folder-tree" href="/project-structure">
-    Which directories are special, and which are just yours.
+    Special directories, output paths, and static assets.
   </Card>
   <Card title="CLI" icon="terminal" href="/tooling/cli">
     Every subcommand and flag.
   </Card>
   <Card title="Images" icon="image" href="/guides/images">
-    When you need the image service, and when you do not.
+    The `<Image>` component and the image service.
   </Card>
 </CardGroup>

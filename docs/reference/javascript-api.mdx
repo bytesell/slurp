@@ -1,11 +1,11 @@
 ---
 title: "JavaScript API"
-description: "The WASM build of the Slurp compiler for Node and browser hosts: seven exports, what each returns, and which of them enforce the security walk."
+description: "The WASM build of the Slurp compiler: its seven exports and their return types."
 ---
 
-`@bytesell/slurp-compiler-wasm` is the Slurp compiler built to WebAssembly. It
-exists for hosts that are not Rust: an editor, a preview pane, a language server,
-a build script, a browser.
+`@bytesell/slurp-compiler-wasm` is the Slurp compiler built to WebAssembly, for
+hosts that are not Rust: an editor, a preview pane, a language server, a build
+script, a browser.
 
 <Warning>
   Slurp is **0.1.0, pre-1.0**. This surface will change without a deprecation
@@ -47,8 +47,7 @@ committed.
 ## Everything returns a JSON string
 
 Every export serialises through `JsValue::from_str`, so **every function returns
-a `string` you must `JSON.parse`**. None of them returns an object. Know this
-before anything else.
+a `string` you must `JSON.parse`**. None of them returns an object.
 
 ```ts
 import { parse, parseJson } from '@bytesell/slurp-compiler-wasm'
@@ -60,8 +59,8 @@ if (!result.ok) console.error(result.errors)
 
 The TypeScript declarations encode it. An export returns `JsonString<T>`, a
 branded `string` that will not typecheck as a `T`, and `parseJson` is the one way
-to cross that boundary. `parseJson` is a plain `JSON.parse` wrapper; its whole
-job is to keep the fact visible at the call site.
+to cross that boundary. `parseJson` is a plain `JSON.parse` wrapper that keeps
+the fact visible at the call site.
 
 The parsed shapes (`ParseResult`, `RenderResult`, `SchemaResult`, `SlurpError`)
 are exported as types too.
@@ -124,7 +123,7 @@ interface RenderResult {
 }
 ```
 
-Both take the AST **as a JSON string**, which is what `parse` gave you, so it is
+Both take the AST **as a JSON string**, which is what `parse` returned, so it is
 `JSON.stringify(parseResult.ast)` on the way back in.
 
 Malformed input comes back as an `InvalidAst` or `InvalidContext` error rather
@@ -139,7 +138,7 @@ const r = parseJson(render(JSON.stringify(p.ast), JSON.stringify({ title: '<b>' 
 r.html // '<h1>&lt;b&gt;</h1>'
 ```
 
-### Which one to call
+### Mode differences
 
 `render` is production mode. `render_dev` is development mode, and it differs in
 three ways:
@@ -156,7 +155,7 @@ both things still happen, silently. Given
 characters.
 
 **An editor or preview pane wants `render_dev`.** A production SSR path wants
-`render`, where the two advisories are the wrong trade on a hot path.
+`render`.
 
 The **budget** diagnostics are not among the development-only pair. Loop
 truncation at 1,000 items, the output-byte budget and the render-depth budget are
@@ -272,8 +271,8 @@ function render_section(
 ```
 
 Renders a section template with saved editor state merged over its schema
-defaults. This is what gives an editor an instant preview of a fetch-free
-section, with no server round trip.
+defaults. An editor uses it for an instant preview of a fetch-free section, with
+no server round trip.
 
 ```ts
 const src = [
@@ -291,7 +290,7 @@ parseJson(render_section(ast, state, '{}')).html // '\n<h2>Saved</h2>'
 
 The merge is tolerant: unknown keys such as `bogus` above are dropped and
 out-of-range numbers are clamped to the schema's `min` and `max`, rather than
-rejected. That tolerance is what lets saved state survive a theme update.
+rejected, so saved state survives a theme update.
 
 It renders in **production** mode and it does **not** take a block catalog, so
 `@theme`-targeted blocks are dropped from the output while surviving in storage.
@@ -313,9 +312,9 @@ server-side concerns enforced by the host, and a preview is not a deploy. A
 template that violates all of them parses and renders cleanly through the other
 six.
 
-The consequence to hold onto: **do not use a WASM render as a production render
-path.** Use the [Rust API](/reference/rust-api) server-side, where `compile` and
-its relatives run the walk on every call.
+**Do not use a WASM render as a production render path.** Use the
+[Rust API](/reference/rust-api) server-side, where `compile` and its relatives
+run the walk on every call.
 
 What a WASM render **does** still apply is the renderer's own script-context
 backstops, because those live in the renderer rather than the walk. An unfiltered
@@ -365,11 +364,11 @@ client runtime that ships to a visitor's browser; this package is the compiler. 
 page using none of `{fetch}`, `{$let}`, `{try}` or client navigation does not
 need the runtime at all.
 
-It is small, because it is not a framework: the core bundle measures 2,570 bytes
-gzipped, and Alpine is an external import rather than something bundled into it.
+The core bundle measures 2,570 bytes gzipped, and Alpine is an external import
+rather than something bundled into it.
 
-Be careful there, because the runtime's capability and the compiler's output do
-not currently meet in the middle:
+The runtime's capability and the compiler's output do not currently meet in the
+middle:
 
 - It registers **zero** Alpine magics and **zero** Alpine directives. It touches
   Alpine in exactly three places: `Alpine.start()`, `Alpine.initTree()` after a
@@ -386,8 +385,7 @@ from compiled output today, which is why they are published behind an
 needs a theme that supplies `[data-slurp-page]` and a `navigate` attribute on
 `<body>` itself.
 
-A host can supply any of the above. This section exists so you find that out here
-rather than by debugging.
+A host can supply any of the above.
 
 ---
 

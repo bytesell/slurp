@@ -1,14 +1,14 @@
 ---
 title: "Image service"
-description: "slurp-image is the standalone resize service the Image component points at. Its one endpoint, its configuration, and the guards it needs because it fetches URLs it did not choose."
+description: "The slurp-image resize service: its endpoint, configuration and security guards."
 ---
 
 `slurp-image` is a small standalone HTTP service that resizes and re-encodes
 images on demand. The `<Image>` component in a template emits URLs that point at
-it; the service does not read your templates and has no knowledge of Slurp beyond
-the URL shape.
+it; the service does not read templates and has no knowledge of Slurp beyond the
+URL shape.
 
-It does exactly one thing: **a width-only resize that preserves aspect ratio and
+It performs one transform: **a width-only resize that preserves aspect ratio and
 never upscales**, re-encoded to AVIF, WebP or JPEG. There is no cropping, no
 rotation, no quality parameter and no height parameter.
 
@@ -16,15 +16,15 @@ rotation, no quality parameter and no height parameter.
   Slurp is **0.1.0, pre-1.0**. The CLI surface here is unstable.
 </Warning>
 
-## Running it
+## Running the service
 
 ```bash
 cargo install slurp-image
 slurp-image --port 3001
 ```
 
-It binds **loopback by default** and sends **no CORS headers**, which is correct
-for the usual deployment: reverse-proxied at the same origin as the site, under
+It binds **loopback by default** and sends **no CORS headers**. The usual
+deployment is reverse-proxied at the same origin as the site, under
 `/_slurp/image`. It has no authentication. Expose it only if you mean to.
 
 ```bash
@@ -34,7 +34,7 @@ slurp-image --bind 0.0.0.0 --cors-allow-origin https://shop.example.com
 
 Binding a non-loopback address logs a warning saying so.
 
-## How a template reaches it
+## The URLs a template emits
 
 ```slurp
 <Image src="https://cdn.example.com/a.jpg" alt="A hat" width={800} height={600} />
@@ -51,10 +51,10 @@ renders a `<picture>` with three variants:
 </picture>
 ```
 
-Two things to notice. The URLs are **root-relative**, so the service has to be
-reachable at `/_slurp/image` on the site's own origin. And `height` is used for
-the `<img>` attribute only and is **never sent to the service**, because the only
-transform is width-driven. It exists to reserve layout space and avoid a shift.
+The URLs are **root-relative**, so the service has to be reachable at
+`/_slurp/image` on the site's own origin. `height` is used for the `<img>`
+attribute only and is **never sent to the service**, because the only transform
+is width-driven. It reserves layout space and avoids a shift.
 
 `width` defaults to 800 and `height` to 600 when not given. Add `priority` to
 drop `loading="lazy"` for an above-the-fold image. A missing `src` is a
@@ -118,11 +118,10 @@ An error is JSON, `{"error": "..."}`:
 | 503 | Shutting down |
 
 Only 429 and 503 carry a `Retry-After` (60 and 5 seconds). A 4xx caused by the
-request itself will fail again at any time, and telling a client to retry it is
-an invitation to hammer.
+request itself will fail again at any time.
 
 Error messages for security failures are vague, so the service is not an oracle
-for what is reachable from inside your network.
+for what is reachable from inside the network.
 
 ---
 
@@ -147,7 +146,7 @@ for what is reachable from inside your network.
 ### Not exposed as flags
 
 Several limits live on `Config` and can only be set by a Rust caller using
-`slurp-image` as a library. A 413 or a 422 you did not expect comes from here:
+`slurp-image` as a library. An unexpected 413 or 422 comes from here:
 
 | Field | Default |
 |---|---|
@@ -185,10 +184,9 @@ this service sees it.
 
 ## Security
 
-This service fetches URLs it did not choose, which makes it the most
-attacker-exposed component Slurp ships. The guards below run in order, and each
-is there because the one before it is not sufficient on its own. The full
-treatment is in [the security model](/security-model).
+This service fetches URLs it did not choose. The guards below run in order, and
+each covers a case the one before it does not. The full treatment is in
+[the security model](/security-model).
 
 <AccordionGroup>
   <Accordion title="URL validation">
@@ -274,7 +272,7 @@ treatment is in [the security model](/security-model).
     bounded by construction, not by hoping the sweeper keeps up.
 
     **It resets on restart and is not shared between instances.** It is a last
-    line of defence, not a substitute for limits at your reverse proxy.
+    line of defence, not a substitute for limits at the reverse proxy.
   </Accordion>
 </AccordionGroup>
 

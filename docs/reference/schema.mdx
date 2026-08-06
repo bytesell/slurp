@@ -1,11 +1,10 @@
 ---
 title: "Schemas"
-description: "The section and block schema grammar in full: every setting kind, constraints, defaults, nested blocks, @theme targeting and the merge rules."
+description: "Section and block schema grammar: setting kinds, constraints, defaults, nested blocks, @theme targeting and merge rules."
 ---
 
 A section or block declares its own editor surface in frontmatter. That declaration
-is the contract between the template and whatever renders a settings form over it,
-which is how a non-technical person edits a page without touching the template.
+is the contract between the template and whatever renders a settings form over it.
 
 ```slurp
 ---
@@ -114,8 +113,7 @@ is not one of the select options
 <Note>
   **`select(...)` options may be identifiers OR string literals**, and so may the
   default. `select(left, center)` and `select("left", "center")` parse identically.
-  Bare identifiers are not required, whatever other documentation says. Both
-  forms were checked against the compiler.
+  Bare identifiers are not required.
 
   `select()` with no options is `select needs at least one option`.
 </Note>
@@ -195,7 +193,7 @@ Inside a `blocks { }` group, `@theme` says which THEME-LEVEL blocks (the ones in
 | `@theme()` | Error: `needs at least one block name` |
 | `@anything_else` | Error: `Unknown block target (only @theme is supported)` |
 
-Two resolution rules that are not obvious from the syntax:
+Two resolution rules:
 
 - **A bare `@theme` always wins over a whitelist**, regardless of the order the two
   appear in. Widening is never silently narrowed.
@@ -226,12 +224,12 @@ selectors and JS strings. A value carrying a quote, an angle bracket, a backslas
 backtick or whitespace is DROPPED rather than rewritten.
 
 <Warning>
-  **The most surprising consequence: without a block catalog, a `@theme`-targeted
-  block is an unknown type and is DROPPED FROM THE RENDER while surviving intact in
-  storage.** The page renders as though nothing was added, and nothing is reported.
+  **Without a block catalog, a `@theme`-targeted block is an unknown type and is
+  DROPPED FROM THE RENDER while surviving intact in storage.** The page renders as
+  though nothing was added, and nothing is reported.
 
-  That is why the catalog is threaded through the merge rather than defaulted. It is
-  a host integration concern, not something a template author can guard against.
+  The catalog is threaded through the merge rather than defaulted. It is a host
+  integration concern, not something a template author can guard against.
 </Warning>
 
 ## Hard ceilings

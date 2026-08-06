@@ -1,6 +1,6 @@
 ---
 title: "Expressions"
-description: "The expression grammar: interpolation forms, precedence, operator semantics, literals, paths and scoping."
+description: "Interpolation forms, precedence, operator semantics, literals, paths and scoping."
 ---
 
 An expression is evaluated once, on the server, against a JSON context. It cannot
@@ -17,8 +17,8 @@ and renders as the empty string.
 | `` `text ${ expr }` `` | Anywhere an expression is | Per context |
 
 `${ expr }` and `{ expr }` are the same node in text position. The brace form is
-shorter; the dollar form is unambiguous, which matters because **a bare `{` in text
-starts an expression**:
+shorter; the dollar form is unambiguous, because **a bare `{` in text starts an
+expression**:
 
 ```slurp
 <p>css-ish: a { color: red }</p>
@@ -88,8 +88,6 @@ Any arithmetic result that is NaN or infinite silently becomes 0.
 
 ### Arithmetic coerces, comparison does not
 
-This asymmetry is the single most common source of wrong-looking output.
-
 ```slurp
 ${ "10" > 9 }            {* false: no coercion *}
 ${ ("10" | int) > 9 }    {* true *}
@@ -129,7 +127,7 @@ Pass collections and objects through the render context.
 
 `===` `!==` `??` `?.` `in` `**` `typeof` `instanceof`, every bitwise operator,
 every assignment operator, and arrow functions. Each is a parse or lex error, not a
-silent no-op, so none of them can ship unnoticed.
+silent no-op.
 
 There is no `?.` because none is needed: `.` is always null-safe. For a null
 fallback use `| default(...)` rather than `??`.
@@ -201,8 +199,8 @@ component CAN read a page global it was never passed.
 
 ## Escaping by context
 
-An interpolation is escaped for exactly where it lands. You do not choose the
-escaper; the compiler does, from the position.
+An interpolation is escaped for exactly where it lands. The compiler selects the
+escaper from the position.
 
 | Position | Escaper | What it does |
 |---|---|---|

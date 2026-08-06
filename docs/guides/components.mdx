@@ -1,14 +1,15 @@
 ---
 title: "Components"
-description: "Declaring props, importing components, and the quoted-prop trap that fails silently."
+description: "Props, scope, slots, and imports."
 ---
 
-A component is a `.slurp` file you include from somewhere else. It takes props,
+A component is a `.slurp` file included from another file. It takes props,
 renders markup, and can accept children through a `<slot />`.
 
-## Write one
+## Declaring a component
 
-Put it in `components/` so it is checked but never emitted as a page.
+Components live in `components/`, where they are checked but never emitted as a
+page.
 
 ```slurp components/Card.slurp
 ---
@@ -38,7 +39,7 @@ A tag is a component if its first character is uppercase. `<Card />` is a
 component; `<card />` is a plain HTML element and is emitted as one. There is no
 registration step beyond the `using` line.
 
-## The one thing to get right
+## Props are passed by expression
 
 <Warning>
   A quoted COMPONENT prop is a literal string. A quoted ELEMENT attribute
@@ -63,14 +64,14 @@ literal.
 
 | Written | The component receives |
 |---|---|
-| `prop={expr}` | The evaluated expression. This is the form you want. |
+| `prop={expr}` | The evaluated expression. |
 | ``prop={`text ${x}`}`` | A template literal, interpolated. |
 | `prop="text"` | A literal string. Never interpolated. |
 | `prop` | Boolean `true`. |
 | `prop=123` | TWO props. An unquoted value lexes as an attribute name, so you get `prop = true` and a second prop named `123`. Write `prop={123}`. |
 | `...spread` | A parse error. Both `<Card ...props />` and `<Card ...spread={props} />` fail. Pass props explicitly. |
 
-## Props are documentation, with one real effect
+## Prop declarations and defaults
 
 The `props` block records names and types for tooling. Types are never checked
 at render time, so a missing prop is simply null and renders as the empty
@@ -80,10 +81,10 @@ Two things follow from that:
 
 - **An undeclared prop still arrives.** Passing `<Card note={"hi"} />` makes
   `note` readable inside the component even though `props` never mentions it.
-  Declaring it is for the reader and for your editor, not for the renderer.
-- **A `= default` is the one part that is not decoration.** Omit `featured`
-  above and the component sees `false`, not null. The default expression is
-  evaluated in the caller's scope, so it can read the caller's globals.
+  Declaring it serves the reader and the editor, not the renderer.
+- **A `= default` does have a render-time effect.** Omit `featured` above and
+  the component sees `false`, not null. The default expression is evaluated in
+  the caller's scope, so it can read the caller's globals.
 
 Write one declaration per line:
 
@@ -107,7 +108,7 @@ props {
 
   `a` swallows `b`'s declaration as part of its own type and takes `"fallback"`
   as its own default. `b` is never recorded, so `b`'s default never applies.
-  A comma fixes it, but one per line is clearer than either.
+  A comma fixes it; one declaration per line avoids the ambiguity entirely.
 </Warning>
 
 ## Scope: page globals, overlaid by props
@@ -163,7 +164,7 @@ Children of a component tag land at its `<slot />`.
 <Badge>Sale</Badge>
 ```
 
-Two rules before you rely on it:
+Two rules apply:
 
 <AccordionGroup>
   <Accordion title="A component with no slot discards its children">
@@ -206,9 +207,8 @@ props {
 <List items={products} />
 ```
 
-`any` is the honest annotation when you are not declaring the element shape.
-Writing `items: Product[]` renders identically, because no annotation is ever
-enforced, so pick whichever reads better for the next person.
+`any` is the annotation when the element shape is not declared.
+`items: Product[]` renders identically, because no annotation is ever enforced.
 
 ## Importing
 
@@ -255,10 +255,10 @@ level and then a placeholder.
 
 <CardGroup cols={2}>
   <Card title="Layouts and slots" icon="layer-group" href="/guides/layouts">
-    Shared chrome, and why a layout takes no props.
+    Layouts, slots, and the head block.
   </Card>
   <Card title="Displaying data" icon="code" href="/guides/displaying-data">
-    What `${ }` can contain, and what it cannot.
+    Expressions, property access, and operators.
   </Card>
   <Card title="Control flow" icon="code-branch" href="/guides/control-flow">
     `{if}`, `{each}`, `{match}` and the loop variables.

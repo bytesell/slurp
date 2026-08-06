@@ -1,11 +1,10 @@
 ---
 title: "Editor setup"
-description: "The VS Code extension and the Prettier plugin: what they do, what they do not, and which one to believe."
+description: "The VS Code extension and the Prettier plugin, and their limits."
 ---
 
 Two pieces of editor tooling exist: a VS Code extension for highlighting and
-navigation, and a Prettier plugin for formatting `.slurp` files. Both are useful
-and both are narrow. This page says exactly where each one stops.
+navigation, and a Prettier plugin for formatting `.slurp` files. Both are narrow.
 
 <Warning>
   **The editor tooling is a second description of the language, written by hand,
@@ -37,10 +36,10 @@ code --install-extension slurp-vscode-0.1.0.vsix
 out to `npm ls` to verify the dependency tree, which fails against a pnpm
 workspace layout and takes the packaging step down with it.
 
-To hack on the extension instead of installing it, open `vscode-extension/` in
+To work on the extension instead of installing it, open `vscode-extension/` in
 VS Code and press `F5` for an Extension Development Host.
 
-### What it gives you
+### Features
 
 - **Syntax highlighting.** A TextMate grammar covering frontmatter, control
   blocks, inline expressions, filters, component tags and HTML attributes
@@ -172,8 +171,7 @@ The compiler is the specification. The editor tooling maintains its own tables
 of keywords, filters and globals, and they are not generated from the compiler,
 so they can and do fall out of step.
 
-A concrete case you can reproduce today. The shared formatter treats `with` as a
-block opener and indents it:
+The shared formatter treats `with` as a block opener and indents it:
 
 ```slurp
 {with user}
@@ -192,12 +190,12 @@ and a completion offering something is not a promise the compiler accepts it.
 [Tags](/reference/tags) and [Filters](/reference/filters) in the reference are
 derived from the compiler and are the list to trust.
 
-## What good looks like
+## Recommended setup
 
 <Steps>
   <Step title="Install the extension for highlighting and navigation">
     Highlighting, completions, hover and go to definition all work. They come
-    from a package the extension really does depend on.
+    from a declared dependency, unlike the diagnostics.
   </Step>
   <Step title="Let the formatter handle indentation">
     Either the extension's format on save or `prettier --write`. They run the

@@ -1,18 +1,17 @@
 ---
 title: "Error codes"
-description: "Every error code, when it fires, a minimal example, and the fix. Plus the conditions that produce no error at all."
+description: "Compiler error codes, their causes and fixes."
 ---
 
 Every diagnostic carries a code, a message, a file, a line, a column and a
-severity, so they are machine-consumable rather than prose to be pattern-matched:
+severity:
 
 ```
 error[UnknownFilter]: Unknown filter: wat (path/page.slurp:1:11)
 ```
 
 The compiler declares **21 codes and emits 13 of them**. The other 8 exist for host
-integrations that layer their own checks on top; the compiler will never produce
-them, so do not go hunting for the condition.
+integrations that layer their own checks on top; the compiler never produces them.
 
 ## When each code can fire
 
@@ -210,13 +209,12 @@ does not
 ```
 
 An UNDECLARED slot in the same position is not an error: it is auto-encoded as a
-JSON literal, which is a complete answer, and development mode records an advisory
-suggesting you declare it.
+JSON literal, and development mode records an advisory suggesting you declare it.
 
 <Note>
   HTML entity escaping does not protect a script context. A raw-text element reaches
   the JavaScript engine without character references being decoded, so the ordinary
-  text escaping is inert there. That is why the compiler refuses to guess.
+  text escaping is inert there.
 
   Note also that a JavaScript template literal cannot be written in a `<script>`
   body at all, because Slurp claims the `${` sequence itself. Build the string by
@@ -253,10 +251,9 @@ server-side data, drop the backticks and let Slurp interpolate.
 ```
 
 <Warning>
-  This one earned a dedicated code because of HOW it fails. For a client-side
-  variable the slot renders EMPTY, with no runtime error and no other sign, so the
-  result is a page that looks built and has dead links and unstyled elements
-  scattered through it.
+  For a client-side variable the slot renders EMPTY, with no runtime error and no
+  other sign, so the result is a page that looks built and has dead links and
+  unstyled elements scattered through it.
 
   For SERVER-side data it fails differently: the slot interpolates correctly, but
   the backticks themselves are emitted into the HTML, so the attribute value keeps a
@@ -395,10 +392,9 @@ several cases the condition IS detected and handled another way.
 
 ## Conditions that produce no error at all
 
-Slurp is total and tolerant. These are the failures with no diagnostic anywhere,
-which makes them the ones worth memorising.
+Slurp is total and tolerant. These are the failures with no diagnostic anywhere.
 
-| What you wrote | What happens |
+| Construct | Result |
 |---|---|
 | `<Card title="Hi ${name}" />` | The prop is the LITERAL text `Hi ${name}`. A quoted component prop is never interpolated. |
 | `${ Math.max(a, b) }` | Renders empty. A call always evaluates to `null`. |

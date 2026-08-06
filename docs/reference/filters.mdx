@@ -1,6 +1,6 @@
 ---
 title: "Filters"
-description: "Every value filter and loop filter, with signatures, argument rules, real rendered output and caveats."
+description: "Value filters and loop filters: signatures, argument rules and caveats."
 ---
 
 A filter transforms a value on its way out. Apply it with `|`, and chain
@@ -26,7 +26,7 @@ using one where the other belongs is an `UnknownFilter` error.
   `default` is the only exception: the renderer evaluates its argument in scope.
 </Warning>
 
-Two more rules that shape how a filter mistake presents itself:
+Two more rules:
 
 - An **unknown value filter** records the diagnostic AND passes the value through
   unfiltered, so the render itself continues. On the CLI the diagnostic is an error,
@@ -56,7 +56,7 @@ Usable anywhere an expression is.
 | [`lower`](#lower) | `lower` | string |
 | [`plural`](#plural) | `plural(one = "item", many = one + "s")` | string |
 | [`truncate`](#truncate) | `truncate(n = 50, suffix = "...")` | string |
-| [`unsafe_js`](#unsafe-js) | `unsafe_js` | string |
+| [`unsafe_js`](#unsafe_js) | `unsafe_js` | string |
 | [`upper`](#upper) | `upper` | string |
 
 ---
@@ -256,7 +256,7 @@ With `user.name = "Bo"`, `| js` renders `Bo` and you supply the quotes.
   ```
 </Warning>
 
-You rarely need `js` for its escaping alone: in a JS-evaluated attribute the same
+`js` is rarely needed for its escaping alone: in a JS-evaluated attribute the same
 escaper is applied automatically to an undeclared slot inside a string literal.
 Writing it silences the development-mode advisory and states the intent.
 
@@ -364,8 +364,8 @@ not the markup.
 
 `unsafe_js`
 
-No escaping at all. It exists so a theme can declare that a value IS JavaScript the
-theme itself wrote, rather than data.
+No escaping at all. It declares that a value IS JavaScript the theme itself wrote,
+rather than data.
 
 ```slurp
 <span x-text="${ valueExpression | unsafe_js }"></span>
@@ -494,5 +494,5 @@ The full rank is null, bool, number, string, array, object. Arrays compare by le
 then elementwise (to a depth of 32, past which length alone decides); objects
 compare by length only, because an object has no intrinsic order.
 
-Without a key, objects therefore sort by how many fields they have, which is almost
-never what you want. Pass a key when sorting objects.
+Without a key, objects therefore sort by how many fields they have. Pass a key when
+sorting objects.

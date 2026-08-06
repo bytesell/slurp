@@ -1,6 +1,6 @@
 ---
 title: "Control flow"
-description: "Conditionals, loops, matching, and the iteration budget that truncates a page rather than failing it."
+description: "Conditionals, loops, matching, fetch, and iteration limits."
 ---
 
 Control flow is written with brace-delimited block tags. They nest freely and
@@ -26,15 +26,14 @@ Any number of `{else if}` branches and at most one `{else}`. Neither takes a
 closing tag; `{/if}` is required.
 
 `null`, `false`, `0`, the empty string, the empty array and the empty object
-are falsy. An empty array being falsy is the useful difference from JavaScript,
-because it makes `{if cart.items}` a valid emptiness check. See
-[Truthiness](/guides/displaying-data#truthiness) for the rest, including why
-the string `"false"` is truthy.
+are falsy. An empty array is falsy, which makes `{if cart.items}` a valid
+emptiness check. See [Truthiness](/guides/displaying-data#truthiness) for the
+rest, including why the string `"false"` is truthy.
 
 Comparisons do not coerce types, so a numeric value that arrived as a string
-needs `| int` before you compare it. That trap is
+needs `| int` before comparison. That is
 [covered in full here](/guides/displaying-data#arithmetic-coerces-comparison-does-not)
-and it is the most common reason an `{if}` takes the wrong branch.
+and is the most common reason an `{if}` takes the wrong branch.
 
 ## Loops
 
@@ -98,7 +97,7 @@ fields:
 Nothing else exists on `loop`. `loop.even`, `loop.odd`, `loop.length`,
 `loop.index0`, `loop.revindex` and `loop.parent` all resolve to null and render
 the empty string, so a habit from Jinja or Twig fails silently here. For
-alternating rows, compare `loop.index % 2` yourself.
+alternating rows, compare `loop.index % 2`.
 
 In nested loops the inner `loop` shadows the outer one, and there is no way to
 reach the outer `loop` from inside. Name the outer index instead, because a
@@ -133,12 +132,12 @@ A null or missing collection is empty and takes the `{empty}` branch:
 ```
 
 That holds whether `cart.items` is `[]`, `null`, or absent from the context
-entirely. A misspelled collection name therefore renders your empty state, not
-an error. Remember that when an empty state appears for no reason.
+entirely. A misspelled collection name therefore renders the empty state, not an
+error. An empty state appearing for no reason is often a misspelled name.
 
 A value that is neither an array nor null is wrapped and iterated exactly once,
-with `loop.count` of 1. So pointing `{each}` at a single object gives you one
-pass rather than nothing.
+with `loop.count` of 1. So `{each}` over a single object makes one pass rather
+than none.
 
 ### Filtering and ordering
 
@@ -157,7 +156,7 @@ The `{each}` header accepts loop filters, which run before iteration:
 These are a separate set from the value filters, and mixing them up is a build
 error rather than a silent one. See [Filters](/guides/filters).
 
-## Matching one value against several
+## Matching
 
 ```slurp
 {match post.status}
@@ -191,10 +190,10 @@ status of `archived`, this produces an empty file:
 {/match}
 ```
 
-That is a real risk when the set of values can grow server-side. Add a `_` arm
-unless you positively want the silence.
+This matters when the set of values can grow server-side. Add a `_` arm unless
+the silence is intended.
 
-## Repeating markup
+## Repeat
 
 ```slurp
 {repeat 3}<div class="skeleton"></div>{/repeat}
@@ -241,8 +240,7 @@ With `order.total` of `"3"`:
 
 <Note>
   The compiler performs no network request, ever. Rendering makes no I/O at
-  all, which is a large part of why an untrusted template is safe to render.
-  `{fetch}` reads the name out of the render context and picks a branch.
+  all. `{fetch}` reads the name out of the render context and picks a branch.
 </Note>
 
 Server-side branch selection:
@@ -254,9 +252,9 @@ Server-side branch selection:
 | an empty array | `{empty}` |
 | anything else | the body, with the name rebound |
 
-So on a static build a `{fetch}` whose name is not in your globals renders its
-`{loading}` branch, which is usually what you want from a skeleton and is
-occasionally a confusing way to discover a typo.
+On a static build a `{fetch}` whose name is absent from the globals renders its
+`{loading}` branch. That is the skeleton state, and it is also what a typo in
+the name produces.
 
 The branch order is fixed: body, then `{loading}`, then `{error}`, then
 `{empty}`. Out of order is not recovered and reports as an unclosed block. All
@@ -269,8 +267,7 @@ is silently dropped, so check the spelling.
 
 ## `{with}` does not exist
 
-Readers coming from Twig, Nunjucks or Blade reach for a scoping block. Slurp
-has none.
+Twig, Nunjucks and Blade provide a scoping block. Slurp has none.
 
 ```slurp
 {with user}<p>${ name }</p>{/with}
@@ -287,9 +284,8 @@ The lexer knows the word but no parser supports it, so every `{with}` is a hard
 build failure, and the four errors after the first are the parser recovering
 from it.
 
-Usually the answer is to write the full path. If the repetition is painful,
-`{each}` over a non-array value iterates it exactly once, which gives you the
-shorter name:
+Write the full path instead. Where the repetition is heavy, `{each}` over a
+non-array value iterates it exactly once, which gives the shorter name:
 
 ```slurp
 {each u in user}
@@ -300,8 +296,6 @@ shorter name:
 ```html
 <p>Bo lives in Lisbon
 ```
-
-This one at least fails loudly. Most Slurp mistakes do not.
 
 ## The iteration budget
 
@@ -328,13 +322,12 @@ Build complete. 1 page(s) emitted.
   the output or by building with `-v`.
 </Warning>
 
-`{repeat}` is worse: it clamps to 1000 with no diagnostic at all, in either
-mode. If you are generating a large number of elements from a count, check the
-count.
+`{repeat}` clamps to 1000 with no diagnostic at all, in either mode. Check the
+count when generating a large number of elements from one.
 
-Paginate server-side rather than relying on either cap. The budgets exist to
-bound a hostile or broken template, not to be a paging strategy. The full list
-is in [Limits](/troubleshooting/limits).
+Paginate server-side rather than relying on either cap. The budgets bound a
+hostile or broken template; they are not a paging strategy. The full list is in
+[Limits](/troubleshooting/limits).
 
 ## Next
 
@@ -343,7 +336,7 @@ is in [Limits](/troubleshooting/limits).
     The loop filters used in `{each}` headers, and the value filters.
   </Card>
   <Card title="Displaying data" icon="code" href="/guides/displaying-data">
-    Truthiness and the comparison rules an `{if}` depends on.
+    Truthiness and comparison rules.
   </Card>
   <Card title="Block tags" icon="book" href="/reference/tags">
     Every tag, with branch order and closing rules.

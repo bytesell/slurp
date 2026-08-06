@@ -1,25 +1,22 @@
 ---
 title: "Sections and blocks"
-description: "Declaring a typed editing schema in a template, so a non-technical person can change a page through a form."
+description: "Schema declarations, setting kinds, blocks, and the merge."
 ---
 
 A section is a template that declares its own editable surface. The declaration
-sits in frontmatter, and a host application turns it into a settings form. So
-somebody who has never seen a `.slurp` file can change a heading, pick an
-alignment, swap an image or reorder a list of questions, and the template they
-are editing is never touched.
+sits in frontmatter, and a host application turns it into a settings form. An
+editor user can change a heading, pick an alignment, swap an image or reorder a
+list of questions without the template being touched.
 
-That division is the whole feature:
+The division of responsibility:
 
 - The **template** owns the markup and says which values are editable.
 - The **host** stores what the editor saved and merges it over the schema.
 - The **editor user** only ever sees a form.
 
-Most engines leave the first part to the surrounding application, which means
-the form and the markup are two separate files that drift apart. Putting the
-schema in the template stops that.
+With the schema in the template, the form and the markup cannot drift apart.
 
-## Declare a section
+## Declaring a section
 
 ```slurp sections/Faq.slurp
 ---
@@ -45,9 +42,9 @@ section {
 </section>
 ```
 
-Three things are being declared. `name` is the human label an editor shows in
-its "add a section" list. `settings` are the fields on the form. `blocks` are
-the repeatable child items, each with its own settings, which is how a list a
+Three things are declared. `name` is the label an editor shows in its "add a
+section" list. `settings` are the fields on the form. `blocks` are the
+repeatable child items, each with its own settings, which is how a list a
 merchant can add to and reorder is expressed.
 
 A section **must** have a `name`. Leaving it out is
@@ -131,7 +128,7 @@ one produces:
 ```
 
 The second block shows `?`, the schema default for `question`, because the
-editor never filled it in. That is the merge doing its job.
+editor never filled it in. That is the merge substituting the default.
 
 ## Blocks
 
@@ -208,7 +205,7 @@ blocks { @theme(heading, button) }         {* only these two *}
 blocks { faq_item { settings { question: text } } }  {* inline, this section only *}
 ```
 
-Two rules that are easy to get backwards:
+Two rules:
 
 - **A bare `@theme` always wins over a whitelist**, whatever order they appear
   in. Widening is never silently narrowed.
@@ -216,17 +213,16 @@ Two rules that are easy to get backwards:
   declares its own `heading` keeps it, so adding a `heading` to the theme
   palette can never change how an existing section renders.
 
-`@theme()` with no names is an error, and the message tells you to write a bare
-`@theme` if you meant "everything".
+`@theme()` with no names is an error, and the message names the bare `@theme`
+form.
 
 <Warning>
   **A `@theme` block with no catalog is dropped from the render.** The catalog is
   built by the host from the theme's `blocks/` files and passed into the merge.
   Without it, a targeted block is an unknown type, so the merge drops it while
   the saved state survives untouched in storage. The page renders as though
-  nothing had been added, and nothing is reported. This is the most surprising
-  behaviour in the schema system, and it is a host integration bug rather than a
-  template one.
+  nothing had been added, and nothing is reported. This is a host integration
+  bug rather than a template one.
 </Warning>
 
 ## The merge is tolerant
@@ -236,7 +232,7 @@ that a theme upgrade must not be able to break a stored page, and a stored page
 must not be able to break a render. So every mismatch resolves to something
 valid rather than to an error.
 
-Here is a real merge. The schema is the nine-kind example above, plus a
+A worked merge. The schema is the nine-kind example above, plus a
 `faq_item { max: 2 settings { question: text  answer: richtext } }` block. The
 saved state is wrong in every way at once:
 
@@ -285,7 +281,7 @@ saved state is wrong in every way at once:
 }
 ```
 
-Reading that output line by line is the fastest way to learn the rules:
+The rules, line by line:
 
 - `heading` was a number, so the **default** was kept.
 - `align` was not one of the options, so the default was kept.
@@ -360,10 +356,10 @@ above and one `faq_item` block comes out like this:
 }
 ```
 
-Everything a form needs is there: the control to render comes from `type`, the
-initial value from `default`, the label from `meta.label`, and the constraints
-from `options` or from `meta.min` and `meta.max`. Absent keys are omitted rather
-than emitted as null, so a setting with no default simply has no `default` key.
+The control to render comes from `type`, the initial value from `default`, the
+label from `meta.label`, and the constraints from `options` or from `meta.min`
+and `meta.max`. Absent keys are omitted rather than emitted as null, so a
+setting with no default has no `default` key.
 
 In Rust that is `slurp_compiler::extract_schema` for a section and
 `extract_block_schema` for a block file. The matching render entry point is
@@ -372,10 +368,10 @@ rendering. Use `render_section_with_registry_and_blocks` when the theme has
 `blocks/` files: that is the variant that takes the block catalog, without which
 `@theme` blocks are dropped. See [Embedding with Rust](/reference/rust-api).
 
-## Trying it without a host
+## Rendering without a host
 
 `slurp build` has no concept of a section, but `section` is an ordinary context
-key, so `--globals` can supply one and you can see a section template render:
+key, so `--globals` can supply one and render a section template:
 
 ```json data.json
 {
@@ -403,9 +399,9 @@ slurp build --globals data.json
   when a host calls `render_section`.
 </Warning>
 
-Note also that `slurp build` writes an HTML file for every `.slurp` file outside
-`components/` and `layouts/`, so a `blocks/heading.slurp` will produce a
-`dist/blocks/heading.html` you can ignore.
+`slurp build` also writes an HTML file for every `.slurp` file outside
+`components/` and `layouts/`, so `blocks/heading.slurp` produces a
+`dist/blocks/heading.html` that can be ignored.
 
 ## Next
 

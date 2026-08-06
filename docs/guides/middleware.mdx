@@ -1,6 +1,6 @@
 ---
 title: "Middleware"
-description: "A request-time gate that runs before a page renders, and why it is a compile flag rather than a directory name."
+description: "The --middleware flag, scope rules, redirects, and the host seam."
 ---
 
 Middleware is a template that decides whether a request should reach a page at
@@ -16,13 +16,13 @@ middleware "auth"
 {/if}
 ```
 
-That is the entire feature. A page never has to ask whether it is allowed to be
-rendered, so a page never has to read the request.
+A page never has to ask whether it is allowed to be rendered, so a page never
+has to read the request.
 
-## It is a compile option, not a path convention
+## Selecting middleware files
 
-Nothing about the filename or the directory makes a file middleware. You say so
-when you compile:
+Nothing about the filename or the directory makes a file middleware. The compile
+flag does:
 
 ```bash
 slurp validate --dir . --middleware middleware
@@ -56,8 +56,8 @@ guess from a path.
   The failure direction is the safe one. The dangerous direction is a **typo**:
   `--middleware midleware` names a directory that does not exist, selects
   nothing, and reports the same scope violations with no hint that the flag
-  missed. If middleware you expected to be checked is reporting `request.*`
-  errors, check the spelling of the flag before the template.
+  missed. If middleware that should be checked reports `request.*` errors, check
+  the spelling of the flag before the template.
 </Warning>
 
 ### What the flag selects
@@ -76,7 +76,7 @@ guess from a path.
   of it is skipped silently.
 </Note>
 
-## It is checked, then skipped
+## Checked, never emitted
 
 Middleware produces no output file. `slurp build` compiles it, runs the security
 walk over it, and moves on:
@@ -96,9 +96,8 @@ Build complete. 1 page(s) emitted, 2 component/layout file(s) checked, 1 middlew
 Emitting it would be meaningless. It runs per request in the host, and writing
 a `.html` for it would put a file in `dist/` that no route ever serves.
 
-Checking it is the point. Its scope rules are inverted, so the ordinary page
-walk reports every correct middleware file as a violation and lets a broken one
-through.
+Its scope rules are inverted, so the ordinary page walk reports every correct
+middleware file as a violation and lets a broken one through.
 
 ## The scope rules are inverted
 
@@ -129,14 +128,13 @@ gets everything else: the server puts it in the render context. A page reading
 cookies directly is a page whose output depends on data the host did not choose
 to give it.
 
-## What middleware can and cannot do
+## Available language features
 
-It has the whole template language available, minus the data. In practice that
-means `{if}`, `{match}` and comparisons over `request.*`, and then a
-`{redirect "/somewhere"}` or a `{next}`.
+Middleware has the whole template language available, minus the data. In
+practice that means `{if}`, `{match}` and comparisons over `request.*`, and then
+a `{redirect "/somewhere"}` or a `{next}`.
 
-What it does not have is everything the language does not have anywhere. Two of
-those bite here specifically:
+The language's general limits apply. Two matter here:
 
 <Warning>
   **There is no clock, and there are no callable functions.** `Date.now()` parses
@@ -166,10 +164,10 @@ request. Expect this seam to move before 1.0.
 
 <CardGroup cols={2}>
   <Card title="Writing pages" icon="file-code" href="/guides/pages">
-    Where page data comes from, now that it is not the request.
+    File-based routing, page data, and output paths.
   </Card>
   <Card title="Project structure" icon="folder-tree" href="/project-structure">
-    Which directories the compiler treats specially, and which it does not.
+    Special directories, output paths, and static assets.
   </Card>
   <Card title="Errors" icon="triangle-exclamation" href="/reference/errors">
     Every diagnostic code, including the two on this page.

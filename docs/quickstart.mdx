@@ -1,10 +1,10 @@
 ---
 title: "Quickstart"
-description: "Build a page, extract a component, and put it in a layout."
+description: "Building a page, extracting a component, and adding a layout."
 ---
 
 This walks through a small project from an empty directory to a rendered page.
-It takes about five minutes and assumes nothing beyond a terminal.
+It takes about five minutes and requires only a terminal.
 
 <Steps>
   <Step title="Install the compiler">
@@ -18,8 +18,8 @@ It takes about five minutes and assumes nothing beyond a terminal.
     slurp --version
     ```
 
-    If you would rather not install Rust, see [Installation](/installation) for
-    the other options.
+    For options that do not need a Rust toolchain, see
+    [Installation](/installation).
   </Step>
 
   <Step title="Create a project">
@@ -48,7 +48,7 @@ It takes about five minutes and assumes nothing beyond a terminal.
     </html>
     ```
 
-    Three things are happening. `${ }` interpolates a value and escapes it for
+    Three constructs are in use. `${ }` interpolates a value and escapes it for
     wherever it lands. `{each}` loops, with `{empty}` as the branch taken when
     there is nothing to loop over. `| sort` and `| currency` are filters, which
     transform a value on its way out.
@@ -88,14 +88,13 @@ It takes about five minutes and assumes nothing beyond a terminal.
     <!doctype html><body><h1>My Shop</h1><p>Pen - $3.00<p>Notebook - $12.50
     ```
 
-    The output is minified, and the products came out cheapest first because of
-    the `sort` filter. Note that `${ }` escaped everything on the way out, so a
-    product named `<script>` would render as text rather than as a tag.
+    The output is minified, and the `sort` filter ordered the products cheapest
+    first. `${ }` escaped everything on the way out, so a product named
+    `<script>` renders as text rather than as a tag.
 
     <Tip>
-      Add `--verbose` while you are developing. Slurp fails quietly,
-      and `--verbose` is what turns silent truncations and unresolved values
-      into printed warnings.
+      Add `--verbose` while developing. Slurp fails quietly, and `--verbose`
+      turns silent truncations and unresolved values into printed warnings.
     </Tip>
   </Step>
 
@@ -133,8 +132,7 @@ It takes about five minutes and assumes nothing beyond a terminal.
     <Warning>
       Write `product={product}`, with braces. A quoted prop is a literal
       string, so `product="product"` passes the seven-character word rather than
-      the object. This is the single most common Slurp mistake and it fails
-      silently.
+      the object. This is the most common Slurp mistake and it fails silently.
     </Warning>
 
     Files under `components/` are not pages. Slurp checks them and does not emit
@@ -175,8 +173,8 @@ It takes about five minutes and assumes nothing beyond a terminal.
     <Warning>
       A layout does not receive props. Passing one has no effect, and a `props`
       default declared inside a layout is never applied either. Read shared
-      values from page globals instead, or use a component when you need to
-      pass something in. Components do both correctly.
+      values from page globals instead, or use a component, which does receive
+      props and does apply their defaults.
     </Warning>
   </Step>
 
@@ -203,7 +201,7 @@ It takes about five minutes and assumes nothing beyond a terminal.
   </Step>
 </Steps>
 
-## What you built
+## Result
 
 ```
 hello/
@@ -220,20 +218,20 @@ hello/
 
 <CardGroup cols={2}>
   <Card title="Project structure" icon="folder-tree" href="/project-structure">
-    Which directories are special, and which are just yours.
+    Special directories, output paths, and static assets.
   </Card>
   <Card title="Displaying data" icon="code" href="/guides/displaying-data">
-    What `${ }` can contain, and what it cannot.
+    Expressions, property access, and operators.
   </Card>
   <Card title="Common mistakes" icon="triangle-exclamation" href="/troubleshooting/common-mistakes">
-    The silent failures, collected in one place. Worth reading early.
+    The silent failures, collected in one place.
   </Card>
   <Card title="Filters" icon="filter" href="/guides/filters">
-    Formatting values, and why arguments must be literals.
+    Formatting values, and literal filter arguments.
   </Card>
 </CardGroup>
 
-## A note on data in production
+## Data in production
 
 `--globals` is build-time data, which suits a static site. When Slurp is
 embedded in a server, the context arrives per request from the host instead and

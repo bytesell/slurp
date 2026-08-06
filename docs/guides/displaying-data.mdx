@@ -1,13 +1,12 @@
 ---
 title: "Displaying data"
-description: "Reading values out of the render context, what an expression can contain, and what it cannot."
+description: "Expressions, property access, operators, and truthiness."
 ---
 
-A template renders against a JSON context. Everything on the page comes from
-reading values out of that context and interpolating them, so this is the part
-of Slurp you use constantly.
+A template renders against a JSON context. Page content comes from reading
+values out of that context and interpolating them.
 
-## Interpolate a value
+## Interpolation
 
 ```slurp
 <h1>${ site.title }</h1>
@@ -19,8 +18,8 @@ of Slurp you use constantly.
 ```
 
 The output is minified, which is why the closing `</p>` is missing. HTML makes
-it optional there and Slurp drops it. Expect that in every output sample on
-these pages.
+it optional there and Slurp drops it. Every output sample on these pages is
+minified.
 
 Use the `${ }` form. A bare `{ }` means exactly the same thing and is accepted,
 but it reads ambiguously next to a block tag such as `{if}`, so these guides
@@ -28,11 +27,11 @@ use `${ }` throughout.
 
 Everything interpolated is escaped for the context it lands in. A value
 containing `<script>` renders as text in a paragraph, and as an escaped
-attribute value in an attribute. You do not opt into that and there is nothing
-to remember. See [Escaping](/guides/escaping) for the details and for the one
-tag that bypasses it.
+attribute value in an attribute. Escaping is always on. See
+[Escaping](/guides/escaping) for the details and for the one tag that bypasses
+it.
 
-## Read properties
+## Property access
 
 Dots walk into objects, brackets index arrays and string keys.
 
@@ -51,8 +50,7 @@ A dynamic index works, including with an `{each}` loop index. After a `.` only
 an identifier is accepted, so `items.0` is a parse error and `items[0]` is the
 only spelling.
 
-Navigation is null-safe at every depth. There is no `?.` operator in the
-language because there is nothing to guard against.
+Navigation is null-safe at every depth, and there is no `?.` operator.
 
 ## Missing values render nothing
 
@@ -69,17 +67,14 @@ A property that is not there resolves to null and renders the empty string. So
 does a whole missing chain. Nothing is reported, at any stage.
 
 <Warning>
-  This is the single most important thing to know about Slurp, and it is the
-  root of most time lost to it. A typo in a property name does not raise, it
-  renders a page that looks almost right with one thing quietly blank. If a
-  value is not appearing, suspect the spelling of the path before you suspect
-  anything else.
+  A typo in a property name does not raise. It renders a page that looks almost
+  right with one thing quietly blank, and this is the root of most time lost to
+  Slurp. If a value is not appearing, check the spelling of the path first.
 </Warning>
 
-Slurp is built to render templates the host did not write, where aborting a
-page because one field is absent is the wrong trade. Build with `--verbose`
-while you work, and read
-[Common mistakes](/troubleshooting/common-mistakes) early.
+Slurp renders templates the host did not write, where aborting a page because
+one field is absent is the wrong trade. Build with `--verbose`, and read
+[Common mistakes](/troubleshooting/common-mistakes).
 
 ## Operators
 
@@ -136,9 +131,9 @@ against string actually compare. Every other pairing is treated as equal, so
 are not equal either. A string that looks like a number loses every comparison
 it is in.
 
-That matters because server data arrives as strings more often than you expect.
-Postgres and most other databases serialise a decimal to JSON as a string, so
-a price or a stock count is frequently `"10"` rather than `10`. Coerce it:
+Server data arrives as strings often. Postgres and most other databases
+serialise a decimal to JSON as a string, so a price or a stock count is
+frequently `"10"` rather than `10`. Coerce it:
 
 ```slurp
 {if (product.stock | int) > 0}
@@ -154,7 +149,7 @@ a price or a stock count is frequently `"10"` rather than `10`. Coerce it:
 `null`, `false`, `0`, the empty string, the empty array and the empty object
 are falsy. Everything else is truthy.
 
-Two of those differ from JavaScript and both come up in real templates:
+Two of those differ from JavaScript:
 
 - An empty array is falsy, so `{if cart.items}` is a valid emptiness check.
 - The strings `"0"` and `"false"` are truthy, because they are non-empty
@@ -163,9 +158,8 @@ Two of those differ from JavaScript and both come up in real templates:
 
 ## What expressions cannot do
 
-Slurp expressions are not a small programming language. A template cannot run
-code at render time, which is what makes it safe to render a template you did
-not write. Several habits carried over from other engines silently produce
+Slurp expressions are not a programming language. A template cannot run code at
+render time. Several habits carried over from other engines silently produce
 nothing.
 
 **There are no callable functions.** A call parses and always evaluates to
@@ -180,8 +174,8 @@ null, with no diagnostic:
 <p>[]<p>[]
 ```
 
-`items.length` is the same story: there are no array properties or methods at
-all. The only call-shaped construct in the language is a filter.
+`items.length` behaves the same way: there are no array properties or methods.
+The only call-shaped construct in the language is a filter.
 
 | Reaching for | Write instead |
 |---|---|
@@ -193,8 +187,8 @@ all. The only call-shaped construct in the language is a filter.
 
 **These operators do not exist:** `===`, `!==`, `??`, `?.`, `in`, `**`,
 `typeof`, `instanceof`, every bitwise operator, every assignment operator, and
-arrow functions. Unlike a bad property name, writing one of these is a real
-parse error, so you find out immediately.
+arrow functions. Unlike a bad property name, writing one of these is a parse
+error rather than a silent failure.
 
 **There are no array or object literals.** Both `[1, 2]` and `{a: 1}` are parse
 errors. Pass collections in through the render context.
@@ -243,7 +237,7 @@ interpolation is considered at all. So a double-quoted string key inside a
 double-quoted attribute truncates the attribute and turns the remainder into
 stray attributes. Nothing is reported by the compiler.
 
-Two spellings work. Use whichever reads better:
+Two spellings work:
 
 ```slurp
 <div title={ settings.labels["cart"] }>
@@ -278,9 +272,9 @@ When Slurp is embedded in a server the picture changes: the host supplies the
 context per request, and `--globals` covers only the values a theme must
 resolve at compile time. See [Embedding with Rust](/reference/rust-api).
 
-Inside the template there is no difference between the two. A page cannot tell
-where its context came from, which is what lets you develop a theme against a
-fixture file and ship it against live data.
+Inside the template there is no difference between the two: a page cannot tell
+where its context came from. A theme can therefore be developed against a
+fixture file and shipped against live data.
 
 ## Next
 
@@ -292,7 +286,7 @@ fixture file and ship it against live data.
     Formatting values on the way out.
   </Card>
   <Card title="Escaping" icon="lock" href="/guides/escaping">
-    What is escaped where, and the one way to bypass it.
+    Per-context escaping, and the unescaped forms.
   </Card>
   <Card title="Expressions" icon="book" href="/reference/expressions">
     The full grammar, precedence table and operator semantics.

@@ -1,6 +1,6 @@
 ---
 title: "Frontmatter"
-description: "Every frontmatter directive, its exact syntax, and what happens to the ones that do not exist."
+description: "Frontmatter directives and their syntax."
 ---
 
 Frontmatter is the block between two `---` lines at the top of a `.slurp` file. The
@@ -48,7 +48,7 @@ statements accumulate. A second `section { }` or a second `block { }` is an
 
 <Warning>
   **Unknown statements are silently skipped.** A misspelled directive produces no
-  diagnostic at all, so a typo does nothing and looks like it did something.
+  diagnostic at all.
 
   ```slurp
   ---

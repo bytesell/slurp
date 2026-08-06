@@ -1,14 +1,13 @@
 ---
 title: "Limits"
-description: "Every resource budget and hard ceiling, with its real number, what crossing it does, and how you find out."
+description: "Resource budgets and hard ceilings, with their values and effects."
 ---
 
-Slurp is built to render templates it did not write and cannot trust. That means
-every recursive walk, every loop and every allocation needs a ceiling, because a
-crafted template must not be able to pin a render thread or exhaust a shared
-process.
+Slurp renders templates it did not write and cannot trust, so every recursive
+walk, every loop and every allocation carries a ceiling: a crafted template must
+not be able to pin a render thread or exhaust a shared process.
 
-One design rule governs the whole table:
+One rule governs the whole table:
 
 <Warning>
   **Exceeding a budget truncates the output. It does not abort the render.** A
@@ -96,7 +95,7 @@ rendering stops emitting and records:
 warning[IterationLimitExceeded]: Render output budget (16777216 bytes) exceeded; output truncated (0:0)
 ```
 
-The page is written out. It just ends early, mid-markup.
+The page is written out. It ends early, mid-markup.
 
 ### 8 MiB per filter value, 64 MiB of filter work
 
@@ -111,9 +110,9 @@ Nothing else catches that shape. The output budget bounds what is **emitted** an
 the iteration budget bounds how often a loop **runs**, but a filter chain emits
 nothing until it finishes, so neither ever sees an intermediate value.
 
-- **8 MiB per value** is what makes the doubling unreachable. It is per-value
-  rather than cumulative: growth is multiplicative, so the first intermediate to
-  cross the cap ends the chain before the next doubling.
+- **8 MiB per value** puts the doubling out of reach. It is per-value rather
+  than cumulative: growth is multiplicative, so the first intermediate to cross
+  the cap ends the chain before the next doubling.
 
   ```
   error[IterationLimitExceeded]: Filter 'json' produced 8388616 bytes, over the
@@ -170,8 +169,8 @@ Past 96, the subtree renders as empty and one warning is recorded:
 warning[IterationLimitExceeded]: Maximum render depth (96) exceeded; subtree omitted (0:0)
 ```
 
-A deep component chain therefore builds successfully and is simply missing
-everything below the ninety-sixth level.
+A deep component chain therefore builds successfully and is missing everything
+below the ninety-sixth level.
 
 ### Parser nesting depth 64
 
@@ -192,9 +191,9 @@ Both refuse the file outright, before the parser sees anything.
 
 The token cap bounds the memory a single source file can turn into. The mode
 stack bounds nesting of the lexer's own contexts, where `${`, a backtick, a tag
-and each block tag all push a mode. It exists so that a 600 KB file of `` ${` ``
-costs a bounded amount of work, rather than producing a multi-million-token
-stream the parser then walks only to reject.
+and each block tag all push a mode. It bounds the work a 600 KB file of
+`` ${` `` costs, rather than producing a multi-million-token stream the parser
+then walks only to reject.
 
 ```
 Template is too complex: more than 2000000 tokens
@@ -234,8 +233,7 @@ provide. A tokio SSR worker's default stack is not enough for 96 frames of
 element rendering.
 
 On **wasm** there is no way to grow the stack, so this is a no-op and the depth
-caps alone keep it safe. Nothing changes about the numbers; they are simply doing
-more of the work there.
+caps alone keep it safe. Nothing changes about the numbers.
 
 ---
 
@@ -260,7 +258,7 @@ the editor saves and the page does not display.
 ## Smaller ceilings
 
 - **`fixed(n)` precision 100.** `n` is a template literal, not a rendered value,
-  so this is a footgun guard rather than a trust boundary. Without it a typo of
+  so this guards against a typo rather than being a trust boundary. Without it
   `fixed(1000000)` allocates a megabyte per call for nothing. Larger values are
   clamped, silently.
 - **`{html ... sanitize}` keyword lookahead, 4,096 characters.** The lexer scans
@@ -276,8 +274,6 @@ the editor saves and the page does not display.
 ---
 
 ## Things that are not limits
-
-People go looking for these, so they are named here.
 
 - **There is no per-layout depth ceiling.** `LayoutDepthExceeded` is a declared
   error code that the compiler never emits; layout chains are bounded by the
@@ -295,7 +291,7 @@ compiler actually produces.
 
 ## How to tell a budget was hit
 
-In rough order of how much you will use them:
+In rough order of usefulness:
 
 1. **`slurp build -v`.** Every budget above that records anything records it
    here. Without `-v`, only the errors print.
@@ -311,4 +307,4 @@ In rough order of how much you will use them:
    `render_dev` both surface them. See the
    [JavaScript API](/reference/javascript-api).
 5. **Output length.** A page that ends mid-tag at almost exactly 16 MiB hit the
-   output budget, whatever else you were suspecting.
+   output budget.

@@ -1,6 +1,6 @@
 ---
 title: "Project structure"
-description: "How the input tree becomes the output tree, which directories are special, and which are only convention."
+description: "Input and output trees, special directories, static assets, and import resolution."
 ---
 
 A Slurp project is a directory of `.slurp` files. There is no config file, no
@@ -54,8 +54,6 @@ dist/
   pages/product.html
 ```
 
-Three things in that listing surprise people.
-
 ## The output tree mirrors the input tree
 
 There is no rewriting. A `.slurp` file keeps its relative path and changes
@@ -71,7 +69,7 @@ extension, so `pages/index.slurp` becomes `dist/pages/index.html`, and
 | `components/Card.slurp` | nothing |
 | `layouts/base.slurp` | nothing |
 
-## Two directories are special, and only two
+## Special directories
 
 `components/` and `layouts/` are compiled and checked but never written out. A
 component or a layout rendered on its own is a fragment rather than a document,
@@ -94,11 +92,10 @@ filter in a component that no page imports yet still fails the build.
 The compiler does not require it. A lone `index.slurp` at the root builds to
 `dist/index.html`, which is what the [Quickstart](/quickstart) does.
 
-What makes `pages/` worth using is the other end: `slurp-dev` and the hosts that
-embed Slurp route an extensionless request path into it, resolving `/` to
-`pages/index.html` and `/product` to `pages/product.html` or
-`pages/product/index.html`. Anything with a file extension is served straight
-from the theme root as an asset.
+`slurp-dev` and the hosts that embed Slurp route an extensionless request path
+into it, resolving `/` to `pages/index.html` and `/product` to
+`pages/product.html` or `pages/product/index.html`. Anything with a file
+extension is served straight from the theme root as an asset.
 
 `slurp build` also prints a warning when it emits no pages at all, and that
 warning names `pages/`:
@@ -114,9 +111,9 @@ A build of only components and middleware is legal and produces nothing.
 ## Static assets are copied verbatim
 
 Every non-`.slurp` file in the input tree is copied to the output at the same
-relative path. There is no assets directory and no manifest: put your CSS,
-images, fonts and JavaScript wherever the markup references them, and they land
-in the same place.
+relative path. There is no assets directory and no manifest: CSS, images, fonts
+and JavaScript go wherever the markup references them, and they land at the same
+path.
 
 ```
 assets/css/theme.css   ->   dist/assets/css/theme.css
@@ -147,8 +144,8 @@ slurp build --globals mock-context.json
 
 `--globals` seeds the render context with values a template must resolve at
 compile time. It is read and **not** copied to the output, even though it sits
-inside the input tree in the obvious layout. That is why it is singled out: the
-copy used to ship it to production at a guessable path.
+inside the input tree in the obvious layout. An earlier version of the copy walk
+shipped it to production at a guessable path.
 
 <Warning>
   A `--globals` file that is missing, malformed, or not a JSON object is
@@ -158,8 +155,9 @@ copy used to ship it to production at a guessable path.
   Globals file bad.json must contain a JSON object
   ```
 
-  The reason to pass one is that some attribute cannot be written without it, so
-  a build that silently continued would come out clean and break in the browser.
+  A globals file is passed because some attribute cannot be written without it,
+  so a build that silently continued would come out clean and break in the
+  browser.
 </Warning>
 
 Commit the globals file. It holds no secrets, and without it a fresh clone builds
@@ -176,9 +174,9 @@ using "@layouts/base"
 ---
 ```
 
-`@components/ui/Card` resolves `components/ui/Card.slurp`, so nesting works and
-there is nothing to configure. The local name is the last path segment, or the
-alias if you write `using "./Card" as Renamed`.
+`@components/ui/Card` resolves `components/ui/Card.slurp`, so nesting works with
+no configuration. The local name is the last path segment, or the alias in
+`using "./Card" as Renamed`.
 
 <Warning>
   An unresolvable import does not fail the build. `<Nope title="x" />` renders as
@@ -193,7 +191,7 @@ slurp gitignore
 ```
 
 Writes a `.gitignore` suited to a theme into the current directory. It refuses
-rather than clobbering an existing one, and tells you the three ways forward:
+rather than clobbering an existing one, and prints the three options:
 
 ```
 .\.gitignore already exists.
@@ -203,18 +201,17 @@ rather than clobbering an existing one, and tells you the three ways forward:
   --stdout   print the template and write nothing
 ```
 
-The rules it adds are short and unsurprising: `dist/`, `node_modules/`, `.env`,
-editor droppings. The useful half of the file is the part naming what must
-**not** be ignored.
+The rules it adds are `dist/`, `node_modules/`, `.env` and editor files. The
+rest of the file names what must **not** be ignored.
 
 <Warning>
   **Commit your compiled CSS.** If the theme compiles a stylesheet with Tailwind
   or anything else, the compiled output is committed alongside the source, and
   it must compile to a path the theme actually serves rather than into `dist/`.
 
-  A well-meaning `*.css` or `styles/` line in `.gitignore` breaks this
-  invisibly: the theme publishes, every page renders, every static check stays
-  green, and every page is unstyled HTML because the stylesheet 404s.
+  A `*.css` or `styles/` line in `.gitignore` breaks this invisibly: the theme
+  publishes, every page renders, every static check stays green, and every page
+  is unstyled HTML because the stylesheet 404s.
 </Warning>
 
 The globals file and a `theme.json` manifest, if you have one, are committed for
@@ -224,13 +221,13 @@ the same reason: they are inputs, not build artifacts.
 
 <CardGroup cols={2}>
   <Card title="Writing pages" icon="file-code" href="/guides/pages">
-    Routing, data, and how a page becomes a file.
+    File-based routing, page data, and output paths.
   </Card>
   <Card title="Components" icon="cube" href="/guides/components">
-    Props, slots, and the quoted-prop trap.
+    Props, slots, and imports.
   </Card>
   <Card title="Middleware" icon="shield" href="/guides/middleware">
-    Why `middleware/` is a flag rather than a directory name.
+    The `--middleware` flag, scope rules, and redirects.
   </Card>
   <Card title="CLI" icon="terminal" href="/tooling/cli">
     Every subcommand and flag.

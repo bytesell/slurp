@@ -1,6 +1,6 @@
 ---
 title: "Block tags"
-description: "Every block tag, its exact syntax, its branches, and the closing rules."
+description: "Block tags, their branches and closing rules."
 ---
 
 Block tags are written in braces: `{if}`, `{each}`, `{/each}`. The lexer recognises
@@ -102,7 +102,7 @@ Four variables are bound automatically inside the body.
 
 These four names are resolved by a flat-key fast path, so exactly `loop.index`,
 `loop.count`, `loop.first` and `loop.last` are shadowed inside a loop. Any other
-property of a real `loop` object in your context still resolves normally.
+property of a real `loop` object in the context still resolves normally.
 
 ```slurp
 {* with loop = { index: "REAL", custom: "MINE" } in the context *}
@@ -263,14 +263,13 @@ table thead tbody tfoot tr th td caption colgroup col time data address details
 summary
 ```
 
-Everything else is removed by absence rather than as a special case, which is what
-strips `<script>`, `<iframe>`, `<form>` and `<style>`. Attributes work the same
-way. URL schemes are limited to `http`, `https` and `mailto`.
+Everything else is removed by absence rather than as a special case, including
+`<script>`, `<iframe>`, `<form>` and `<style>`. Attributes work the same way. URL
+schemes are limited to `http`, `https` and `mailto`.
 
 <Note>
   **Every sanitized `<a>` gains `rel="noopener noreferrer"`,** not only one that
-  carries a `target`. That is stricter than the requirement, and a test pins it so
-  nobody narrows it later.
+  carries a `target`. That is stricter than the requirement, and a test pins it.
 
   `srcset` is not on the attribute allowlist: the scheme check does not parse its
   comma-separated candidate grammar.

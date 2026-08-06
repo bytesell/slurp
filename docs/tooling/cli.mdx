@@ -1,6 +1,6 @@
 ---
 title: "CLI"
-description: "Every subcommand and flag of the slurp binary, with what each one is for."
+description: "Subcommands and flags of the slurp binary."
 ---
 
 `cargo install slurp-compiler` gives you one binary, `slurp`, with four
@@ -17,7 +17,7 @@ Nothing takes a positional argument. Every input is a named flag, so
 `slurp build ./site` is a usage error and `slurp build --input ./site` is what
 you meant.
 
-## Turn on --verbose first
+## Warnings and `--verbose`
 
 Slurp is total and tolerant: a loop past its budget is truncated, a missing
 property renders empty, and neither aborts the build. Those are recorded as
@@ -29,7 +29,7 @@ slurp build --verbose
 
 <Warning>
   A build with no `-v` and no errors tells you almost nothing about whether the
-  page is right. This is the single most useful habit while developing.
+  page is right.
 </Warning>
 
 The same is true of `validate`, where the flag is spelled `--warnings`:
@@ -39,8 +39,7 @@ slurp validate --warnings
 ```
 
 The two differ in one detail. `validate` always prints the warning
-**count** in its summary line, even without `-w`, so you can tell there is
-something to look at:
+**count** in its summary line, even without `-w`:
 
 ```
 Validation ok: 1 file(s), 0 error(s), 1 warning(s).
@@ -116,8 +115,7 @@ Building 4 file(s)...
 Build complete. 1 page(s) emitted, 2 component/layout file(s) checked, 1 middleware file(s) checked.
 ```
 
-If a build emits nothing at all, it says so on stderr rather than reporting a
-cheerful zero.
+A build that emits nothing at all says so on stderr.
 
 ### Static assets
 
@@ -148,7 +146,7 @@ so you tell it:
 slurp build --middleware middleware --middleware auth/guards
 ```
 
-Leave the flag off and a perfectly correct middleware file fails:
+Leave the flag off and a correct middleware file fails:
 
 ```
 error[MiddlewareScopeViolation]: request.* is only accessible in middleware files (1:6)
@@ -238,10 +236,10 @@ The server has more options than these three, and reaching them means running
 
 ## slurp gitignore
 
-Writes a `.gitignore` suited to a theme. Most of its value is the section at the
-bottom listing what must **not** be ignored, chiefly a compiled stylesheet:
-ignoring that produces a theme that publishes and renders as unstyled HTML while
-every static check stays green.
+Writes a `.gitignore` suited to a theme. The section at the bottom lists what
+must **not** be ignored, chiefly a compiled stylesheet: ignoring that produces a
+theme that publishes and renders as unstyled HTML while every static check stays
+green.
 
 ```bash
 slurp gitignore
@@ -308,7 +306,7 @@ so a failing pipeline leaves nothing half-built behind.
 
 <CardGroup cols={2}>
   <Card title="Dev server" icon="server" href="/tooling/dev-server">
-    Fixtures, reloads, and what it is not.
+    Fixtures, reloads and security posture.
   </Card>
   <Card title="Working with agents" icon="robot" href="/tooling/agents">
     The MCP server, which answers the same questions without a shell.

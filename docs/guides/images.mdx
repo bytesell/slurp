@@ -1,26 +1,25 @@
 ---
 title: "Images"
-description: "Plain img tags need nothing. The Image component needs a service, and this is what it does."
+description: "The Image component, the image service, and its transform parameters."
 ---
 
-There are two ways to put an image on a page, and the first one is the one you
-already know.
+There are two ways to put an image on a page.
 
-## Plain `<img>` is just HTML
+## Plain `<img>`
 
 ```slurp
 <img src={product.image} alt={product.title} width="600" height="400" />
 ```
 
-No component, no service, no template syntax to learn. `src` and `alt`
-interpolate like any other attribute, and the tag comes out as written:
+No component, no service, no extra syntax. `src` and `alt` interpolate like any
+other attribute, and the tag comes out as written:
 
 ```html
 <img alt=Notebook height=400 src=https://cdn.example.com/p/1.jpg width=600>
 ```
 
-If you already serve images at the sizes and formats you want, stop here. The
-rest of this page is about the case where you do not.
+A site already serving images at the required sizes and formats needs nothing
+further on this page.
 
 <Warning>
   Quote or brace attribute values. Unquoted, `width=600` lexes the value as a
@@ -29,7 +28,7 @@ rest of this page is about the case where you do not.
   is reported.
 </Warning>
 
-## `<Image>` and what it emits
+## The `<Image>` component
 
 `<Image>` is built into the compiler. It renders a `<picture>` offering AVIF and
 WebP with a JPEG fallback, all three pointing at an image service:
@@ -49,7 +48,7 @@ WebP with a JPEG fallback, all three pointing at an image service:
 
 That is wrapped for reading. The real output is one minified line.
 
-So `<Image>` is a URL generator. It does no work at build time and touches no
+`<Image>` is a URL generator. It does no work at build time and touches no
 pixels. Those URLs 404 until something is serving `/_slurp/image`.
 
 ### Props
@@ -79,8 +78,8 @@ error[MissingImageSrc]: <Image> is missing the src prop (1:1)
 ### The URL is fixed and root-relative
 
 `/_slurp/image` is hardcoded. There is no base-path option and no way for a
-theme to point at another host, which means the service has to answer on the
-**same origin as the page**, behind your reverse proxy.
+theme to point at another host, so the service must answer on the **same origin
+as the page**, behind a reverse proxy.
 
 <Warning>
   **`src` has to be an absolute `http` or `https` URL.** A theme-local path
@@ -91,8 +90,8 @@ theme to point at another host, which means the service has to answer on the
   { "error": "invalid source URL" }
   ```
 
-  Use a plain `<img>` for assets you serve yourself, and `<Image>` for remote
-  ones. A `src` that contains reserved characters is percent-encoded for you.
+  Use a plain `<img>` for self-served assets and `<Image>` for remote ones. A
+  `src` containing reserved characters is percent-encoded.
 </Warning>
 
 ## Running the service
@@ -102,8 +101,8 @@ cargo install slurp-image
 slurp-image --port 3001
 ```
 
-One route, `GET /_slurp/image`. Then proxy `/_slurp/image` from your web server
-to port 3001 so the page and the images share an origin.
+One route, `GET /_slurp/image`. Proxy `/_slurp/image` from the web server to
+port 3001 so the page and the images share an origin.
 
 <Warning>
   **The dev server does not serve this route.** `slurp-dev` returns 404 for
@@ -112,8 +111,7 @@ to port 3001 so the page and the images share an origin.
 </Warning>
 
 The defaults are closed. This service fetches URLs an attacker may have chosen,
-so it binds `127.0.0.1` and sends no CORS headers. Widen them only where you
-need to.
+so it binds `127.0.0.1` and sends no CORS headers. Widen only as needed.
 
 ```bash
 slurp-image --bind 0.0.0.0 --cors-allow-origin https://example.com
@@ -122,7 +120,7 @@ slurp-image --bind 0.0.0.0 --cors-allow-origin https://example.com
 There is no authentication, so put it behind a reverse proxy rather than on a
 public port.
 
-### The flags that matter
+### Flags
 
 | Flag | Default | |
 |---|---|---|
@@ -188,11 +186,10 @@ Every error is JSON, shaped `{"error": "..."}`.
 A successful response carries the output MIME type and
 `cache-control: public, max-age=<cache-ttl>`.
 
-## What it refuses, and why
+## Request guards
 
 The service takes a URL from a query string and fetches it, so it is a
-server-side request forgery primitive unless it is written not to be. The guards
-are the feature, not optional hardening:
+server-side request forgery primitive unless written not to be. The guards:
 
 - **Scheme allowlist.** Only `http` and `https`. Anything else is
   `invalid source URL`, including a URL carrying userinfo.
@@ -237,7 +234,7 @@ An attacker requesting many distinct variants therefore cannot fill the disk.
 
 <CardGroup cols={2}>
   <Card title="Components" icon="cube" href="/guides/components">
-    Props, and why a quoted prop is a literal string.
+    Props, scope, slots, and imports.
   </Card>
   <Card title="Image service reference" icon="server" href="/reference/image-service">
     Every parameter, limit and status code.
@@ -246,6 +243,6 @@ An attacker requesting many distinct variants therefore cannot fill the disk.
     The order the guards run in, and what they do not cover.
   </Card>
   <Card title="Dev server" icon="bolt" href="/tooling/dev-server">
-    What it serves, and what it does not.
+    What the dev server serves.
   </Card>
 </CardGroup>

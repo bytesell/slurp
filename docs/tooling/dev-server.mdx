@@ -1,6 +1,6 @@
 ---
 title: "Dev server"
-description: "Serving a theme locally with hot reload, canned data and no backend."
+description: "The slurp-dev server: hot reload, fixtures, dynamic routes and security posture."
 ---
 
 `slurp-dev` serves a built theme on `127.0.0.1`, watches it, and pushes a reload
@@ -20,7 +20,7 @@ That serves the current directory on `http://localhost:3000`.
   use `--source-dir` below to get the rebuild loop.
 </Warning>
 
-## Install it
+## Installation
 
 `slurp dev` is a launcher. The server itself is a separate binary from a
 separate crate, and the launcher looks for it next to the `slurp` binary, then
@@ -30,11 +30,11 @@ on `PATH`:
 cargo install slurp-dev-server
 ```
 
-Without it you get exit code 127 and a message saying how to build it. From a
+Without it the launcher exits 127 with a message saying how to build it. From a
 clone, `cargo build -p slurp-dev-server` puts `slurp-dev` next to `slurp` in
 `target/debug` or `target/release`, which is where the launcher looks first.
 
-## The two ways to run it
+## Run modes
 
 <Tabs>
   <Tab title="Serve a build">
@@ -43,8 +43,8 @@ clone, `cargo build -p slurp-dev-server` puts `slurp-dev` next to `slurp` in
     cd dist && slurp dev
     ```
 
-    Simple, and what `slurp dev` supports directly. Reloads fire on any watched
-    file changing, but nothing recompiles your templates: you rebuild yourself.
+    What `slurp dev` supports directly. Reloads fire on any watched file
+    changing, but nothing recompiles templates: rebuild them yourself.
   </Tab>
   <Tab title="Watch sources and rebuild">
     ```bash
@@ -60,7 +60,7 @@ clone, `cargo build -p slurp-dev-server` puts `slurp-dev` next to `slurp` in
 
 ## Flags
 
-These are `slurp-dev`'s own flags. Through `slurp dev` you get `--port` and
+These are `slurp-dev`'s own flags. `slurp dev` forwards `--port` and
 `--fixtures`, plus a `--bind` that is accepted and ignored.
 
 <ParamField query="--port" type="number" default="3000">
@@ -150,8 +150,7 @@ into a broken page, and fixing the file clears it.
   binary does not use, so you have to ask for logs explicitly:
   `RUST_LOG=slurp_dev=info slurp-dev --port 3000`. That prints the theme
   directory it resolved, the watcher starting, the fixture count and whether the
-  backend answered, which is usually enough to explain "why is nothing
-  happening".
+  backend answered.
 </Tip>
 
 ## Fixtures
@@ -202,17 +201,16 @@ file as-is, which is usually a skeleton.
 
 ## Security posture
 
-It binds `127.0.0.1` unconditionally, and that is not the interesting part.
-Binding loopback does not stop a web page you have open from talking to it, so
-there are two checks that do:
+It binds `127.0.0.1` unconditionally. Binding loopback does not stop an open web
+page from talking to it, so there are two further checks:
 
 - **Host.** A request whose `Host` header names anything but `localhost`,
-  `127.0.0.1` or `[::1]` is refused with a 403 explaining why. This is what
-  makes DNS rebinding fail: an attacker pointing their own domain at
-  `127.0.0.1` makes the browser treat their page as same-origin with your dev
-  server, and the `Host` header is the only place that lie is visible.
+  `127.0.0.1` or `[::1]` is refused with a 403 explaining why. DNS rebinding
+  fails on this check: an attacker pointing their own domain at `127.0.0.1`
+  makes the browser treat their page as same-origin with the dev server, and the
+  `Host` header is the only place that lie is visible.
 - **Origin.** A present but foreign `Origin` is refused on every route. Without
-  it, a cross-site simple request could drive the backend proxy with your
+  it, a cross-site simple request could drive the backend proxy with the user's
   cookies attached. An absent `Origin` is allowed, because a normal navigation
   and a plain `curl` both send none.
 
@@ -231,13 +229,13 @@ That admits `mytheme.test` and nothing else. Path traversal is refused in every
 encoding, including through the dynamic-route and SSR branches, and the proxy
 does not relay the upstream's `access-control-allow-origin` header: a permissive
 dev backend answering `*` must not hand a foreign page read access to responses
-fetched with your cookies.
+fetched with the user's cookies.
 
 <Warning>
   **This is a development server. Do not expose it.** It is not hardened for
   network exposure, it sets `cache-control: no-store` on everything, it does no
-  compression, and it will happily proxy to whatever `--backend-url` you gave
-  it. Ship the output of `slurp build` from an ordinary static host instead.
+  compression, and it proxies to whatever `--backend-url` it was given. Ship the
+  output of `slurp build` from an ordinary static host instead.
 </Warning>
 
 ## Status
@@ -258,6 +256,6 @@ forwards a small part of it, and the flags it does not forward may still move.
     Routing, and how a page becomes a file.
   </Card>
   <Card title="Common mistakes" icon="triangle-exclamation" href="/troubleshooting/common-mistakes">
-    Why a page can reload cleanly and still be wrong.
+    Failures that survive a clean reload.
   </Card>
 </CardGroup>

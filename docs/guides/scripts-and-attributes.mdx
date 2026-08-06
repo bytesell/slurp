@@ -1,15 +1,13 @@
 ---
 title: "Scripts and attributes"
-description: "Getting server values into HTML attributes and script bodies, and choosing between | js and | json."
+description: "Attribute interpolation, script bodies, and the | js and | json filters."
 ---
 
-Most of the time `${ }` needs no thought: you write it, and the value comes out
-escaped for wherever it landed. Attributes and `<script>` bodies are where that
-stops being uniform, because a browser reads those two places with different
-parsers and no single escaper is correct in both.
+`${ }` normally comes out escaped for wherever it landed. Attributes and
+`<script>` bodies are where that stops being uniform: a browser reads those two
+places with different parsers, and no single escaper is correct in both.
 
-This page is the practical version of that. If you have hit
-`error[UnsafeScriptInterpolation]` and want the fix, skip to
+For a fix to `error[UnsafeScriptInterpolation]`, skip to
 [Choosing between `| js` and `| json`](#choosing-between-js-and-json).
 
 ## Ordinary attributes need nothing
@@ -38,7 +36,7 @@ this page applies to it.
   identically.
 </Note>
 
-## A `<script>` body will not guess
+## Interpolation in a `<script>` body
 
 Write an interpolation in a script body with no filter and the build fails:
 
@@ -118,7 +116,7 @@ handles values that are not strings, which `| js` does not:
   at all.
 </Tip>
 
-### What going wrong looks like
+### Using `| js` in code position
 
 `| js` in code position compiles, because the filter is present and that is all
 the script-body rule checks. What it emits is a bare, unquoted value:
@@ -173,8 +171,8 @@ Then in `cart.js`:
 const cart = JSON.parse(document.getElementById('cart').textContent);
 ```
 
-This keeps your JavaScript in a real `.js` file where an editor and a linter can
-see it, and the only thing the template generates is data. `{$let name = expr}`
+This keeps the JavaScript in a `.js` file where an editor and a linter can see
+it, and the template generates only data. `{$let name = expr}`
 does the same thing with slurp's own spelling, emitting a
 `<script type="application/json" data-slurp-let="name">` payload for the browser
 runtime to pick up.
@@ -228,7 +226,7 @@ Quote the slot (`'${ v | js }'`), or use `| json` for a bare JSON value, or
 verbatim. A false claim turns the automatic escaper off and puts nothing in its
 place, so it is refused rather than ignored.
 
-### You can leave the filter off
+### Omitting the filter
 
 An undeclared slot in a JavaScript-evaluated attribute is not an error. The
 compiler escapes it for the position it found:
@@ -251,8 +249,8 @@ filter off stays legal because comparing against a count or a loop index is a
 normal thing to write and cannot be proved safe or unsafe statically.
 
 In development mode the renderer records an advisory on every undeclared slot,
-naming the attribute and telling you which filter would state your intent. It is
-silent in `slurp build`, which always renders in production mode.
+naming the attribute and the filter that would state the intent. It is silent in
+`slurp build`, which always renders in production mode.
 
 <Note>
   `| unsafe_js` is the escape hatch for the opposite case: JavaScript the theme
@@ -278,7 +276,7 @@ With `path` set to `a);color:red;x:url(b`:
 ```
 
 `:` and `/` are kept, because neither can open a new declaration on its own and
-both are needed by the `background:url(...)` shape this exists to support.
+both are needed by the `background:url(...)` shape.
 
 The consequence for ordinary use is that a value carrying legitimate punctuation
 arrives mangled. A CSS custom property set from a schema `color` setting is
@@ -293,9 +291,9 @@ changed a value.
   `style` attribute or in a custom property, not in a stylesheet body.
 </Warning>
 
-## Two traps that fail quietly
+## Two silent failures
 
-### A JavaScript template literal in an attribute gets eaten
+### JavaScript template literals in attributes
 
 ```slurp
 <a :href="`/product/${ item.slug }`">View</a>
@@ -304,13 +302,13 @@ changed a value.
 Slurp interpolates `${ }` in attribute values itself, so this slot is evaluated
 against the **server** render context rather than the browser's. If `item` is a
 client-side variable it resolves to nothing and the link renders as
-`` `/product/` ``, with no runtime error and nothing else to notice. You get a
-page that looks built and has dead links scattered through it.
+`` `/product/` ``, with no runtime error. The page looks built and carries dead
+links.
 
 This is diagnosed as a `JsTemplateLiteralInAttribute` warning, which `slurp
-validate --warnings` and `slurp build -v` will show you. It is a warning rather
-than an error because interpolating a genuine server value inside backticks is
-legal, and the compiler cannot tell the two apart.
+validate --warnings` and `slurp build -v` print. It is a warning rather than an
+error because interpolating a genuine server value inside backticks is legal,
+and the compiler cannot tell the two apart.
 
 ```slurp
 <a :href="'/product/' + item.slug">View</a>   {* client-side value *}
@@ -355,8 +353,7 @@ expression, or the brace form, which is not quote-delimited:
 
 <CardGroup cols={2}>
   <Card title="How escaping works" icon="lock" href="/guides/escaping">
-    The full set of contexts, what each one does, and where the trust boundary
-    sits.
+    Every escaping context, and the unescaped forms.
   </Card>
   <Card title="Security model" icon="shield-check" href="/security-model">
     The threat model behind these rules, with the enforcing symbol named for

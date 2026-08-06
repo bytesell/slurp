@@ -1,6 +1,6 @@
 ---
 title: "Pages and routing"
-description: "How a .slurp file becomes an HTML file, which files are pages, and where page data comes from."
+description: "File-based routing, output paths, page data, and dynamic routes."
 ---
 
 A page is a `.slurp` file that Slurp writes an HTML file for. There is no route
@@ -23,8 +23,8 @@ site/                       dist/
 ```
 
 Nested directories are created as needed. Nothing is renamed, flattened or
-given a trailing slash, so what you see in the source tree is what you get on
-disk.
+given a trailing slash, so the source tree and the output tree have the same
+shape.
 
 ## Which files are pages
 
@@ -44,7 +44,7 @@ otherwise empty directory is a valid one-page site, which is what the
   The match is on the FIRST path segment and on the exact name. So
   `components-archive/Old.slurp` becomes `dist/components-archive/Old.html`,
   and `src/components/Card.slurp` becomes `dist/src/components/Card.html`.
-  Neither is excluded, and you get HTML files for fragments that are not
+  Neither is excluded, and the build emits HTML files for fragments that are not
   documents. Keep both directories at the input root and spell them exactly.
 </Warning>
 
@@ -79,9 +79,9 @@ site/                       dist/
   data.json                   (not copied)
 ```
 
-The file you pass to `--globals` is the one exception. It is build input, not a
-site asset, and publishing it would put whatever you keep in it at a guessable
-URL, so it is skipped. The output directory is skipped too, so
+The `--globals` file is the one exception. It is build input, not a site asset,
+and publishing it would expose its contents at a guessable URL, so it is
+skipped. The output directory is skipped too, so
 rebuilding into a directory inside the input tree does not copy the last build
 into the next one.
 
@@ -89,9 +89,8 @@ into the next one.
 
 Slurp does not require a `pages/` directory, but hosts that serve a Slurp theme
 generally resolve a request for `/about` to `pages/about.html`, and the bundled
-[dev server](/tooling/dev-server) does the same. If you are writing a theme for
-a host rather than a standalone static site, put your pages under `pages/` and
-they will be reachable.
+[dev server](/tooling/dev-server) does the same. For a theme written against a
+host rather than a standalone static site, put pages under `pages/`.
 
 The layout the example theme uses:
 
@@ -105,8 +104,7 @@ basic-theme/
   layouts/               checked only
 ```
 
-A build that emits nothing says so, because an empty `dist/` is almost always a
-misplaced tree rather than an empty project:
+A build that emits nothing reports it:
 
 ```
 Build complete. 0 page(s) emitted, 2 component/layout file(s) checked.
@@ -133,8 +131,8 @@ name, so `/premium-wallet` renders the file above with `slug` set to
 <Note>
   The value lands at the top level, not under `params`. `params` has no special
   meaning to the compiler at all: it is an ordinary context key that hosts
-  conventionally populate, and `${ params.slug }` reads it only if your host put
-  it there.
+  conventionally populate, and `${ params.slug }` reads it only if the host
+  populated it.
 </Note>
 
 ## The 404 page
@@ -173,16 +171,15 @@ global the page can read.
   different keys out of a shared context.
 </Warning>
 
-That is a real limit of the static path. `--globals` is build-time data, not
-page data. When Slurp is embedded in a server the context arrives per request
-from the host, and each page gets its own. See
+This is a limit of the static path: `--globals` is build-time data, not page
+data. When Slurp is embedded in a server the context arrives per request from
+the host, and each page gets its own. See
 [Embedding with Rust](/reference/rust-api).
 
-### Declaring data a page needs
+### Declaring a data dependency
 
-`{fetch}` is how a page states what it wants without the compiler going and
-getting it. At build time no request is made. The renderer looks up the fetch
-name in the context and picks a branch:
+`{fetch}` declares a data dependency. At build time no request is made: the
+renderer looks up the fetch name in the context and picks a branch.
 
 ```slurp
 {fetch products from "/api/products"}
@@ -218,8 +215,7 @@ populated.
 slurp validate --dir site        # exit 1 if anything is broken, writes nothing
 ```
 
-`validate` compiles the same files and emits nothing, which is what you want in
-CI.
+`validate` compiles the same files and emits nothing, which suits CI.
 
 <Tip>
   Add `--verbose` to `build` and `--warnings` to `validate` while you work.
@@ -231,13 +227,13 @@ CI.
 
 <CardGroup cols={2}>
   <Card title="Components" icon="puzzle-piece" href="/guides/components">
-    Extracting markup you use twice, and the prop trap that catches everyone.
+    Props, scope, slots, and imports.
   </Card>
   <Card title="Layouts and slots" icon="layer-group" href="/guides/layouts">
-    Shared chrome, the `<slot />`, and getting tags into `<head>`.
+    Layouts, slots, and the head block.
   </Card>
   <Card title="Project structure" icon="folder-tree" href="/project-structure">
-    Which directories are special, and which are just yours.
+    Special directories, output paths, and static assets.
   </Card>
   <Card title="CLI" icon="terminal" href="/tooling/cli">
     Every flag on `build`, `validate` and `dev`.

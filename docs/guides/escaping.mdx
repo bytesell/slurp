@@ -1,16 +1,15 @@
 ---
 title: "How escaping works"
-description: "What Slurp escapes for you, what it does not, and where the line sits when you did not write the template."
+description: "Per-context escaping, raw HTML, and the host's responsibilities."
 ---
 
-Every `${ }` is escaped, and it is escaped for the exact place it lands rather
-than by one general-purpose rule. This page is what that means in practice:
-which contexts get which treatment, shown by rendering hostile values and
-printing the real output, plus the three places where the answer is "not
-escaped" and you have to know it.
+Every `${ }` is escaped for the exact place it lands rather than by one
+general-purpose rule. This page lists which contexts get which treatment, with
+hostile values rendered and the real output printed, plus the three places where
+nothing is escaped.
 
 The full threat model, with the enforcing function named for every property, is
-in the [security model](/security-model). This page is the working version.
+in the [security model](/security-model). This page is the practical summary.
 
 <Note>
   Every output below is what the compiler emits. `slurp build` then minifies,
@@ -96,8 +95,7 @@ before testing the scheme, so this is neutralised the same way a plain `href` is
   concatenation, an identifier or a ternary is left exactly as written, because
   its value is not knowable at compile time and guessing would break ordinary
   bindings. So `:href="'/p/' + slug"` renders untouched. An expression like that
-  cannot carry an attacker-chosen scheme in the leading position, which is what
-  the check exists to catch.
+  cannot carry an attacker-chosen scheme in the leading position.
 </Note>
 
 For a URL that a merchant supplies through an editing form, prefer the `link`
@@ -112,7 +110,7 @@ decodes character references **before** the JavaScript engine reads the value,
 so `&#39;` is a `'` again at exactly the layer that matters.
 
 Slurp escapes each slot according to where it lands in the author's own text.
-Inside a string literal you wrote, the JavaScript metacharacters are
+Inside an author-written string literal, the JavaScript metacharacters are
 backslash-escaped:
 
 ```slurp
@@ -164,7 +162,7 @@ declaration on its own and both are needed by the legitimate shape.
 
 A `<style>` **body** is a raw text element, so `${ }` there is not interpolated
 at all and emits as literal characters. There is no way to put a value into a
-stylesheet body, which is also why there is nothing to neutralise.
+stylesheet body.
 
 ## `srcdoc`
 
@@ -184,16 +182,15 @@ With `doc` set to `<p>Hi <em>there</em></p><script>alert(1)</script><a href="jav
 ```
 
 The script is gone, the `javascript:` href is gone, the markup survives, and the
-anchor picked up `rel="noopener noreferrer"` on the way through. Sanitizing
-rather than escaping keeps `srcdoc` usable for the one thing it is for.
+anchor picked up `rel="noopener noreferrer"` on the way through.
 
 This applies to the plain attribute. The bound form (`:srcdoc`) is a JavaScript
 expression, so the rules in the previous section cover it instead.
 
 ## Raw HTML: `{html}` and `sanitize`
 
-`{html expr}` is the only way to emit unescaped markup, and it is a statement
-that you trust the value:
+`{html expr}` is the only way to emit unescaped markup. It asserts that the
+value is trusted:
 
 ```slurp
 <div>{html body}</div>
@@ -217,7 +214,7 @@ application produced.
 ```
 
 The allowlist is the contract: anything not on it is stripped, including tags
-that do not exist yet. `script`, `iframe`, `form`, `style` and friends are
+that do not exist yet. `script`, `iframe`, `form`, `style` and similar tags are
 absent from it rather than being special-cased, and every `on*` handler
 disappears because no attribute outside the list is ever kept. Permitted URL
 schemes are `http`, `https` and `mailto`. The full tag and attribute lists are
@@ -235,8 +232,8 @@ If no HTML at all should appear, use a plain `${ }` rather than a sanitizer.
 
 ## The three places nothing is escaped
 
-Each one exists because the alternative would break a legitimate use, and each
-one means the same thing: **only put values the theme itself controls here.**
+Each one carries the same rule: **only put values the theme itself controls
+here.**
 
 ### `attr={ expr }` on a JavaScript-evaluated attribute
 
@@ -263,7 +260,7 @@ because the value becomes a whole document.
 
 ### `{html expr}` without `sanitize`
 
-Covered above. It is the raw hatch, and it is doing what it says.
+Covered above. Nothing is escaped.
 
 ### `{html expr}` as an attribute spread
 
@@ -287,10 +284,10 @@ JavaScript. An allowlist that admits `:disabled="loading"` cannot also exclude
 `:title="alert(1)"`, because they are the same construct. What the gate buys is
 narrowing, not safety. **Never route untrusted data into an attribute spread.**
 
-## When you did not write the template
+## Untrusted templates
 
-Slurp exists to render templates from somewhere else. Here is which half of
-that is the engine's job, and which half is yours.
+Rendering a template from an untrusted source divides into engine guarantees and
+host responsibilities.
 
 **What the engine guarantees.** A template is data transformed into markup: no
 code runs at render time, there are no callable functions, and rendering
@@ -300,7 +297,7 @@ and filter memory bound what any single render can cost. A template author who
 wants to inject script has to go through one of the three unescaped forms above,
 all of which are greppable.
 
-**What the host has to do.** Three of these come up every time:
+**What the host has to do.**
 
 <AccordionGroup>
   <Accordion title="Call validate_full, not validate">
@@ -355,7 +352,7 @@ Build with `--verbose` and read
 
 <CardGroup cols={2}>
   <Card title="Scripts and attributes" icon="code" href="/guides/scripts-and-attributes">
-    The practical side: `| js` versus `| json`, and the errors around them.
+    `| js` versus `| json`, and the errors around them.
   </Card>
   <Card title="Security model" icon="shield-check" href="/security-model">
     The threat model, the image optimizer and dev server, and the known limits.
