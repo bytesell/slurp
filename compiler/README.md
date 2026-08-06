@@ -1,6 +1,6 @@
 # slurp-compiler
 
-The compiler for the [Slurp](https://github.com/bytesell/slurp) template
+The compiler for the [Slurp](https://docs.bytesell.io/slurp) template
 language. It lexes and parses `.slurp` files into an AST and renders that AST to
 HTML against a JSON context, in a single server-side pass.
 
@@ -28,7 +28,7 @@ structural characters in a `style` value, and the allowlist sanitizer in
 `srcdoc`. An interpolation in a `<script>` body is a compile error unless it
 declares its context with `| js` or `| json`.
 
-[The security model](https://github.com/bytesell/slurp/blob/main/docs/security-model.md)
+[The security model](https://docs.bytesell.io/slurp/security-model)
 has the threat model and the known gaps.
 
 **Status: 0.1.0, pre-1.0.** The API and the template language are both unstable.

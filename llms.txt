@@ -135,7 +135,7 @@ section {
   the CLI, and the known gaps in 0.1.0.
 - [SLURP_DOCS.md](https://github.com/bytesell/slurp/blob/main/SLURP_DOCS.md):
   the long-form language documentation.
-- [docs/security-model.md](https://github.com/bytesell/slurp/blob/main/docs/security-model.md):
+- [The security model](https://docs.bytesell.io/slurp/security-model):
   where the default escaping is and is not sufficient. Read before using `{html}`.
 - [mcp/README.md](https://github.com/bytesell/slurp/blob/main/mcp/README.md):
   the MCP server, and how to register it with a coding agent.

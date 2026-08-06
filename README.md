@@ -2,6 +2,8 @@
 
 **Lightweight, agent-first templating engine.**
 
+[Documentation](https://docs.bytesell.io/slurp)
+
 Slurp compiles `.slurp` files to plain HTML on the server, in one pass, with everything escaped by default. You write pages, components and layouts; what ships is HTML, and the browser runtime is optional.
 
 It exists for the case where you need a real templating language for themes you did not write and cannot fully trust. Sections and blocks declare a typed schema on top of that, so a non-technical person can edit a page through a form without touching the template.
