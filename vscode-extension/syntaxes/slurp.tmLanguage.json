@@ -450,7 +450,10 @@
       "name": "constant.numeric.slurp"
     },
     "html-content": {
+      "comment": "Closing tags come first. They are single-line `match` rules and can never be reached by the opening rules, whose `begin` requires a name character immediately after `<`. Omitting them from this list is how they went unhighlighted: both rules existed in the repository with nothing referencing them, so `</p>` fell through to plain text while `<p>` tokenized correctly.",
       "patterns": [
+        { "include": "#html-component-closing" },
+        { "include": "#html-tag-closing" },
         { "include": "#html-component-tag" },
         { "include": "#html-tag" }
       ]
