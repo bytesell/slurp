@@ -46,12 +46,12 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.2.0",
     "@vitest/coverage-v8": "^4.1.10",
     "jsdom": "^30.0.1",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vite": "^8.2.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1",
     "vitest": "^4.1.10"
   },
   "//dependencies": "tailwind-merge 3 is what makes `cn()` target Tailwind CSS v4, so it states a consumer-facing contract rather than an internal version: `cn` is exported from the package root AND published on `window`. The unit tests only exercise utilities that behave identically across tailwind-merge majors, so they cannot catch a change here. Moving major means restating the supported Tailwind version in README.md.",
