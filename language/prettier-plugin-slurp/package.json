@@ -37,10 +37,10 @@
   "//devDependencies": "@bytesell/slurp-language stays here, never in dependencies: it is private, so a published manifest naming it would 404. tsup noExternal bundles it into dist/.",
   "devDependencies": {
     "@bytesell/slurp-language": "workspace:*",
-    "prettier": "^3.9.6",
+    "prettier": "^3.9.8",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vite": "^8.2.0",
-    "vitest": "^4.1.10"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
   }
 }
