@@ -52,7 +52,7 @@
   "dependencies": {
     "@bytesell/slurp-compiler-wasm": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
