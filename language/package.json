@@ -35,10 +35,10 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "monaco-editor": "^0.56.0",
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vite": "^8.2.0",
-    "vitest": "^4.1.10"
+    "monaco-editor": "^0.57.0",
+    "tsup": "^9.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
   }
 }
